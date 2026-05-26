@@ -7,7 +7,6 @@
  */
 import * as zod from 'zod';
 
-
 /**
  * @summary Health check
  */
@@ -108,10 +107,13 @@ export const ListCustomersQueryParams = zod.object({
 export const ListCustomersResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "ntn": zod.string().nullish(),
   "area": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "contact": zod.string().nullish(),
   "creditLimit": zod.number().nullish(),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
   "balance": zod.number(),
   "createdAt": zod.coerce.date()
 })
@@ -123,10 +125,13 @@ export const ListCustomersResponse = zod.array(ListCustomersResponseItem)
  */
 export const CreateCustomerBody = zod.object({
   "name": zod.string(),
+  "ntn": zod.string().optional(),
   "area": zod.string().optional(),
+  "address": zod.string().optional(),
   "contact": zod.string().optional(),
   "creditLimit": zod.number().optional(),
-  "openingBalance": zod.number().optional()
+  "openingBalance": zod.number().optional(),
+  "openingBalanceDate": zod.coerce.date().optional()
 })
 
 
@@ -140,10 +145,13 @@ export const GetCustomerParams = zod.object({
 export const GetCustomerResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "ntn": zod.string().nullish(),
   "area": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "contact": zod.string().nullish(),
   "creditLimit": zod.number().nullish(),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
   "balance": zod.number(),
   "createdAt": zod.coerce.date()
 })
@@ -158,19 +166,25 @@ export const UpdateCustomerParams = zod.object({
 
 export const UpdateCustomerBody = zod.object({
   "name": zod.string().optional(),
+  "ntn": zod.string().nullish(),
   "area": zod.string().optional(),
+  "address": zod.string().nullish(),
   "contact": zod.string().optional(),
   "creditLimit": zod.number().nullish(),
-  "openingBalance": zod.number().optional()
+  "openingBalance": zod.number().optional(),
+  "openingBalanceDate": zod.coerce.date().nullish()
 })
 
 export const UpdateCustomerResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "ntn": zod.string().nullish(),
   "area": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "contact": zod.string().nullish(),
   "creditLimit": zod.number().nullish(),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
   "balance": zod.number(),
   "createdAt": zod.coerce.date()
 })
@@ -185,35 +199,57 @@ export const DeleteCustomerParams = zod.object({
 
 
 /**
- * @summary Get a customer's ledger with running balance
+ * @summary Get a customer's detailed ledger with running balance
  */
 export const GetCustomerLedgerParams = zod.object({
   "id": zod.coerce.number()
+})
+
+export const GetCustomerLedgerQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional()
 })
 
 export const GetCustomerLedgerResponse = zod.object({
   "customer": zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "ntn": zod.string().nullish(),
   "area": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "contact": zod.string().nullish(),
   "creditLimit": zod.number().nullish(),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
   "balance": zod.number(),
   "createdAt": zod.coerce.date()
 }),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullable(),
   "closingBalance": zod.number(),
-  "totalDebit": zod.number(),
-  "totalCredit": zod.number(),
+  "totalReceived": zod.number(),
+  "totalPaid": zod.number().optional(),
+  "totalSoValue": zod.number(),
+  "totalTons": zod.number().optional(),
+  "from": zod.coerce.date().nullable(),
+  "to": zod.coerce.date().nullable(),
   "entries": zod.array(zod.object({
-  "id": zod.number(),
+  "srNo": zod.number(),
   "date": zod.coerce.date(),
-  "type": zod.enum(['opening', 'sale', 'payment', 'adjustment']),
-  "description": zod.string(),
-  "referenceId": zod.number().nullish(),
-  "debit": zod.number(),
-  "credit": zod.number(),
+  "transactionType": zod.string(),
+  "remarks": zod.string().nullish(),
+  "documentNo": zod.string().nullable(),
+  "billNo": zod.string().nullish(),
+  "item": zod.string().nullish(),
+  "billtyNo": zod.string().nullish(),
+  "vehicleNo": zod.string().nullish(),
+  "weightTons": zod.number().nullish(),
+  "rateTon": zod.number().nullish(),
+  "qtyBags": zod.number().nullish(),
+  "rateBag": zod.number().nullish(),
+  "receivedAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "soValue": zod.number(),
   "balance": zod.number()
 }))
 })
@@ -665,5 +701,3 @@ export const GetRecentActivityResponseItem = zod.object({
   "description": zod.string()
 })
 export const GetRecentActivityResponse = zod.array(GetRecentActivityResponseItem)
-
-

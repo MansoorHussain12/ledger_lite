@@ -82,61 +82,92 @@ export interface Customer {
   id: number;
   name: string;
   /** @nullable */
+  ntn?: string | null;
+  /** @nullable */
   area?: string | null;
+  /** @nullable */
+  address?: string | null;
   /** @nullable */
   contact?: string | null;
   /** @nullable */
   creditLimit?: number | null;
   openingBalance: number;
+  /** @nullable */
+  openingBalanceDate?: string | null;
   balance: number;
   createdAt: string;
 }
 
 export interface CustomerInput {
   name: string;
+  ntn?: string;
   area?: string;
+  address?: string;
   contact?: string;
   creditLimit?: number;
   openingBalance?: number;
+  openingBalanceDate?: string;
 }
 
 export interface CustomerUpdate {
   name?: string;
+  /** @nullable */
+  ntn?: string | null;
   area?: string;
+  /** @nullable */
+  address?: string | null;
   contact?: string;
   /** @nullable */
   creditLimit?: number | null;
   openingBalance?: number;
+  /** @nullable */
+  openingBalanceDate?: string | null;
 }
 
-export type LedgerEntryType = typeof LedgerEntryType[keyof typeof LedgerEntryType];
-
-
-export const LedgerEntryType = {
-  opening: 'opening',
-  sale: 'sale',
-  payment: 'payment',
-  adjustment: 'adjustment',
-} as const;
-
 export interface LedgerEntry {
-  id: number;
+  srNo: number;
   date: string;
-  type: LedgerEntryType;
-  description: string;
+  transactionType: string;
   /** @nullable */
-  referenceId?: number | null;
-  debit: number;
-  credit: number;
+  remarks?: string | null;
+  /** @nullable */
+  documentNo: string | null;
+  /** @nullable */
+  billNo?: string | null;
+  /** @nullable */
+  item?: string | null;
+  /** @nullable */
+  billtyNo?: string | null;
+  /** @nullable */
+  vehicleNo?: string | null;
+  /** @nullable */
+  weightTons?: number | null;
+  /** @nullable */
+  rateTon?: number | null;
+  /** @nullable */
+  qtyBags?: number | null;
+  /** @nullable */
+  rateBag?: number | null;
+  receivedAmount: number;
+  paidAmount: number;
+  soValue: number;
   balance: number;
 }
 
 export interface CustomerLedger {
   customer: Customer;
   openingBalance: number;
+  /** @nullable */
+  openingBalanceDate: string | null;
   closingBalance: number;
-  totalDebit: number;
-  totalCredit: number;
+  totalReceived: number;
+  totalPaid?: number;
+  totalSoValue: number;
+  totalTons?: number;
+  /** @nullable */
+  from: string | null;
+  /** @nullable */
+  to: string | null;
   entries: LedgerEntry[];
 }
 
@@ -384,6 +415,11 @@ export interface ActivityItem {
 export type ListCustomersParams = {
 search?: string;
 area?: string;
+};
+
+export type GetCustomerLedgerParams = {
+from?: string;
+to?: string;
 };
 
 export type ListSaleOrdersParams = {

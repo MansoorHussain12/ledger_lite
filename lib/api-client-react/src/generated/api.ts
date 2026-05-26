@@ -31,6 +31,7 @@ import type {
   DailyCollectionReport,
   DashboardSummary,
   DebtorRow,
+  GetCustomerLedgerParams,
   GetDailyCollectionReportParams,
   GetMonthlySalesReportParams,
   HealthStatus,
@@ -1026,20 +1027,29 @@ export const useDeleteCustomer = <TError = ErrorType<unknown>,
       return useMutation(getDeleteCustomerMutationOptions(options));
     }
 
-export const getGetCustomerLedgerUrl = (id: number,) => {
+export const getGetCustomerLedgerUrl = (id: number,
+    params?: GetCustomerLedgerParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/customers/${id}/ledger`
+  return stringifiedParams.length > 0 ? `/api/customers/${id}/ledger?${stringifiedParams}` : `/api/customers/${id}/ledger`
 }
 
 /**
- * @summary Get a customer's ledger with running balance
+ * @summary Get a customer's detailed ledger with running balance
  */
-export const getCustomerLedger = async (id: number, options?: RequestInit): Promise<CustomerLedger> => {
+export const getCustomerLedger = async (id: number,
+    params?: GetCustomerLedgerParams, options?: RequestInit): Promise<CustomerLedger> => {
 
-  return customFetch<CustomerLedger>(getGetCustomerLedgerUrl(id),
+  return customFetch<CustomerLedger>(getGetCustomerLedgerUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1052,23 +1062,25 @@ export const getCustomerLedger = async (id: number, options?: RequestInit): Prom
 
 
 
-export const getGetCustomerLedgerQueryKey = (id: number,) => {
+export const getGetCustomerLedgerQueryKey = (id: number,
+    params?: GetCustomerLedgerParams,) => {
     return [
-    `/api/customers/${id}/ledger`
+    `/api/customers/${id}/ledger`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetCustomerLedgerQueryOptions = <TData = Awaited<ReturnType<typeof getCustomerLedger>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetCustomerLedgerQueryOptions = <TData = Awaited<ReturnType<typeof getCustomerLedger>>, TError = ErrorType<unknown>>(id: number,
+    params?: GetCustomerLedgerParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetCustomerLedgerQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetCustomerLedgerQueryKey(id,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomerLedger>>> = ({ signal }) => getCustomerLedger(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomerLedger>>> = ({ signal }) => getCustomerLedger(id,params, { signal, ...requestOptions });
 
 
 
@@ -1082,15 +1094,16 @@ export type GetCustomerLedgerQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Get a customer's ledger with running balance
+ * @summary Get a customer's detailed ledger with running balance
  */
 
 export function useGetCustomerLedger<TData = Awaited<ReturnType<typeof getCustomerLedger>>, TError = ErrorType<unknown>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ id: number,
+    params?: GetCustomerLedgerParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetCustomerLedgerQueryOptions(id,options)
+  const queryOptions = getGetCustomerLedgerQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

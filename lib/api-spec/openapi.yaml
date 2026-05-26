@@ -255,13 +255,23 @@ paths:
     get:
       operationId: getCustomerLedger
       tags: [customers]
-      summary: Get a customer's ledger with running balance
+      summary: Get a customer's detailed ledger with running balance
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: Ledger entries
@@ -809,7 +819,11 @@ components:
           type: integer
         name:
           type: string
+        ntn:
+          type: ["string", "null"]
         area:
+          type: ["string", "null"]
+        address:
           type: ["string", "null"]
         contact:
           type: ["string", "null"]
@@ -817,6 +831,9 @@ components:
           type: ["number", "null"]
         openingBalance:
           type: number
+        openingBalanceDate:
+          type: ["string", "null"]
+          format: date
         balance:
           type: number
         createdAt:
@@ -829,7 +846,11 @@ components:
       properties:
         name:
           type: string
+        ntn:
+          type: string
         area:
+          type: string
+        address:
           type: string
         contact:
           type: string
@@ -837,58 +858,98 @@ components:
           type: number
         openingBalance:
           type: number
+        openingBalanceDate:
+          type: string
+          format: date
 
     CustomerUpdate:
       type: object
       properties:
         name:
           type: string
+        ntn:
+          type: ["string", "null"]
         area:
           type: string
+        address:
+          type: ["string", "null"]
         contact:
           type: string
         creditLimit:
           type: ["number", "null"]
         openingBalance:
           type: number
+        openingBalanceDate:
+          type: ["string", "null"]
+          format: date
 
     LedgerEntry:
       type: object
-      required: [id, date, type, description, debit, credit, balance]
+      required: [srNo, date, transactionType, documentNo, receivedAmount, paidAmount, soValue, balance]
       properties:
-        id:
+        srNo:
           type: integer
         date:
           type: string
           format: date
-        type:
+        transactionType:
           type: string
-          enum: [opening, sale, payment, adjustment]
-        description:
-          type: string
-        referenceId:
-          type: ["integer", "null"]
-        debit:
+        remarks:
+          type: ["string", "null"]
+        documentNo:
+          type: ["string", "null"]
+        billNo:
+          type: ["string", "null"]
+        item:
+          type: ["string", "null"]
+        billtyNo:
+          type: ["string", "null"]
+        vehicleNo:
+          type: ["string", "null"]
+        weightTons:
+          type: ["number", "null"]
+        rateTon:
+          type: ["number", "null"]
+        qtyBags:
+          type: ["number", "null"]
+        rateBag:
+          type: ["number", "null"]
+        receivedAmount:
           type: number
-        credit:
+        paidAmount:
+          type: number
+        soValue:
           type: number
         balance:
           type: number
 
     CustomerLedger:
       type: object
-      required: [customer, openingBalance, closingBalance, totalDebit, totalCredit, entries]
+      required: [customer, openingBalance, openingBalanceDate, closingBalance, totalReceived, totalSoValue, from, to, entries]
       properties:
         customer:
           $ref: "#/components/schemas/Customer"
         openingBalance:
           type: number
+        openingBalanceDate:
+          type: ["string", "null"]
+          format: date
         closingBalance:
           type: number
-        totalDebit:
+        totalReceived:
           type: number
-        totalCredit:
+        totalPaid:
           type: number
+        totalSoValue:
+          type: number
+        totalTons:
+          type: number
+        from:
+          type: ["string", "null"]
+          format: date
+        to:
+          type: ["string", "null"]
+          format: date
         entries:
           type: array
           items:

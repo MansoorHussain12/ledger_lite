@@ -1,0 +1,1 @@
+- [Orval codegen config](orval-codegen.md) — zod output must use mode:"single", indexFiles:false; manually keep index.ts as single-export
