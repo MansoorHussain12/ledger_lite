@@ -218,18 +218,16 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
 
   // Payment rows
   for (const p of pmts) {
-    let transactionType = p.type === "bank" ? "Bank Deposited" : "Cash Received";
-    if (p.notes) transactionType = `${transactionType} ${p.notes}`;
-    const documentNo = p.chequeNo
-      ? `CHQ-${p.chequeNo}`
-      : p.bankAccount
-        ? `Bank: ${p.bankAccount}`
-        : null;
+    const transactionType = p.type === "bank" ? "Bank Deposited" : "Cash Received";
+    // For bank: remarks = cheque/transaction ref; For cash: remarks = notes (name/description)
+    const remarks = p.type === "bank" ? (p.chequeNo ?? null) : (p.notes ?? null);
+    // documentNo = the receipt/document number stored in bankAccount field
+    const documentNo = p.bankAccount ?? null;
     rows.push({
       date: p.date,
       sortKey: `${p.date}_0_${String(p.id).padStart(8, "0")}`,
       transactionType,
-      remarks: p.notes ?? null,
+      remarks,
       documentNo,
       billNo: null,
       item: null,
