@@ -7,6 +7,9 @@ import { sessionMiddleware } from "./middlewares/session";
 
 const app: Express = express();
 
+// Trust Replit's reverse proxy so secure cookies work on HTTPS
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
