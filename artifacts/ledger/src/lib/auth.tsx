@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetMe, useLogin, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 
@@ -22,8 +22,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const queryClient = useQueryClient();
+  // Track whether the initial auth check has resolved.
+  // After that, errors from background refetches must NOT clear the user —
+  // they could be transient network blips, not real logouts.
+  const initialCheckDone = useRef(false);
 
-  const { data: meData, isLoading: meLoading, isError: meError } = useGetMe({
+  const { data: meData, isLoading: meLoading } = useGetMe({
     query: { retry: false, queryKey: getGetMeQueryKey() }
   });
 
@@ -31,24 +35,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logoutMutation = useLogout();
 
   useEffect(() => {
-    if (!meLoading) {
-      if (meData && !meError) {
-        setUser(meData as AuthUser);
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
+    if (meLoading) return;
+
+    if (meData) {
+      setUser(meData as AuthUser);
+    } else if (!initialCheckDone.current) {
+      // Only clear user on the very first check (not authenticated on load).
+      // Subsequent failed refetches (e.g. network blip) should not force logout.
+      setUser(null);
     }
-  }, [meData, meLoading, meError]);
+
+    initialCheckDone.current = true;
+    setLoading(false);
+  }, [meData, meLoading]);
 
   const login = async (username: string, password: string) => {
     const result = await loginMutation.mutateAsync({ data: { username, password } });
+    // Set user directly from the login response — no need to refetch /auth/me.
+    // Triggering invalidateQueries here would cause a background refetch that
+    // could race against the session cookie arriving and force an unexpected logout.
     setUser(result as AuthUser);
-    queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    initialCheckDone.current = true;
+    setLoading(false);
   };
 
   const logout = async () => {
     await logoutMutation.mutateAsync();
+    initialCheckDone.current = false;
     setUser(null);
     queryClient.clear();
   };

@@ -2,6 +2,12 @@ import { Router, type IRouter } from "express";
 import { db, saleOrdersTable, saleOrderItemsTable, productsTable, customersTable } from "@workspace/db";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+
+// Zod coerces date strings to JS Date objects. Format them back to YYYY-MM-DD for Postgres.
+function toDateStr(d: Date | string): string {
+  if (d instanceof Date) return d.toISOString().split("T")[0];
+  return String(d);
+}
 import {
   ListSaleOrdersQueryParams,
   CreateSaleOrderBody,
@@ -85,7 +91,7 @@ router.post("/sale-orders", requireAuth, async (req, res): Promise<void> => {
   }));
 
   const [order] = await db.insert(saleOrdersTable).values({
-    customerId, date: String(date), vehicleNo: vehicleNo ?? null, driverName: driverName ?? null,
+    customerId, date: toDateStr(date), vehicleNo: vehicleNo ?? null, driverName: driverName ?? null,
     billtyNo: billtyNo ?? null, notes: notes ?? null, totalAmount: String(totalAmount),
   }).returning();
 
@@ -112,7 +118,7 @@ router.patch("/sale-orders/:id", requireAuth, async (req, res): Promise<void> =>
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const updates: Record<string, unknown> = {};
-  if (parsed.data.date != null) updates.date = parsed.data.date;
+  if (parsed.data.date != null) updates.date = toDateStr(parsed.data.date);
   if (parsed.data.vehicleNo !== undefined) updates.vehicleNo = parsed.data.vehicleNo ?? null;
   if (parsed.data.driverName !== undefined) updates.driverName = parsed.data.driverName ?? null;
   if (parsed.data.billtyNo !== undefined) updates.billtyNo = parsed.data.billtyNo ?? null;

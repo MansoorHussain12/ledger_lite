@@ -2,6 +2,12 @@ import { Router, type IRouter } from "express";
 import { db, paymentsTable, customersTable } from "@workspace/db";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+
+// Zod coerces date strings to JS Date objects. Format them back to YYYY-MM-DD for Postgres.
+function toDateStr(d: Date | string): string {
+  if (d instanceof Date) return d.toISOString().split("T")[0];
+  return String(d);
+}
 import {
   ListPaymentsQueryParams,
   CreatePaymentBody,
@@ -41,7 +47,7 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { customerId, date, type, amount, bankAccount, chequeNo, notes } = parsed.data;
   const [p] = await db.insert(paymentsTable).values({
-    customerId, date: String(date), type, amount: String(amount),
+    customerId, date: toDateStr(date), type, amount: String(amount),
     bankAccount: bankAccount ?? null, chequeNo: chequeNo ?? null, notes: notes ?? null,
   }).returning();
   const [c] = await db.select().from(customersTable).where(eq(customersTable.id, p.customerId));
@@ -71,7 +77,7 @@ router.patch("/payments/:id", requireAuth, async (req, res): Promise<void> => {
   const parsed = UpdatePaymentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const updates: Record<string, unknown> = {};
-  if (parsed.data.date != null) updates.date = parsed.data.date;
+  if (parsed.data.date != null) updates.date = toDateStr(parsed.data.date);
   if (parsed.data.type != null) updates.type = parsed.data.type;
   if (parsed.data.amount != null) updates.amount = String(parsed.data.amount);
   if (parsed.data.bankAccount !== undefined) updates.bankAccount = parsed.data.bankAccount ?? null;
