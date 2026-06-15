@@ -13,6 +13,10 @@ import SaleOrderNewPage from "@/pages/sale-order-new";
 import SaleOrderDetailPage from "@/pages/sale-order-detail";
 import PaymentsPage from "@/pages/payments";
 import CashbookPage from "@/pages/cashbook";
+import SuppliersPage from "@/pages/suppliers";
+import SupplierDetailPage from "@/pages/supplier-detail";
+import PurchasesPage from "@/pages/purchases";
+import PurchaseNewPage from "@/pages/purchase-new";
 import ProductsPage from "@/pages/products";
 import ReportsPage from "@/pages/reports";
 import UsersPage from "@/pages/users";
@@ -54,6 +58,10 @@ function AuthenticatedApp() {
         <Route path="/payments" component={PaymentsPage} />
         <Route path="/payments/new" component={PaymentsPage} />
         <Route path="/cashbook" component={CashbookPage} />
+        <Route path="/suppliers" component={SuppliersPage} />
+        <Route path="/suppliers/:id" component={SupplierDetailPage} />
+        <Route path="/purchases/new" component={PurchaseNewPage} />
+        <Route path="/purchases" component={PurchasesPage} />
         <Route path="/products" component={ProductsPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/users" component={UsersPage} />

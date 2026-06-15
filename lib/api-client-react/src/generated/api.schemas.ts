@@ -412,6 +412,139 @@ export interface ActivityItem {
   description: string;
 }
 
+export interface SupplierInput {
+  name: string;
+  contact?: string;
+  address?: string;
+  ntn?: string;
+  openingBalance?: number;
+  openingBalanceDate?: string;
+}
+
+export interface SupplierRow {
+  id: number;
+  name: string;
+  /** @nullable */
+  contact?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  ntn?: string | null;
+  openingBalance: number;
+  payableBalance: number;
+  createdAt: string;
+}
+
+export type PurchaseInvoiceRowPaymentMode = typeof PurchaseInvoiceRowPaymentMode[keyof typeof PurchaseInvoiceRowPaymentMode];
+
+
+export const PurchaseInvoiceRowPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface PurchaseInvoiceRow {
+  id: number;
+  supplierId: number;
+  supplierName: string;
+  date: string;
+  /** @nullable */
+  invoiceNo?: string | null;
+  totalAmount: number;
+  paidAmount: number;
+  balance: number;
+  paymentMode: PurchaseInvoiceRowPaymentMode;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface SupplierDetail {
+  id: number;
+  name: string;
+  /** @nullable */
+  contact?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  ntn?: string | null;
+  openingBalance: number;
+  payableBalance: number;
+  createdAt: string;
+  invoices: PurchaseInvoiceRow[];
+}
+
+export interface PurchaseInvoiceItemInput {
+  productId: number;
+  qty: number;
+  rate: number;
+}
+
+export type PurchaseInvoiceInputPaymentMode = typeof PurchaseInvoiceInputPaymentMode[keyof typeof PurchaseInvoiceInputPaymentMode];
+
+
+export const PurchaseInvoiceInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface PurchaseInvoiceInput {
+  supplierId: number;
+  date: string;
+  invoiceNo?: string;
+  items: PurchaseInvoiceItemInput[];
+  paidAmount?: number;
+  paymentMode?: PurchaseInvoiceInputPaymentMode;
+  notes?: string;
+  updateCostPrice?: boolean;
+}
+
+export interface PurchaseInvoiceItemRow {
+  id: number;
+  productId: number;
+  productName: string;
+  qty: number;
+  rate: number;
+  amount: number;
+}
+
+export type PurchaseInvoiceDetailPaymentMode = typeof PurchaseInvoiceDetailPaymentMode[keyof typeof PurchaseInvoiceDetailPaymentMode];
+
+
+export const PurchaseInvoiceDetailPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface PurchaseInvoiceDetail {
+  id: number;
+  supplierId: number;
+  supplierName: string;
+  date: string;
+  /** @nullable */
+  invoiceNo?: string | null;
+  totalAmount: number;
+  paidAmount: number;
+  balance: number;
+  paymentMode: PurchaseInvoiceDetailPaymentMode;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  items: PurchaseInvoiceItemRow[];
+}
+
 export type CashbookEntryType = typeof CashbookEntryType[keyof typeof CashbookEntryType];
 
 
@@ -604,6 +737,12 @@ date?: string;
 export type GetMonthlySalesReportParams = {
 year?: number;
 month?: number;
+};
+
+export type ListPurchasesParams = {
+supplierId?: number;
+from?: string;
+to?: string;
 };
 
 export type ListCashbookEntriesParams = {

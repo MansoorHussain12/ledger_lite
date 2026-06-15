@@ -23,6 +23,8 @@ tags:
     description: Business reports
   - name: dashboard
     description: Dashboard summary
+  - name: suppliers
+    description: Suppliers & purchase invoices
   - name: cashbook
     description: Cashbook & expenses
 
@@ -736,6 +738,174 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ActivityItem"
+
+  # ── SUPPLIERS ─────────────────────────────────────────────────────────────
+  /suppliers:
+    get:
+      operationId: listSuppliers
+      tags: [suppliers]
+      summary: List all suppliers with payable balance
+      responses:
+        "200":
+          description: Supplier list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierRow"
+    post:
+      operationId: createSupplier
+      tags: [suppliers]
+      summary: Create a supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierRow"
+
+  /suppliers/{id}:
+    get:
+      operationId: getSupplier
+      tags: [suppliers]
+      summary: Get supplier with ledger (purchases + balance)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierDetail"
+    patch:
+      operationId: updateSupplier
+      tags: [suppliers]
+      summary: Update a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierRow"
+    delete:
+      operationId: deleteSupplier
+      tags: [suppliers]
+      summary: Delete a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── PURCHASES ─────────────────────────────────────────────────────────────
+  /purchases:
+    get:
+      operationId: listPurchases
+      tags: [suppliers]
+      summary: List purchase invoices
+      parameters:
+        - name: supplierId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Purchase list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PurchaseInvoiceRow"
+    post:
+      operationId: createPurchase
+      tags: [suppliers]
+      summary: Create a purchase invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseInvoiceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseInvoiceRow"
+
+  /purchases/{id}:
+    get:
+      operationId: getPurchase
+      tags: [suppliers]
+      summary: Get purchase invoice with items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseInvoiceDetail"
+    delete:
+      operationId: deletePurchase
+      tags: [suppliers]
+      summary: Delete a purchase invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
 
   # ── CASHBOOK ──────────────────────────────────────────────────────────────
   /cashbook:
@@ -1476,6 +1646,194 @@ components:
           type: number
         description:
           type: string
+
+    # ── SUPPLIER / PURCHASE SCHEMAS ───────────────────────────────────────
+    SupplierInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        contact:
+          type: string
+        address:
+          type: string
+        ntn:
+          type: string
+        openingBalance:
+          type: number
+          default: 0
+        openingBalanceDate:
+          type: string
+          format: date
+
+    SupplierRow:
+      type: object
+      required: [id, name, openingBalance, payableBalance, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        contact:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        ntn:
+          type: ["string", "null"]
+        openingBalance:
+          type: number
+        payableBalance:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    SupplierDetail:
+      type: object
+      required: [id, name, openingBalance, payableBalance, createdAt, invoices]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        contact:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        ntn:
+          type: ["string", "null"]
+        openingBalance:
+          type: number
+        payableBalance:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseInvoiceRow"
+
+    PurchaseInvoiceItemInput:
+      type: object
+      required: [productId, qty, rate]
+      properties:
+        productId:
+          type: integer
+        qty:
+          type: number
+        rate:
+          type: number
+
+    PurchaseInvoiceInput:
+      type: object
+      required: [supplierId, date, items]
+      properties:
+        supplierId:
+          type: integer
+        date:
+          type: string
+          format: date
+        invoiceNo:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseInvoiceItemInput"
+        paidAmount:
+          type: number
+          default: 0
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+          default: cash
+        notes:
+          type: string
+        updateCostPrice:
+          type: boolean
+          default: true
+
+    PurchaseInvoiceRow:
+      type: object
+      required: [id, supplierId, supplierName, date, totalAmount, paidAmount, balance, paymentMode, createdAt]
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        date:
+          type: string
+          format: date
+        invoiceNo:
+          type: ["string", "null"]
+        totalAmount:
+          type: number
+        paidAmount:
+          type: number
+        balance:
+          type: number
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    PurchaseInvoiceItemRow:
+      type: object
+      required: [id, productId, productName, qty, rate, amount]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        qty:
+          type: number
+        rate:
+          type: number
+        amount:
+          type: number
+
+    PurchaseInvoiceDetail:
+      type: object
+      required: [id, supplierId, supplierName, date, totalAmount, paidAmount, balance, paymentMode, createdAt, items]
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        date:
+          type: string
+          format: date
+        invoiceNo:
+          type: ["string", "null"]
+        totalAmount:
+          type: number
+        paidAmount:
+          type: number
+        balance:
+          type: number
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseInvoiceItemRow"
 
     # ── CASHBOOK SCHEMAS ──────────────────────────────────────────────────
     CashbookEntry:

@@ -704,6 +704,193 @@ export const GetRecentActivityResponse = zod.array(GetRecentActivityResponseItem
 
 
 /**
+ * @summary List all suppliers with payable balance
+ */
+export const ListSuppliersResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "contact": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "ntn": zod.string().nullish(),
+  "openingBalance": zod.number(),
+  "payableBalance": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListSuppliersResponse = zod.array(ListSuppliersResponseItem)
+
+
+/**
+ * @summary Create a supplier
+ */
+export const createSupplierBodyOpeningBalanceDefault = 0;
+
+export const CreateSupplierBody = zod.object({
+  "name": zod.string(),
+  "contact": zod.string().optional(),
+  "address": zod.string().optional(),
+  "ntn": zod.string().optional(),
+  "openingBalance": zod.number().default(createSupplierBodyOpeningBalanceDefault),
+  "openingBalanceDate": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Get supplier with ledger (purchases + balance)
+ */
+export const GetSupplierParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSupplierResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "contact": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "ntn": zod.string().nullish(),
+  "openingBalance": zod.number(),
+  "payableBalance": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "invoices": zod.array(zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "invoiceNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Update a supplier
+ */
+export const UpdateSupplierParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updateSupplierBodyOpeningBalanceDefault = 0;
+
+export const UpdateSupplierBody = zod.object({
+  "name": zod.string(),
+  "contact": zod.string().optional(),
+  "address": zod.string().optional(),
+  "ntn": zod.string().optional(),
+  "openingBalance": zod.number().default(updateSupplierBodyOpeningBalanceDefault),
+  "openingBalanceDate": zod.coerce.date().optional()
+})
+
+export const UpdateSupplierResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "contact": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "ntn": zod.string().nullish(),
+  "openingBalance": zod.number(),
+  "payableBalance": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a supplier
+ */
+export const DeleteSupplierParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List purchase invoices
+ */
+export const ListPurchasesQueryParams = zod.object({
+  "supplierId": zod.coerce.number().optional(),
+  "from": zod.date().optional(),
+  "to": zod.date().optional()
+})
+
+export const ListPurchasesResponseItem = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "invoiceNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPurchasesResponse = zod.array(ListPurchasesResponseItem)
+
+
+/**
+ * @summary Create a purchase invoice
+ */
+export const createPurchaseBodyPaidAmountDefault = 0;
+export const createPurchaseBodyPaymentModeDefault = `cash`;
+export const createPurchaseBodyUpdateCostPriceDefault = true;
+
+export const CreatePurchaseBody = zod.object({
+  "supplierId": zod.number(),
+  "date": zod.coerce.date(),
+  "invoiceNo": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "qty": zod.number(),
+  "rate": zod.number()
+})),
+  "paidAmount": zod.number().default(createPurchaseBodyPaidAmountDefault),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).default(createPurchaseBodyPaymentModeDefault),
+  "notes": zod.string().optional(),
+  "updateCostPrice": zod.boolean().default(createPurchaseBodyUpdateCostPriceDefault)
+})
+
+
+/**
+ * @summary Get purchase invoice with items
+ */
+export const GetPurchaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPurchaseResponse = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "invoiceNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "rate": zod.number(),
+  "amount": zod.number()
+}))
+})
+
+
+/**
+ * @summary Delete a purchase invoice
+ */
+export const DeletePurchaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary List cashbook entries with running balance
  */
 export const ListCashbookEntriesQueryParams = zod.object({
