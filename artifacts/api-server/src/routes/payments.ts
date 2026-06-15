@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, paymentsTable, customersTable } from "@workspace/db";
+import { cashbookEntriesTable } from "@workspace/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
@@ -46,11 +47,29 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { customerId, date, type, amount, bankAccount, chequeNo, notes } = parsed.data;
+  const userId = (req.session as any)?.userId ?? null;
+
+  const [c] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
+  const dateStr = toDateStr(date);
+
   const [p] = await db.insert(paymentsTable).values({
-    customerId, date: toDateStr(date), type, amount: String(amount),
+    customerId, date: dateStr, type, amount: String(amount),
     bankAccount: bankAccount ?? null, chequeNo: chequeNo ?? null, notes: notes ?? null,
   }).returning();
-  const [c] = await db.select().from(customersTable).where(eq(customersTable.id, p.customerId));
+
+  // Auto-post to cashbook
+  await db.insert(cashbookEntriesTable).values({
+    date: dateStr,
+    type: "cash_in",
+    source: "payment",
+    referenceId: p.id,
+    description: `Receipt from ${c?.name ?? "customer"}`,
+    paymentMode: type === "cash" ? "cash" : "bank",
+    amount: String(amount),
+    notes: notes ?? null,
+    createdById: userId,
+  });
+
   res.status(201).json({
     id: p.id, customerId: p.customerId, customerName: c?.name ?? "",
     date: p.date, type: p.type, amount: parseFloat(p.amount),

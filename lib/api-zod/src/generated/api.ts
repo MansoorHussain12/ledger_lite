@@ -701,3 +701,121 @@ export const GetRecentActivityResponseItem = zod.object({
   "description": zod.string()
 })
 export const GetRecentActivityResponse = zod.array(GetRecentActivityResponseItem)
+
+
+/**
+ * @summary List cashbook entries with running balance
+ */
+export const ListCashbookEntriesQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional(),
+  "type": zod.enum(['cash_in', 'cash_out']).optional(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional()
+})
+
+export const ListCashbookEntriesResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.number(),
+  "date": zod.coerce.date(),
+  "type": zod.enum(['cash_in', 'cash_out']),
+  "source": zod.enum(['manual', 'payment', 'expense', 'opening_balance', 'adjustment', 'salary', 'transfer']),
+  "referenceId": zod.number().nullish(),
+  "description": zod.string(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "runningBalance": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "totalIn": zod.number(),
+  "totalOut": zod.number(),
+  "netBalance": zod.number()
+})
+
+
+/**
+ * @summary Create a manual cashbook entry
+ */
+export const createCashbookEntryBodySourceDefault = `manual`;
+export const createCashbookEntryBodyAmountMin = 0.01;
+
+
+
+export const CreateCashbookEntryBody = zod.object({
+  "date": zod.coerce.date(),
+  "type": zod.enum(['cash_in', 'cash_out']),
+  "source": zod.enum(['manual', 'opening_balance', 'adjustment', 'salary', 'transfer']).default(createCashbookEntryBodySourceDefault),
+  "description": zod.string(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number().min(createCashbookEntryBodyAmountMin),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Get cash & bank balances summary
+ */
+export const GetCashbookSummaryResponse = zod.object({
+  "cashInHand": zod.number(),
+  "bankBalance": zod.number(),
+  "easypaisaBalance": zod.number(),
+  "jazzcashBalance": zod.number(),
+  "totalBalance": zod.number(),
+  "todayIn": zod.number(),
+  "todayOut": zod.number()
+})
+
+
+/**
+ * @summary Delete a manual cashbook entry
+ */
+export const DeleteCashbookEntryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List expenses
+ */
+export const ListExpensesQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional(),
+  "category": zod.coerce.string().optional()
+})
+
+export const ListExpensesResponseItem = zod.object({
+  "id": zod.number(),
+  "date": zod.coerce.date(),
+  "category": zod.string(),
+  "description": zod.string(),
+  "amount": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListExpensesResponse = zod.array(ListExpensesResponseItem)
+
+
+/**
+ * @summary Record an expense (auto-posts to cashbook)
+ */
+export const createExpenseBodyAmountMin = 0.01;
+
+
+
+export const CreateExpenseBody = zod.object({
+  "date": zod.coerce.date(),
+  "category": zod.string(),
+  "description": zod.string(),
+  "amount": zod.number().min(createExpenseBodyAmountMin),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete an expense
+ */
+export const DeleteExpenseParams = zod.object({
+  "id": zod.coerce.number()
+})

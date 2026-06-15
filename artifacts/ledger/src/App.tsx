@@ -12,6 +12,7 @@ import SaleOrdersPage from "@/pages/sale-orders";
 import SaleOrderNewPage from "@/pages/sale-order-new";
 import SaleOrderDetailPage from "@/pages/sale-order-detail";
 import PaymentsPage from "@/pages/payments";
+import CashbookPage from "@/pages/cashbook";
 import ProductsPage from "@/pages/products";
 import ReportsPage from "@/pages/reports";
 import UsersPage from "@/pages/users";
@@ -52,6 +53,7 @@ function AuthenticatedApp() {
         <Route path="/sale-orders/:id" component={SaleOrderDetailPage} />
         <Route path="/payments" component={PaymentsPage} />
         <Route path="/payments/new" component={PaymentsPage} />
+        <Route path="/cashbook" component={CashbookPage} />
         <Route path="/products" component={ProductsPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/users" component={UsersPage} />

@@ -23,6 +23,8 @@ tags:
     description: Business reports
   - name: dashboard
     description: Dashboard summary
+  - name: cashbook
+    description: Cashbook & expenses
 
 paths:
   /healthz:
@@ -735,6 +737,149 @@ paths:
                 items:
                   $ref: "#/components/schemas/ActivityItem"
 
+  # ── CASHBOOK ──────────────────────────────────────────────────────────────
+  /cashbook:
+    get:
+      operationId: listCashbookEntries
+      tags: [cashbook]
+      summary: List cashbook entries with running balance
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [cash_in, cash_out]
+        - name: paymentMode
+          in: query
+          schema:
+            type: string
+            enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+      responses:
+        "200":
+          description: Cashbook entries with running balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashbookLedger"
+    post:
+      operationId: createCashbookEntry
+      tags: [cashbook]
+      summary: Create a manual cashbook entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CashbookEntryInput"
+      responses:
+        "201":
+          description: Entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashbookEntry"
+
+  /cashbook/summary:
+    get:
+      operationId: getCashbookSummary
+      tags: [cashbook]
+      summary: Get cash & bank balances summary
+      responses:
+        "200":
+          description: Balance summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashbookSummary"
+
+  /cashbook/{id}:
+    delete:
+      operationId: deleteCashbookEntry
+      tags: [cashbook]
+      summary: Delete a manual cashbook entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── EXPENSES ──────────────────────────────────────────────────────────────
+  /expenses:
+    get:
+      operationId: listExpenses
+      tags: [cashbook]
+      summary: List expenses
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Expense list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
+    post:
+      operationId: createExpense
+      tags: [cashbook]
+      summary: Record an expense (auto-posts to cashbook)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseInput"
+      responses:
+        "201":
+          description: Expense recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+
+  /expenses/{id}:
+    delete:
+      operationId: deleteExpense
+      tags: [cashbook]
+      summary: Delete an expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -1330,4 +1475,140 @@ components:
         amount:
           type: number
         description:
+          type: string
+
+    # ── CASHBOOK SCHEMAS ──────────────────────────────────────────────────
+    CashbookEntry:
+      type: object
+      required: [id, date, type, source, description, paymentMode, amount, runningBalance, createdAt]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        type:
+          type: string
+          enum: [cash_in, cash_out]
+        source:
+          type: string
+          enum: [manual, payment, expense, opening_balance, adjustment, salary, transfer]
+        referenceId:
+          type: ["integer", "null"]
+        description:
+          type: string
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+        runningBalance:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    CashbookEntryInput:
+      type: object
+      required: [date, type, description, paymentMode, amount]
+      properties:
+        date:
+          type: string
+          format: date
+        type:
+          type: string
+          enum: [cash_in, cash_out]
+        source:
+          type: string
+          enum: [manual, opening_balance, adjustment, salary, transfer]
+          default: manual
+        description:
+          type: string
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+          minimum: 0.01
+        notes:
+          type: string
+
+    CashbookLedger:
+      type: object
+      required: [entries, totalIn, totalOut, netBalance]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CashbookEntry"
+        totalIn:
+          type: number
+        totalOut:
+          type: number
+        netBalance:
+          type: number
+
+    CashbookSummary:
+      type: object
+      required: [cashInHand, bankBalance, easypaisaBalance, jazzcashBalance, totalBalance, todayIn, todayOut]
+      properties:
+        cashInHand:
+          type: number
+        bankBalance:
+          type: number
+        easypaisaBalance:
+          type: number
+        jazzcashBalance:
+          type: number
+        totalBalance:
+          type: number
+        todayIn:
+          type: number
+        todayOut:
+          type: number
+
+    Expense:
+      type: object
+      required: [id, date, category, description, amount, paymentMode, createdAt]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        category:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    ExpenseInput:
+      type: object
+      required: [date, category, description, amount, paymentMode]
+      properties:
+        date:
+          type: string
+          format: date
+        category:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+          minimum: 0.01
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        notes:
           type: string

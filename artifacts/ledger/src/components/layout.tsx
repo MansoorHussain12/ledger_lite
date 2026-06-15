@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Users, ShoppingCart, CreditCard,
-  Package, BarChart3, UserCog, LogOut, Menu, X
+  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ const navItems = [
   { href: "/customers", label: "Customers", icon: Users, roles: ["owner", "salesman", "cashier"] },
   { href: "/sale-orders", label: "Sale Orders", icon: ShoppingCart, roles: ["owner", "salesman"] },
   { href: "/payments", label: "Payments", icon: CreditCard, roles: ["owner", "cashier"] },
+  { href: "/cashbook", label: "Cashbook", icon: BookOpen, roles: ["owner", "cashier"] },
   { href: "/products", label: "Products", icon: Package, roles: ["owner", "salesman"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["owner"] },
   { href: "/users", label: "Users", icon: UserCog, roles: ["owner"] },

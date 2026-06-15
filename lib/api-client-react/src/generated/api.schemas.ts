@@ -412,6 +412,160 @@ export interface ActivityItem {
   description: string;
 }
 
+export type CashbookEntryType = typeof CashbookEntryType[keyof typeof CashbookEntryType];
+
+
+export const CashbookEntryType = {
+  cash_in: 'cash_in',
+  cash_out: 'cash_out',
+} as const;
+
+export type CashbookEntrySource = typeof CashbookEntrySource[keyof typeof CashbookEntrySource];
+
+
+export const CashbookEntrySource = {
+  manual: 'manual',
+  payment: 'payment',
+  expense: 'expense',
+  opening_balance: 'opening_balance',
+  adjustment: 'adjustment',
+  salary: 'salary',
+  transfer: 'transfer',
+} as const;
+
+export type CashbookEntryPaymentMode = typeof CashbookEntryPaymentMode[keyof typeof CashbookEntryPaymentMode];
+
+
+export const CashbookEntryPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface CashbookEntry {
+  id: number;
+  date: string;
+  type: CashbookEntryType;
+  source: CashbookEntrySource;
+  /** @nullable */
+  referenceId?: number | null;
+  description: string;
+  paymentMode: CashbookEntryPaymentMode;
+  amount: number;
+  runningBalance: number;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export type CashbookEntryInputType = typeof CashbookEntryInputType[keyof typeof CashbookEntryInputType];
+
+
+export const CashbookEntryInputType = {
+  cash_in: 'cash_in',
+  cash_out: 'cash_out',
+} as const;
+
+export type CashbookEntryInputSource = typeof CashbookEntryInputSource[keyof typeof CashbookEntryInputSource];
+
+
+export const CashbookEntryInputSource = {
+  manual: 'manual',
+  opening_balance: 'opening_balance',
+  adjustment: 'adjustment',
+  salary: 'salary',
+  transfer: 'transfer',
+} as const;
+
+export type CashbookEntryInputPaymentMode = typeof CashbookEntryInputPaymentMode[keyof typeof CashbookEntryInputPaymentMode];
+
+
+export const CashbookEntryInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface CashbookEntryInput {
+  date: string;
+  type: CashbookEntryInputType;
+  source?: CashbookEntryInputSource;
+  description: string;
+  paymentMode: CashbookEntryInputPaymentMode;
+  /** @minimum 0.01 */
+  amount: number;
+  notes?: string;
+}
+
+export interface CashbookLedger {
+  entries: CashbookEntry[];
+  totalIn: number;
+  totalOut: number;
+  netBalance: number;
+}
+
+export interface CashbookSummary {
+  cashInHand: number;
+  bankBalance: number;
+  easypaisaBalance: number;
+  jazzcashBalance: number;
+  totalBalance: number;
+  todayIn: number;
+  todayOut: number;
+}
+
+export type ExpensePaymentMode = typeof ExpensePaymentMode[keyof typeof ExpensePaymentMode];
+
+
+export const ExpensePaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface Expense {
+  id: number;
+  date: string;
+  category: string;
+  description: string;
+  amount: number;
+  paymentMode: ExpensePaymentMode;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export type ExpenseInputPaymentMode = typeof ExpenseInputPaymentMode[keyof typeof ExpenseInputPaymentMode];
+
+
+export const ExpenseInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface ExpenseInput {
+  date: string;
+  category: string;
+  description: string;
+  /** @minimum 0.01 */
+  amount: number;
+  paymentMode: ExpenseInputPaymentMode;
+  notes?: string;
+}
+
 export type ListCustomersParams = {
 search?: string;
 area?: string;
@@ -450,5 +604,38 @@ date?: string;
 export type GetMonthlySalesReportParams = {
 year?: number;
 month?: number;
+};
+
+export type ListCashbookEntriesParams = {
+from?: string;
+to?: string;
+type?: ListCashbookEntriesType;
+paymentMode?: ListCashbookEntriesPaymentMode;
+};
+
+export type ListCashbookEntriesType = typeof ListCashbookEntriesType[keyof typeof ListCashbookEntriesType];
+
+
+export const ListCashbookEntriesType = {
+  cash_in: 'cash_in',
+  cash_out: 'cash_out',
+} as const;
+
+export type ListCashbookEntriesPaymentMode = typeof ListCashbookEntriesPaymentMode[keyof typeof ListCashbookEntriesPaymentMode];
+
+
+export const ListCashbookEntriesPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export type ListExpensesParams = {
+from?: string;
+to?: string;
+category?: string;
 };
 
