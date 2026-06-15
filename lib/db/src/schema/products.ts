@@ -7,6 +7,8 @@ export const productsTable = pgTable("products", {
   name: text("name").notNull().unique(),
   currentRate: numeric("current_rate", { precision: 14, scale: 2 }).notNull(),
   costPrice: numeric("cost_price", { precision: 14, scale: 2 }),
+  openingStock: numeric("opening_stock", { precision: 10, scale: 2 }).notNull().default("0"),
+  minStock: numeric("min_stock", { precision: 10, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

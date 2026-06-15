@@ -412,6 +412,73 @@ export interface ActivityItem {
   description: string;
 }
 
+export type InventoryRowStatus = typeof InventoryRowStatus[keyof typeof InventoryRowStatus];
+
+
+export const InventoryRowStatus = {
+  ok: 'ok',
+  low: 'low',
+  out: 'out',
+} as const;
+
+export interface InventoryRow {
+  id: number;
+  name: string;
+  currentRate: number;
+  /** @nullable */
+  costPrice?: number | null;
+  openingStock: number;
+  minStock: number;
+  purchased: number;
+  sold: number;
+  adjusted: number;
+  currentStock: number;
+  status: InventoryRowStatus;
+}
+
+export type InventoryMovementEntryType = typeof InventoryMovementEntryType[keyof typeof InventoryMovementEntryType];
+
+
+export const InventoryMovementEntryType = {
+  opening: 'opening',
+  in: 'in',
+  out: 'out',
+  adj_in: 'adj_in',
+  adj_out: 'adj_out',
+} as const;
+
+export interface InventoryMovementEntry {
+  id: string;
+  type: InventoryMovementEntryType;
+  date: string;
+  qty: number;
+  ref: string;
+  /** @nullable */
+  notes?: string | null;
+  balance: number;
+  adjustmentId?: number;
+}
+
+export interface InventoryMovements {
+  product: InventoryRow;
+  movements: InventoryMovementEntry[];
+}
+
+export interface InventorySettingsInput {
+  /** @minimum 0 */
+  openingStock?: number;
+  /** @minimum 0 */
+  minStock?: number;
+}
+
+export interface StockAdjustmentInput {
+  productId: number;
+  date: string;
+  qty: number;
+  reason: string;
+  notes?: string;
+}
+
 export interface DailyProfitDay {
   date: string;
   revenue: number;
@@ -786,6 +853,10 @@ export type GetDailyProfitReportParams = {
 from: string;
 to: string;
 };
+
+export type UpdateInventorySettings200 = { [key: string]: unknown };
+
+export type CreateStockAdjustment201 = { [key: string]: unknown };
 
 export type ListPurchasesParams = {
 supplierId?: number;

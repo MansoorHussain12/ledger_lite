@@ -395,8 +395,8 @@ export default function CashbookPage() {
     return d.toISOString().slice(0, 10);
   });
   const [toDate, setToDate] = useState(today);
-  const [typeFilter, setTypeFilter] = useState("");
-  const [modeFilter, setModeFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("__all__");
+  const [modeFilter, setModeFilter] = useState("__all__");
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -408,7 +408,7 @@ export default function CashbookPage() {
 
   const ledgerQ = useQuery({
     queryKey: ["cashbook", fromDate, toDate, typeFilter, modeFilter],
-    queryFn: () => fetchLedger({ from: fromDate, to: toDate, type: typeFilter || undefined, paymentMode: modeFilter || undefined }),
+    queryFn: () => fetchLedger({ from: fromDate, to: toDate, type: typeFilter === "__all__" ? undefined : typeFilter, paymentMode: modeFilter === "__all__" ? undefined : modeFilter }),
     enabled: tab === "ledger",
   });
 
@@ -521,7 +521,7 @@ export default function CashbookPage() {
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="__all__">All</SelectItem>
                   <SelectItem value="cash_in">Cash In</SelectItem>
                   <SelectItem value="cash_out">Cash Out</SelectItem>
                 </SelectContent>
@@ -534,7 +534,7 @@ export default function CashbookPage() {
                   <SelectValue placeholder="All modes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All modes</SelectItem>
+                  <SelectItem value="__all__">All modes</SelectItem>
                   {PAYMENT_MODES.map(m => (
                     <SelectItem key={m} value={m}>{MODE_LABELS[m]}</SelectItem>
                   ))}

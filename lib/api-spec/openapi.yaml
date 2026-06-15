@@ -23,6 +23,8 @@ tags:
     description: Business reports
   - name: dashboard
     description: Dashboard summary
+  - name: inventory
+    description: Inventory management & stock movements
   - name: suppliers
     description: Suppliers & purchase invoices
   - name: cashbook
@@ -764,6 +766,100 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ActivityItem"
+
+  # ── INVENTORY ─────────────────────────────────────────────────────────────
+  /inventory:
+    get:
+      operationId: listInventory
+      tags: [inventory]
+      summary: List all products with current stock levels
+      responses:
+        "200":
+          description: Inventory list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryRow"
+
+  /inventory/{productId}/movements:
+    get:
+      operationId: getInventoryMovements
+      tags: [inventory]
+      summary: Full stock movement ledger for a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Movement ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryMovements"
+
+  /inventory/{productId}/settings:
+    patch:
+      operationId: updateInventorySettings
+      tags: [inventory]
+      summary: Update opening stock and minimum stock for a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventorySettingsInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /inventory/adjustments:
+    post:
+      operationId: createStockAdjustment
+      tags: [inventory]
+      summary: Create a manual stock adjustment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockAdjustmentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /inventory/adjustments/{id}:
+    delete:
+      operationId: deleteStockAdjustment
+      tags: [inventory]
+      summary: Delete a stock adjustment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
 
   # ── SUPPLIERS ─────────────────────────────────────────────────────────────
   /suppliers:
@@ -1671,6 +1767,94 @@ components:
         amount:
           type: number
         description:
+          type: string
+
+    # ── INVENTORY SCHEMAS ─────────────────────────────────────────────────
+    InventoryRow:
+      type: object
+      required: [id, name, currentRate, openingStock, minStock, purchased, sold, adjusted, currentStock, status]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        currentRate:
+          type: number
+        costPrice:
+          type: ["number", "null"]
+        openingStock:
+          type: number
+        minStock:
+          type: number
+        purchased:
+          type: number
+        sold:
+          type: number
+        adjusted:
+          type: number
+        currentStock:
+          type: number
+        status:
+          type: string
+          enum: [ok, low, out]
+
+    InventoryMovementEntry:
+      type: object
+      required: [id, type, date, qty, ref, balance]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [opening, in, out, adj_in, adj_out]
+        date:
+          type: string
+        qty:
+          type: number
+        ref:
+          type: string
+        notes:
+          type: ["string", "null"]
+        balance:
+          type: number
+        adjustmentId:
+          type: integer
+
+    InventoryMovements:
+      type: object
+      required: [product, movements]
+      properties:
+        product:
+          $ref: "#/components/schemas/InventoryRow"
+        movements:
+          type: array
+          items:
+            $ref: "#/components/schemas/InventoryMovementEntry"
+
+    InventorySettingsInput:
+      type: object
+      properties:
+        openingStock:
+          type: number
+          minimum: 0
+        minStock:
+          type: number
+          minimum: 0
+
+    StockAdjustmentInput:
+      type: object
+      required: [productId, date, qty, reason]
+      properties:
+        productId:
+          type: integer
+        date:
+          type: string
+          format: date
+        qty:
+          type: number
+        reason:
+          type: string
+        notes:
           type: string
 
     # ── DAILY PROFIT SCHEMAS ──────────────────────────────────────────────

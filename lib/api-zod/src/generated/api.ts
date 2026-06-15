@@ -750,6 +750,102 @@ export const GetRecentActivityResponse = zod.array(GetRecentActivityResponseItem
 
 
 /**
+ * @summary List all products with current stock levels
+ */
+export const ListInventoryResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "currentRate": zod.number(),
+  "costPrice": zod.number().nullish(),
+  "openingStock": zod.number(),
+  "minStock": zod.number(),
+  "purchased": zod.number(),
+  "sold": zod.number(),
+  "adjusted": zod.number(),
+  "currentStock": zod.number(),
+  "status": zod.enum(['ok', 'low', 'out'])
+})
+export const ListInventoryResponse = zod.array(ListInventoryResponseItem)
+
+
+/**
+ * @summary Full stock movement ledger for a product
+ */
+export const GetInventoryMovementsParams = zod.object({
+  "productId": zod.coerce.number()
+})
+
+export const GetInventoryMovementsResponse = zod.object({
+  "product": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "currentRate": zod.number(),
+  "costPrice": zod.number().nullish(),
+  "openingStock": zod.number(),
+  "minStock": zod.number(),
+  "purchased": zod.number(),
+  "sold": zod.number(),
+  "adjusted": zod.number(),
+  "currentStock": zod.number(),
+  "status": zod.enum(['ok', 'low', 'out'])
+}),
+  "movements": zod.array(zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['opening', 'in', 'out', 'adj_in', 'adj_out']),
+  "date": zod.string(),
+  "qty": zod.number(),
+  "ref": zod.string(),
+  "notes": zod.string().nullish(),
+  "balance": zod.number(),
+  "adjustmentId": zod.number().optional()
+}))
+})
+
+
+/**
+ * @summary Update opening stock and minimum stock for a product
+ */
+export const UpdateInventorySettingsParams = zod.object({
+  "productId": zod.coerce.number()
+})
+
+export const updateInventorySettingsBodyOpeningStockMin = 0;
+
+export const updateInventorySettingsBodyMinStockMin = 0;
+
+
+
+export const UpdateInventorySettingsBody = zod.object({
+  "openingStock": zod.number().min(updateInventorySettingsBodyOpeningStockMin).optional(),
+  "minStock": zod.number().min(updateInventorySettingsBodyMinStockMin).optional()
+})
+
+export const UpdateInventorySettingsResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Create a manual stock adjustment
+ */
+export const CreateStockAdjustmentBody = zod.object({
+  "productId": zod.number(),
+  "date": zod.coerce.date(),
+  "qty": zod.number(),
+  "reason": zod.string(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete a stock adjustment
+ */
+export const DeleteStockAdjustmentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary List all suppliers with payable balance
  */
 export const ListSuppliersResponseItem = zod.object({
