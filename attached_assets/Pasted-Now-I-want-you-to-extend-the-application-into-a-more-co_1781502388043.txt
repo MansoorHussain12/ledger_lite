@@ -1,0 +1,616 @@
+Now I want you to extend the application into a more complete ERP.
+
+The next required modules are:
+
+1. Cashbook
+2. Daily Profit Reports
+3. Advanced Sales / Point of Sale
+4. EMI / Installment Management
+5. Comprehensive Inventory Management
+
+Use clean, scalable, production-ready architecture.
+
+Main Goal
+
+Build an ERP suitable for shops, traders, distributors, wholesalers, retailers, and small businesses.
+
+The system should support:
+
+* Credit sales
+* Cash sales
+* Purchase management
+* Customer balances
+* Supplier balances
+* Cash in hand
+* Bank payments
+* Product stock
+* Profit calculation
+* Installment sales
+* Daily business reports
+
+Required Modules
+
+1. Cashbook Module
+
+Create a complete cashbook system that tracks all cash and bank movement.
+
+Features:
+
+* Cash in
+* Cash out
+* Opening cash balance
+* Closing cash balance
+* Bank deposit
+* Bank withdrawal
+* Transfer between cash and bank
+* Expense payments
+* Customer receipts
+* Supplier payments
+* Salary payments
+* Installment recoveries
+* Manual cash adjustments
+* Daily cash summary
+* Date-wise cashbook report
+* Payment mode support: Cash, Bank, Easypaisa, JazzCash, Cheque, Other
+
+Cashbook entries should be automatically created from:
+
+* Sales
+* Purchases
+* Payments
+* Receipts
+* Expenses
+* Installments
+* Salaries
+
+Each cashbook entry should include:
+
+* Date
+* Type: Cash In / Cash Out
+* Source module
+* Reference number
+* Description
+* Payment mode
+* Amount
+* Running balance
+* Created by
+
+2. Daily Profit Report Module
+
+Create daily profit reporting.
+
+Profit should be calculated from sales and cost of goods sold.
+
+Features:
+
+* Daily gross sales
+* Daily purchase cost / COGS
+* Gross profit
+* Expenses
+* Net profit
+* Cash sales
+* Credit sales
+* Received payments
+* Pending receivables
+* Product-wise profit
+* Invoice-wise profit
+* Category-wise profit
+* Date range filter
+* Daily, weekly, monthly report views
+
+Profit logic:
+
+* Sale price minus purchase cost equals gross profit.
+* For inventory items, use purchase cost from stock batches or average cost.
+* Expenses should reduce net profit.
+* Credit sale profit should still appear in profit report, but receivable should remain in customer ledger.
+* Returned items should reverse profit.
+
+Reports required:
+
+* Daily Profit Summary
+* Product Profit Report
+* Invoice Profit Report
+* Monthly Profit Report
+* Expense vs Profit Report
+
+3. Advanced Sales / Point of Sale Module
+
+Create a complete sales and POS system.
+
+Features:
+
+* POS screen for fast billing
+* Barcode search
+* Product search
+* Add multiple products to cart
+* Quantity, rate, discount, tax
+* Customer selection
+* Walk-in customer support
+* Cash sale
+* Credit sale
+* Partial payment sale
+* Sale return
+* Invoice printing
+* Thermal receipt printing
+* Hold bill
+* Resume held bill
+* Multiple payment methods
+* Stock validation before sale
+* Auto ledger posting
+* Auto inventory deduction
+* Auto cashbook entry
+* Profit calculation per invoice
+
+Sale types:
+
+* Cash Sale
+* Credit Sale
+* Partial Payment Sale
+* Installment Sale
+* Wholesale Sale
+* Retail Sale
+
+Invoice fields:
+
+* Invoice number
+* Date
+* Customer
+* Items
+* Quantity
+* Unit price
+* Discount
+* Tax
+* Total amount
+* Paid amount
+* Balance amount
+* Payment method
+* Sale type
+* Created by
+
+Business rules:
+
+* If sale is cash, add amount to cashbook.
+* If sale is credit, add receivable to customer ledger.
+* If partial payment, paid amount goes to cashbook and remaining amount goes to ledger.
+* Stock should reduce after invoice confirmation.
+* Profit should be calculated using cost price.
+* Return should increase stock and reverse ledger/cashbook/profit effect.
+
+4. EMI / Installment Management Module
+
+Create installment sale management for businesses that sell products on EMI.
+
+Features:
+
+* Create installment sale
+* Customer profile
+* Product selection
+* Product actual price
+* Advance payment
+* Installment price
+* Markup/profit amount
+* Number of installments
+* Installment duration: daily, weekly, monthly
+* Due date generation
+* Installment schedule
+* Installment collection
+* Late payment status
+* Overdue report
+* Remaining balance
+* Early settlement
+* Penalty charges optional
+* Installment receipt printing
+* Customer installment history
+
+Installment sale fields:
+
+* Agreement number
+* Customer
+* Product/items
+* Sale date
+* Actual price
+* Installment sale price
+* Advance payment
+* Remaining amount
+* Number of installments
+* Installment amount
+* Start date
+* Due dates
+* Status: Active, Completed, Defaulted, Cancelled
+
+Installment payment fields:
+
+* Installment sale ID
+* Due date
+* Paid date
+* Amount due
+* Amount paid
+* Remaining
+* Status: Pending, Paid, Partial, Overdue
+
+Business rules:
+
+* Advance payment should go to cashbook.
+* Remaining installment balance should appear in customer receivable ledger.
+* Every installment payment should update:
+
+  * Cashbook
+  * Customer ledger
+  * Installment schedule
+  * Reports
+* If product is sold on installment, stock should reduce immediately.
+* Profit should be calculated according to business logic.
+* Overdue installments should appear on dashboard.
+
+Reports:
+
+* Active installment accounts
+* Overdue installments
+* Daily installment collection
+* Customer-wise installment balance
+* Completed installment sales
+* Defaulted accounts
+
+
+
+5. Comprehensive Inventory Management Module
+
+Upgrade the current minimal inventory into a complete inventory system.
+
+Features:
+
+* Product management
+* Category management
+* Brand management
+* Unit management
+* Supplier management
+* Purchase management
+* Stock batches
+* Stock adjustment
+* Stock transfer
+* Damaged stock
+* Expired stock
+* Low stock alerts
+* Reorder level
+* Barcode support
+* Product cost tracking
+* Average cost / FIFO costing
+* Stock valuation
+* Purchase return
+* Sale return
+* Inventory reports
+
+Product fields:
+
+* Product code
+* Barcode
+* Product name
+* Category
+* Brand
+* Unit
+* Purchase price
+* Sale price
+* Wholesale price
+* Retail price
+* Opening stock
+* Current stock
+* Reorder level
+* Status
+
+Purchase features:
+
+* Purchase invoice
+* Supplier selection
+* Multiple products
+* Quantity
+* Purchase rate
+* Discount
+* Tax
+* Total
+* Paid amount
+* Balance amount
+* Cash or credit purchase
+* Supplier ledger posting
+* Cashbook posting
+* Stock increase
+
+Stock movement types:
+
+* Opening Stock
+* Purchase
+* Sale
+* Sale Return
+* Purchase Return
+* Adjustment In
+* Adjustment Out
+* Damage
+* Expiry
+* Transfer
+
+Business rules:
+
+* Purchase should increase stock.
+* Sale should decrease stock.
+* Sale return should increase stock.
+* Purchase return should decrease stock.
+* Stock adjustment should record reason.
+* Every stock movement should be traceable.
+* Inventory valuation should use selected costing method.
+* Low stock items should appear on dashboard.
+
+Reports:
+
+* Current stock report
+* Stock movement report
+* Low stock report
+* Product ledger
+* Purchase report
+* Purchase return report
+* Sale return report
+* Stock valuation report
+* Damaged stock report
+* Expired stock report
+* Supplier purchase report
+
+Dashboard Requirements
+
+Create a main ERP dashboard showing:
+
+* Today’s sales
+* Today’s purchases
+* Today’s profit
+* Cash in hand
+* Bank balance
+* Customer receivables
+* Supplier payables
+* Low stock products
+* Overdue installments
+* Today’s installment collection
+* Pending salaries
+* Monthly profit
+* Top selling products
+* Recent transactions
+
+User Roles
+
+Implement role-based access control.
+
+Roles:
+
+* Super Admin
+* Admin
+* Accountant
+* Salesman / POS User
+* Inventory Manager
+* HR Manager
+* Viewer
+
+Permission examples:
+
+* POS user can create sales but cannot delete invoices.
+* Accountant can manage ledgers, payments, receipts, cashbook, reports.
+* Inventory manager can manage products, purchases, stock adjustments.
+* HR manager can manage employees, attendance, payroll.
+* Viewer can only view reports.
+* Super Admin can access everything.
+
+Database Design Requirements
+
+Design Prisma schema models for all modules.
+
+Required core entities:
+
+* User
+* Role
+* Permission
+* Customer
+* Supplier
+* LedgerAccount
+* LedgerEntry
+* CashbookEntry
+* Product
+* Category
+* Brand
+* Unit
+* InventoryBatch
+* StockMovement
+* SaleInvoice
+* SaleInvoiceItem
+* PurchaseInvoice
+* PurchaseInvoiceItem
+* Payment
+* Receipt
+* Expense
+* InstallmentSale
+* InstallmentSchedule
+* InstallmentPayment
+* Employee
+* Department
+* Designation
+* Attendance
+* Payroll
+* SalaryPayment
+* EmployeeAdvance
+
+Every important table should include:
+
+* id
+* createdAt
+* updatedAt
+* createdBy
+* updatedBy where needed
+* status where needed
+
+
+Frontend Pages Required
+
+Create clean UI pages for:
+
+* Dashboard
+* POS
+* Sales invoices
+* Sale returns
+* Purchases
+* Purchase returns
+* Products
+* Categories
+* Brands
+* Stock management
+* Stock adjustment
+* Customers
+* Suppliers
+* Ledgers
+* Payments
+* Receipts
+* Cashbook
+* Daily profit report
+* Inventory reports
+* Installment sales
+* Installment collections
+* HRM employees
+* Attendance
+* Payroll
+* Salary payments
+* Settings
+* Users and roles
+
+UI Requirements
+
+Use a professional ERP layout:
+
+* Sidebar navigation
+* Topbar
+* Search
+* Filters
+* Date range filters
+* Data tables
+* Create/edit forms
+* Detail pages
+* Print buttons
+* Export to PDF/Excel
+* Dashboard cards
+* Charts where useful
+* Mobile responsive where possible
+
+Accounting Integration Rules
+
+The system must maintain consistency between modules.
+
+When a sale is created:
+
+* Create sale invoice
+* Reduce inventory
+* Create customer ledger entry if credit or partial
+* Create cashbook entry if paid
+* Create profit record/report data
+
+When a purchase is created:
+
+* Create purchase invoice
+* Increase inventory
+* Create supplier ledger entry if credit or partial
+* Create cashbook entry if paid
+
+When a payment is made to supplier:
+
+* Create payment record
+* Reduce cash/bank
+* Update supplier ledger
+* Add cashbook cash out entry
+
+When receipt is received from customer:
+
+* Create receipt record
+* Increase cash/bank
+* Update customer ledger
+* Add cashbook cash in entry
+
+When installment payment is received:
+
+* Update installment schedule
+* Update customer ledger
+* Add cashbook entry
+* Update installment reports
+
+When salary is paid:
+
+* Create salary payment
+* Reduce cash/bank
+* Add cashbook entry
+* Update payroll status
+
+Important Technical Requirements
+
+* Use database transactions for all multi-step operations.
+* Never update financial records partially.
+* Use proper validation with Zod.
+* Use reusable services for accounting, inventory, cashbook, and reports.
+* Use enums for statuses and transaction types.
+* Use audit logs for important financial actions.
+* Avoid hard deleting financial records; use cancelled/reversed status.
+* Support invoice number generation.
+* Support printable invoices and receipts.
+* Support date range filtering on all reports.
+* Use pagination on large tables.
+* Use server-side filtering where needed.
+* Keep code modular and maintainable.
+
+
+
+Development Approach
+
+Do not generate random isolated code.
+
+First produce:
+
+1. Complete database schema
+2. Module-wise architecture
+3. Business workflow explanation
+4. API route list
+5. Frontend route list
+6. Implementation plan in phases
+
+Then generate code module by module in this order:
+
+Phase 1:
+Inventory foundation: products, categories, brands, units, suppliers, stock movements.
+
+Phase 2:
+Purchase management and stock increase.
+
+Phase 3:
+Advanced sales and POS with stock deduction.
+
+Phase 4:
+Cashbook integration.
+
+Phase 5:
+Daily profit reports.
+
+Phase 6:
+Installment / EMI module.
+
+Phase 8:
+Dashboard and reports.
+
+Phase 9:
+Roles, permissions, audit logs, export, print.
+
+Coding Standards
+
+* Use TypeScript.
+* Use clean naming.
+* Use reusable components.
+* Use service layer for business logic.
+* Use Prisma transactions.
+* Use Zod validation.
+* Handle errors properly.
+* Show loading and empty states in UI.
+* Keep forms user-friendly.
+* Add comments only where useful.
+
+Final Output Expected
+
+Generate the ERP extension in a structured way.
+
