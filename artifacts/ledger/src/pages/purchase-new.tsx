@@ -163,7 +163,7 @@ export default function PurchaseNewPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
             <Label>Supplier <span className="text-red-400">*</span></Label>
-            <Select value={supplierId === "" ? "" : String(supplierId)} onValueChange={v => setSupplierId(parseInt(v, 10))}>
+            <Select value={supplierId === "" ? "__none__" : String(supplierId)} onValueChange={v => { if (v !== "__none__") setSupplierId(parseInt(v, 10)); }}>
               <SelectTrigger className="mt-1">
                 <SelectValue placeholder="Select supplier" />
               </SelectTrigger>

@@ -680,6 +680,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/MonthlySalesReport"
 
+  /reports/daily-profit:
+    get:
+      operationId: getDailyProfitReport
+      tags: [reports]
+      summary: Daily profit report — revenue, COGS, gross profit, expenses, net profit
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Daily profit report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyProfitReport"
+
   /reports/outstanding:
     get:
       operationId: getOutstandingReport
@@ -1646,6 +1672,96 @@ components:
           type: number
         description:
           type: string
+
+    # ── DAILY PROFIT SCHEMAS ──────────────────────────────────────────────
+    DailyProfitDay:
+      type: object
+      required: [date, revenue, cogs, grossProfit, grossMargin, expenses, netProfit, netMargin, orders, qty]
+      properties:
+        date:
+          type: string
+          format: date
+        revenue:
+          type: number
+        cogs:
+          type: number
+        grossProfit:
+          type: number
+        grossMargin:
+          type: number
+        expenses:
+          type: number
+        netProfit:
+          type: number
+        netMargin:
+          type: number
+        orders:
+          type: integer
+        qty:
+          type: number
+
+    DailyProfitProductRow:
+      type: object
+      required: [productId, productName, qty, revenue, cogs, profit, margin]
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        qty:
+          type: number
+        revenue:
+          type: number
+        cogs:
+          type: number
+        profit:
+          type: number
+        margin:
+          type: number
+
+    DailyProfitSummary:
+      type: object
+      required: [revenue, cogs, grossProfit, grossMargin, expenses, netProfit, netMargin, orders, qty]
+      properties:
+        revenue:
+          type: number
+        cogs:
+          type: number
+        grossProfit:
+          type: number
+        grossMargin:
+          type: number
+        expenses:
+          type: number
+        netProfit:
+          type: number
+        netMargin:
+          type: number
+        orders:
+          type: integer
+        qty:
+          type: number
+
+    DailyProfitReport:
+      type: object
+      required: [from, to, summary, days, byProduct]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        summary:
+          $ref: "#/components/schemas/DailyProfitSummary"
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyProfitDay"
+        byProduct:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyProfitProductRow"
 
     # ── SUPPLIER / PURCHASE SCHEMAS ───────────────────────────────────────
     SupplierInput:

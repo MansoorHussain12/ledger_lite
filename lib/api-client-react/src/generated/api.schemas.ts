@@ -412,6 +412,49 @@ export interface ActivityItem {
   description: string;
 }
 
+export interface DailyProfitDay {
+  date: string;
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  grossMargin: number;
+  expenses: number;
+  netProfit: number;
+  netMargin: number;
+  orders: number;
+  qty: number;
+}
+
+export interface DailyProfitProductRow {
+  productId: number;
+  productName: string;
+  qty: number;
+  revenue: number;
+  cogs: number;
+  profit: number;
+  margin: number;
+}
+
+export interface DailyProfitSummary {
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  grossMargin: number;
+  expenses: number;
+  netProfit: number;
+  netMargin: number;
+  orders: number;
+  qty: number;
+}
+
+export interface DailyProfitReport {
+  from: string;
+  to: string;
+  summary: DailyProfitSummary;
+  days: DailyProfitDay[];
+  byProduct: DailyProfitProductRow[];
+}
+
 export interface SupplierInput {
   name: string;
   contact?: string;
@@ -737,6 +780,11 @@ date?: string;
 export type GetMonthlySalesReportParams = {
 year?: number;
 month?: number;
+};
+
+export type GetDailyProfitReportParams = {
+from: string;
+to: string;
 };
 
 export type ListPurchasesParams = {

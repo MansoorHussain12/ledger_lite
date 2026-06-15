@@ -648,6 +648,52 @@ export const GetMonthlySalesReportResponse = zod.object({
 
 
 /**
+ * @summary Daily profit report — revenue, COGS, gross profit, expenses, net profit
+ */
+export const GetDailyProfitReportQueryParams = zod.object({
+  "from": zod.date(),
+  "to": zod.date()
+})
+
+export const GetDailyProfitReportResponse = zod.object({
+  "from": zod.coerce.date(),
+  "to": zod.coerce.date(),
+  "summary": zod.object({
+  "revenue": zod.number(),
+  "cogs": zod.number(),
+  "grossProfit": zod.number(),
+  "grossMargin": zod.number(),
+  "expenses": zod.number(),
+  "netProfit": zod.number(),
+  "netMargin": zod.number(),
+  "orders": zod.number(),
+  "qty": zod.number()
+}),
+  "days": zod.array(zod.object({
+  "date": zod.coerce.date(),
+  "revenue": zod.number(),
+  "cogs": zod.number(),
+  "grossProfit": zod.number(),
+  "grossMargin": zod.number(),
+  "expenses": zod.number(),
+  "netProfit": zod.number(),
+  "netMargin": zod.number(),
+  "orders": zod.number(),
+  "qty": zod.number()
+})),
+  "byProduct": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "revenue": zod.number(),
+  "cogs": zod.number(),
+  "profit": zod.number(),
+  "margin": zod.number()
+}))
+})
+
+
+/**
  * @summary Customer-wise outstanding list
  */
 export const GetOutstandingReportResponseItem = zod.object({

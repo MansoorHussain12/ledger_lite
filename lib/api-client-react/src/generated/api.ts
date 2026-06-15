@@ -33,12 +33,14 @@ import type {
   CustomerStatement,
   CustomerUpdate,
   DailyCollectionReport,
+  DailyProfitReport,
   DashboardSummary,
   DebtorRow,
   Expense,
   ExpenseInput,
   GetCustomerLedgerParams,
   GetDailyCollectionReportParams,
+  GetDailyProfitReportParams,
   GetMonthlySalesReportParams,
   HealthStatus,
   ListCashbookEntriesParams,
@@ -2633,6 +2635,90 @@ export function useGetMonthlySalesReport<TData = Awaited<ReturnType<typeof getMo
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMonthlySalesReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetDailyProfitReportUrl = (params: GetDailyProfitReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/daily-profit?${stringifiedParams}` : `/api/reports/daily-profit`
+}
+
+/**
+ * @summary Daily profit report — revenue, COGS, gross profit, expenses, net profit
+ */
+export const getDailyProfitReport = async (params: GetDailyProfitReportParams, options?: RequestInit): Promise<DailyProfitReport> => {
+
+  return customFetch<DailyProfitReport>(getGetDailyProfitReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDailyProfitReportQueryKey = (params?: GetDailyProfitReportParams,) => {
+    return [
+    `/api/reports/daily-profit`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDailyProfitReportQueryOptions = <TData = Awaited<ReturnType<typeof getDailyProfitReport>>, TError = ErrorType<unknown>>(params: GetDailyProfitReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDailyProfitReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDailyProfitReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDailyProfitReport>>> = ({ signal }) => getDailyProfitReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDailyProfitReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDailyProfitReportQueryResult = NonNullable<Awaited<ReturnType<typeof getDailyProfitReport>>>
+export type GetDailyProfitReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Daily profit report — revenue, COGS, gross profit, expenses, net profit
+ */
+
+export function useGetDailyProfitReport<TData = Awaited<ReturnType<typeof getDailyProfitReport>>, TError = ErrorType<unknown>>(
+ params: GetDailyProfitReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDailyProfitReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDailyProfitReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
