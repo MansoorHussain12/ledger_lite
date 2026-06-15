@@ -27,6 +27,7 @@ import type {
   CashbookEntryInput,
   CashbookLedger,
   CashbookSummary,
+  CreateInstallmentPlanInput,
   CreateStockAdjustment201,
   Customer,
   CustomerInput,
@@ -44,6 +45,8 @@ import type {
   GetDailyProfitReportParams,
   GetMonthlySalesReportParams,
   HealthStatus,
+  InstallmentPaymentInput,
+  InstallmentPlanDetail,
   InventoryMovements,
   InventoryRow,
   InventorySettingsInput,
@@ -3044,6 +3047,443 @@ export function useGetRecentActivity<TData = Awaited<ReturnType<typeof getRecent
 
 
 
+
+export const getListInstallmentsUrl = () => {
+
+
+
+
+  return `/api/installments`
+}
+
+/**
+ * @summary List all installment plans
+ */
+export const listInstallments = async ( options?: RequestInit): Promise<InstallmentPlanDetail[]> => {
+
+  return customFetch<InstallmentPlanDetail[]>(getListInstallmentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInstallmentsQueryKey = () => {
+    return [
+    `/api/installments`
+    ] as const;
+    }
+
+
+export const getListInstallmentsQueryOptions = <TData = Awaited<ReturnType<typeof listInstallments>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInstallments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInstallmentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInstallments>>> = ({ signal }) => listInstallments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInstallments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInstallmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listInstallments>>>
+export type ListInstallmentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all installment plans
+ */
+
+export function useListInstallments<TData = Awaited<ReturnType<typeof listInstallments>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInstallments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInstallmentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateInstallmentPlanUrl = () => {
+
+
+
+
+  return `/api/installments`
+}
+
+/**
+ * @summary Create a new installment plan
+ */
+export const createInstallmentPlan = async (createInstallmentPlanInput: CreateInstallmentPlanInput, options?: RequestInit): Promise<InstallmentPlanDetail> => {
+
+  return customFetch<InstallmentPlanDetail>(getCreateInstallmentPlanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createInstallmentPlanInput,)
+  }
+);}
+
+
+
+
+export const getCreateInstallmentPlanMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInstallmentPlan>>, TError,{data: BodyType<CreateInstallmentPlanInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createInstallmentPlan>>, TError,{data: BodyType<CreateInstallmentPlanInput>}, TContext> => {
+
+const mutationKey = ['createInstallmentPlan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createInstallmentPlan>>, {data: BodyType<CreateInstallmentPlanInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createInstallmentPlan(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateInstallmentPlanMutationResult = NonNullable<Awaited<ReturnType<typeof createInstallmentPlan>>>
+    export type CreateInstallmentPlanMutationBody = BodyType<CreateInstallmentPlanInput>
+    export type CreateInstallmentPlanMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new installment plan
+ */
+export const useCreateInstallmentPlan = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInstallmentPlan>>, TError,{data: BodyType<CreateInstallmentPlanInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createInstallmentPlan>>,
+        TError,
+        {data: BodyType<CreateInstallmentPlanInput>},
+        TContext
+      > => {
+      return useMutation(getCreateInstallmentPlanMutationOptions(options));
+    }
+
+export const getGetInstallmentPlanUrl = (id: number,) => {
+
+
+
+
+  return `/api/installments/${id}`
+}
+
+/**
+ * @summary Get plan detail with schedule and payments
+ */
+export const getInstallmentPlan = async (id: number, options?: RequestInit): Promise<InstallmentPlanDetail> => {
+
+  return customFetch<InstallmentPlanDetail>(getGetInstallmentPlanUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInstallmentPlanQueryKey = (id: number,) => {
+    return [
+    `/api/installments/${id}`
+    ] as const;
+    }
+
+
+export const getGetInstallmentPlanQueryOptions = <TData = Awaited<ReturnType<typeof getInstallmentPlan>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstallmentPlan>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInstallmentPlanQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInstallmentPlan>>> = ({ signal }) => getInstallmentPlan(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInstallmentPlan>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInstallmentPlanQueryResult = NonNullable<Awaited<ReturnType<typeof getInstallmentPlan>>>
+export type GetInstallmentPlanQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get plan detail with schedule and payments
+ */
+
+export function useGetInstallmentPlan<TData = Awaited<ReturnType<typeof getInstallmentPlan>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstallmentPlan>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInstallmentPlanQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getDeleteInstallmentPlanUrl = (id: number,) => {
+
+
+
+
+  return `/api/installments/${id}`
+}
+
+/**
+ * @summary Delete an installment plan
+ */
+export const deleteInstallmentPlan = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteInstallmentPlanUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteInstallmentPlanMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPlan>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPlan>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteInstallmentPlan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteInstallmentPlan>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteInstallmentPlan(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteInstallmentPlanMutationResult = NonNullable<Awaited<ReturnType<typeof deleteInstallmentPlan>>>
+
+    export type DeleteInstallmentPlanMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete an installment plan
+ */
+export const useDeleteInstallmentPlan = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPlan>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteInstallmentPlan>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteInstallmentPlanMutationOptions(options));
+    }
+
+export const getRecordInstallmentPaymentUrl = (id: number,) => {
+
+
+
+
+  return `/api/installments/${id}/payments`
+}
+
+/**
+ * @summary Record a payment against a plan
+ */
+export const recordInstallmentPayment = async (id: number,
+    installmentPaymentInput: InstallmentPaymentInput, options?: RequestInit): Promise<InstallmentPlanDetail> => {
+
+  return customFetch<InstallmentPlanDetail>(getRecordInstallmentPaymentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      installmentPaymentInput,)
+  }
+);}
+
+
+
+
+export const getRecordInstallmentPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordInstallmentPayment>>, TError,{id: number;data: BodyType<InstallmentPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordInstallmentPayment>>, TError,{id: number;data: BodyType<InstallmentPaymentInput>}, TContext> => {
+
+const mutationKey = ['recordInstallmentPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordInstallmentPayment>>, {id: number;data: BodyType<InstallmentPaymentInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  recordInstallmentPayment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordInstallmentPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof recordInstallmentPayment>>>
+    export type RecordInstallmentPaymentMutationBody = BodyType<InstallmentPaymentInput>
+    export type RecordInstallmentPaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record a payment against a plan
+ */
+export const useRecordInstallmentPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordInstallmentPayment>>, TError,{id: number;data: BodyType<InstallmentPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordInstallmentPayment>>,
+        TError,
+        {id: number;data: BodyType<InstallmentPaymentInput>},
+        TContext
+      > => {
+      return useMutation(getRecordInstallmentPaymentMutationOptions(options));
+    }
+
+export const getDeleteInstallmentPaymentUrl = (paymentId: number,) => {
+
+
+
+
+  return `/api/installments/payments/${paymentId}`
+}
+
+/**
+ * @summary Delete a payment
+ */
+export const deleteInstallmentPayment = async (paymentId: number, options?: RequestInit): Promise<InstallmentPlanDetail> => {
+
+  return customFetch<InstallmentPlanDetail>(getDeleteInstallmentPaymentUrl(paymentId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteInstallmentPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPayment>>, TError,{paymentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPayment>>, TError,{paymentId: number}, TContext> => {
+
+const mutationKey = ['deleteInstallmentPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteInstallmentPayment>>, {paymentId: number}> = (props) => {
+          const {paymentId} = props ?? {};
+
+          return  deleteInstallmentPayment(paymentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteInstallmentPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteInstallmentPayment>>>
+
+    export type DeleteInstallmentPaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a payment
+ */
+export const useDeleteInstallmentPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPayment>>, TError,{paymentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteInstallmentPayment>>,
+        TError,
+        {paymentId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteInstallmentPaymentMutationOptions(options));
+    }
 
 export const getListInventoryUrl = () => {
 

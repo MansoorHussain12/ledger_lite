@@ -750,6 +750,196 @@ export const GetRecentActivityResponse = zod.array(GetRecentActivityResponseItem
 
 
 /**
+ * @summary List all installment plans
+ */
+export const ListInstallmentsResponseItem = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "saleOrderId": zod.number().nullish(),
+  "saleOrderRef": zod.string().nullish(),
+  "title": zod.string(),
+  "totalAmount": zod.number(),
+  "downPayment": zod.number(),
+  "installmentsCount": zod.number(),
+  "frequency": zod.string(),
+  "startDate": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.unknown().optional(),
+  "totalPaid": zod.number(),
+  "outstanding": zod.number(),
+  "isFullyPaid": zod.boolean(),
+  "overdueCount": zod.number(),
+  "nextDueDate": zod.string().nullish(),
+  "nextDueAmount": zod.number().nullish(),
+  "status": zod.enum(['active', 'paid', 'overdue']),
+  "schedule": zod.array(zod.object({
+  "id": zod.number(),
+  "planId": zod.number(),
+  "installmentNo": zod.number(),
+  "dueDate": zod.string(),
+  "scheduledAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "status": zod.enum(['pending', 'paid', 'overdue'])
+})),
+  "payments": zod.array(zod.object({
+  "id": zod.number(),
+  "planId": zod.number(),
+  "scheduleId": zod.number().nullish(),
+  "date": zod.string(),
+  "amount": zod.number(),
+  "paymentMode": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.unknown().optional()
+}))
+})
+export const ListInstallmentsResponse = zod.array(ListInstallmentsResponseItem)
+
+
+/**
+ * @summary Create a new installment plan
+ */
+export const CreateInstallmentPlanBody = zod.object({
+  "customerId": zod.number(),
+  "saleOrderId": zod.number().optional(),
+  "title": zod.string(),
+  "totalAmount": zod.number(),
+  "downPayment": zod.number().optional(),
+  "installmentsCount": zod.number(),
+  "frequency": zod.enum(['weekly', 'biweekly', 'monthly']).optional(),
+  "startDate": zod.coerce.date(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Get plan detail with schedule and payments
+ */
+export const GetInstallmentPlanParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetInstallmentPlanResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "saleOrderId": zod.number().nullish(),
+  "saleOrderRef": zod.string().nullish(),
+  "title": zod.string(),
+  "totalAmount": zod.number(),
+  "downPayment": zod.number(),
+  "installmentsCount": zod.number(),
+  "frequency": zod.string(),
+  "startDate": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.unknown().optional(),
+  "totalPaid": zod.number(),
+  "outstanding": zod.number(),
+  "isFullyPaid": zod.boolean(),
+  "overdueCount": zod.number(),
+  "nextDueDate": zod.string().nullish(),
+  "nextDueAmount": zod.number().nullish(),
+  "status": zod.enum(['active', 'paid', 'overdue']),
+  "schedule": zod.array(zod.object({
+  "id": zod.number(),
+  "planId": zod.number(),
+  "installmentNo": zod.number(),
+  "dueDate": zod.string(),
+  "scheduledAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "status": zod.enum(['pending', 'paid', 'overdue'])
+})),
+  "payments": zod.array(zod.object({
+  "id": zod.number(),
+  "planId": zod.number(),
+  "scheduleId": zod.number().nullish(),
+  "date": zod.string(),
+  "amount": zod.number(),
+  "paymentMode": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.unknown().optional()
+}))
+})
+
+
+/**
+ * @summary Delete an installment plan
+ */
+export const DeleteInstallmentPlanParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Record a payment against a plan
+ */
+export const RecordInstallmentPaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RecordInstallmentPaymentBody = zod.object({
+  "scheduleId": zod.number().optional(),
+  "date": zod.coerce.date(),
+  "amount": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank_transfer', 'cheque', 'online']).optional(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete a payment
+ */
+export const DeleteInstallmentPaymentParams = zod.object({
+  "paymentId": zod.coerce.number()
+})
+
+export const DeleteInstallmentPaymentResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "saleOrderId": zod.number().nullish(),
+  "saleOrderRef": zod.string().nullish(),
+  "title": zod.string(),
+  "totalAmount": zod.number(),
+  "downPayment": zod.number(),
+  "installmentsCount": zod.number(),
+  "frequency": zod.string(),
+  "startDate": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.unknown().optional(),
+  "totalPaid": zod.number(),
+  "outstanding": zod.number(),
+  "isFullyPaid": zod.boolean(),
+  "overdueCount": zod.number(),
+  "nextDueDate": zod.string().nullish(),
+  "nextDueAmount": zod.number().nullish(),
+  "status": zod.enum(['active', 'paid', 'overdue']),
+  "schedule": zod.array(zod.object({
+  "id": zod.number(),
+  "planId": zod.number(),
+  "installmentNo": zod.number(),
+  "dueDate": zod.string(),
+  "scheduledAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "status": zod.enum(['pending', 'paid', 'overdue'])
+})),
+  "payments": zod.array(zod.object({
+  "id": zod.number(),
+  "planId": zod.number(),
+  "scheduleId": zod.number().nullish(),
+  "date": zod.string(),
+  "amount": zod.number(),
+  "paymentMode": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.unknown().optional()
+}))
+})
+
+
+/**
  * @summary List all products with current stock levels
  */
 export const ListInventoryResponseItem = zod.object({

@@ -412,6 +412,117 @@ export interface ActivityItem {
   description: string;
 }
 
+export type InstallmentScheduleItemStatus = typeof InstallmentScheduleItemStatus[keyof typeof InstallmentScheduleItemStatus];
+
+
+export const InstallmentScheduleItemStatus = {
+  pending: 'pending',
+  paid: 'paid',
+  overdue: 'overdue',
+} as const;
+
+export interface InstallmentScheduleItem {
+  id: number;
+  planId: number;
+  installmentNo: number;
+  dueDate: string;
+  scheduledAmount: number;
+  paidAmount: number;
+  balance: number;
+  status: InstallmentScheduleItemStatus;
+}
+
+export interface InstallmentPaymentRecord {
+  id: number;
+  planId: number;
+  /** @nullable */
+  scheduleId?: number | null;
+  date: string;
+  amount: number;
+  paymentMode: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt?: unknown;
+}
+
+export type InstallmentPlanDetailStatus = typeof InstallmentPlanDetailStatus[keyof typeof InstallmentPlanDetailStatus];
+
+
+export const InstallmentPlanDetailStatus = {
+  active: 'active',
+  paid: 'paid',
+  overdue: 'overdue',
+} as const;
+
+export interface InstallmentPlanDetail {
+  id: number;
+  customerId: number;
+  customerName: string;
+  /** @nullable */
+  saleOrderId?: number | null;
+  /** @nullable */
+  saleOrderRef?: string | null;
+  title: string;
+  totalAmount: number;
+  downPayment: number;
+  installmentsCount: number;
+  frequency: string;
+  startDate: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt?: unknown;
+  totalPaid: number;
+  outstanding: number;
+  isFullyPaid: boolean;
+  overdueCount: number;
+  /** @nullable */
+  nextDueDate?: string | null;
+  /** @nullable */
+  nextDueAmount?: number | null;
+  status: InstallmentPlanDetailStatus;
+  schedule: InstallmentScheduleItem[];
+  payments: InstallmentPaymentRecord[];
+}
+
+export type CreateInstallmentPlanInputFrequency = typeof CreateInstallmentPlanInputFrequency[keyof typeof CreateInstallmentPlanInputFrequency];
+
+
+export const CreateInstallmentPlanInputFrequency = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+} as const;
+
+export interface CreateInstallmentPlanInput {
+  customerId: number;
+  saleOrderId?: number;
+  title: string;
+  totalAmount: number;
+  downPayment?: number;
+  installmentsCount: number;
+  frequency?: CreateInstallmentPlanInputFrequency;
+  startDate: string;
+  notes?: string;
+}
+
+export type InstallmentPaymentInputPaymentMode = typeof InstallmentPaymentInputPaymentMode[keyof typeof InstallmentPaymentInputPaymentMode];
+
+
+export const InstallmentPaymentInputPaymentMode = {
+  cash: 'cash',
+  bank_transfer: 'bank_transfer',
+  cheque: 'cheque',
+  online: 'online',
+} as const;
+
+export interface InstallmentPaymentInput {
+  scheduleId?: number;
+  date: string;
+  amount: number;
+  paymentMode?: InstallmentPaymentInputPaymentMode;
+  notes?: string;
+}
+
 export type InventoryRowStatus = typeof InventoryRowStatus[keyof typeof InventoryRowStatus];
 
 

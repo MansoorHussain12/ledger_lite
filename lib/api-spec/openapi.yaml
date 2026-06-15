@@ -23,6 +23,8 @@ tags:
     description: Business reports
   - name: dashboard
     description: Dashboard summary
+  - name: installments
+    description: EMI & installment plans
   - name: inventory
     description: Inventory management & stock movements
   - name: suppliers
@@ -766,6 +768,115 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ActivityItem"
+
+  # ── INSTALLMENTS ──────────────────────────────────────────────────────────
+  /installments:
+    get:
+      operationId: listInstallments
+      tags: [installments]
+      summary: List all installment plans
+      responses:
+        "200":
+          description: Plans list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InstallmentPlanDetail"
+    post:
+      operationId: createInstallmentPlan
+      tags: [installments]
+      summary: Create a new installment plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInstallmentPlanInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstallmentPlanDetail"
+
+  /installments/{id}:
+    get:
+      operationId: getInstallmentPlan
+      tags: [installments]
+      summary: Get plan detail with schedule and payments
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Plan detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstallmentPlanDetail"
+    delete:
+      operationId: deleteInstallmentPlan
+      tags: [installments]
+      summary: Delete an installment plan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /installments/{id}/payments:
+    post:
+      operationId: recordInstallmentPayment
+      tags: [installments]
+      summary: Record a payment against a plan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstallmentPaymentInput"
+      responses:
+        "201":
+          description: Updated plan detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstallmentPlanDetail"
+
+  /installments/payments/{paymentId}:
+    delete:
+      operationId: deleteInstallmentPayment
+      tags: [installments]
+      summary: Delete a payment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstallmentPlanDetail"
 
   # ── INVENTORY ─────────────────────────────────────────────────────────────
   /inventory:
@@ -1768,6 +1879,98 @@ components:
           type: number
         description:
           type: string
+
+    # ── INSTALLMENT SCHEMAS ───────────────────────────────────────────────
+    InstallmentScheduleItem:
+      type: object
+      required: [id, planId, installmentNo, dueDate, scheduledAmount, paidAmount, balance, status]
+      properties:
+        id: { type: integer }
+        planId: { type: integer }
+        installmentNo: { type: integer }
+        dueDate: { type: string }
+        scheduledAmount: { type: number }
+        paidAmount: { type: number }
+        balance: { type: number }
+        status:
+          type: string
+          enum: [pending, paid, overdue]
+
+    InstallmentPaymentRecord:
+      type: object
+      required: [id, planId, date, amount, paymentMode]
+      properties:
+        id: { type: integer }
+        planId: { type: integer }
+        scheduleId: { type: ["integer", "null"] }
+        date: { type: string }
+        amount: { type: number }
+        paymentMode: { type: string }
+        notes: { type: ["string", "null"] }
+        createdAt: {}
+
+    InstallmentPlanDetail:
+      type: object
+      required: [id, customerId, customerName, title, totalAmount, downPayment, installmentsCount, frequency, startDate, totalPaid, outstanding, isFullyPaid, overdueCount, status, schedule, payments]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        customerName: { type: string }
+        saleOrderId: { type: ["integer", "null"] }
+        saleOrderRef: { type: ["string", "null"] }
+        title: { type: string }
+        totalAmount: { type: number }
+        downPayment: { type: number }
+        installmentsCount: { type: integer }
+        frequency: { type: string }
+        startDate: { type: string }
+        notes: { type: ["string", "null"] }
+        createdAt: {}
+        totalPaid: { type: number }
+        outstanding: { type: number }
+        isFullyPaid: { type: boolean }
+        overdueCount: { type: integer }
+        nextDueDate: { type: ["string", "null"] }
+        nextDueAmount: { type: ["number", "null"] }
+        status:
+          type: string
+          enum: [active, paid, overdue]
+        schedule:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstallmentScheduleItem"
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstallmentPaymentRecord"
+
+    CreateInstallmentPlanInput:
+      type: object
+      required: [customerId, title, totalAmount, installmentsCount, startDate]
+      properties:
+        customerId: { type: integer }
+        saleOrderId: { type: integer }
+        title: { type: string }
+        totalAmount: { type: number }
+        downPayment: { type: number }
+        installmentsCount: { type: integer }
+        frequency:
+          type: string
+          enum: [weekly, biweekly, monthly]
+        startDate: { type: string, format: date }
+        notes: { type: string }
+
+    InstallmentPaymentInput:
+      type: object
+      required: [date, amount]
+      properties:
+        scheduleId: { type: integer }
+        date: { type: string, format: date }
+        amount: { type: number }
+        paymentMode:
+          type: string
+          enum: [cash, bank_transfer, cheque, online]
+        notes: { type: string }
 
     # ── INVENTORY SCHEMAS ─────────────────────────────────────────────────
     InventoryRow:
