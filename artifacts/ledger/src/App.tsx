@@ -17,6 +17,7 @@ import SuppliersPage from "@/pages/suppliers";
 import SupplierDetailPage from "@/pages/supplier-detail";
 import PurchasesPage from "@/pages/purchases";
 import PurchaseNewPage from "@/pages/purchase-new";
+import PosPage from "@/pages/pos";
 import InstallmentsPage from "@/pages/installments";
 import InventoryPage from "@/pages/inventory";
 import ProductsPage from "@/pages/products";
@@ -64,6 +65,7 @@ function AuthenticatedApp() {
         <Route path="/suppliers/:id" component={SupplierDetailPage} />
         <Route path="/purchases/new" component={PurchaseNewPage} />
         <Route path="/purchases" component={PurchasesPage} />
+        <Route path="/pos" component={PosPage} />
         <Route path="/installments" component={InstallmentsPage} />
         <Route path="/inventory" component={InventoryPage} />
         <Route path="/products" component={ProductsPage} />
