@@ -11,6 +11,7 @@ import cashbookRouter from "./cashbook";
 import suppliersRouter from "./suppliers";
 import inventoryRouter from "./inventory";
 import installmentsRouter from "./installments";
+import settingsRouter from "./settings";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(cashbookRouter);
 router.use(suppliersRouter);
 router.use(inventoryRouter);
 router.use(installmentsRouter);
+router.use(settingsRouter);
 
 export default router;

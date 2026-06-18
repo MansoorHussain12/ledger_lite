@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { CompanyProvider } from "@/lib/company";
 import { Layout } from "@/components/layout";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
@@ -17,6 +18,7 @@ import SuppliersPage from "@/pages/suppliers";
 import SupplierDetailPage from "@/pages/supplier-detail";
 import PurchasesPage from "@/pages/purchases";
 import PurchaseNewPage from "@/pages/purchase-new";
+import SettingsPage from "@/pages/settings";
 import GuidePage from "@/pages/guide";
 import PosPage from "@/pages/pos";
 import InstallmentsPage from "@/pages/installments";
@@ -73,6 +75,7 @@ function AuthenticatedApp() {
         <Route path="/products" component={ProductsPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/users" component={UsersPage} />
+        <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
@@ -85,7 +88,9 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AuthProvider>
-            <AuthenticatedApp />
+            <CompanyProvider>
+              <AuthenticatedApp />
+            </CompanyProvider>
           </AuthProvider>
         </WouterRouter>
         <Toaster />

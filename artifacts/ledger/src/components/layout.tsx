@@ -1,8 +1,9 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { useCompany } from "@/lib/company";
 import {
   LayoutDashboard, Users, ShoppingCart, CreditCard,
-  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen, Truck, ShoppingBag, Boxes, CalendarClock, Monitor, HelpCircle
+  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen, Truck, ShoppingBag, Boxes, CalendarClock, Monitor, HelpCircle, Settings
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -21,11 +22,13 @@ const navItems = [
   { href: "/products", label: "Products", icon: Package, roles: ["owner", "salesman"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["owner"] },
   { href: "/users", label: "Users", icon: UserCog, roles: ["owner"] },
+  { href: "/settings", label: "Settings", icon: Settings, roles: ["owner"] },
   { href: "/guide", label: "Guide", icon: HelpCircle, roles: ["owner", "cashier", "salesman"] },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const { settings } = useCompany();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -54,12 +57,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
         "fixed inset-y-0 left-0 z-30 w-60 bg-sidebar flex flex-col transition-transform duration-200 lg:relative lg:translate-x-0",
         mobileOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        {/* Logo */}
-        <div className="px-5 py-5 border-b border-sidebar-border">
-          <div className="text-sidebar-foreground font-bold text-base leading-tight">
-            AL-RAHMAN TRADERS
-          </div>
-          <div className="text-sidebar-foreground/40 text-xs mt-0.5">Ledger System</div>
+        {/* Logo / Company name */}
+        <div className="px-5 py-4 border-b border-sidebar-border">
+          {settings.logoData ? (
+            <div>
+              <img
+                src={settings.logoData}
+                alt={settings.companyName}
+                className="max-h-10 max-w-full object-contain"
+              />
+              {settings.tagline && (
+                <div className="text-sidebar-foreground/40 text-xs mt-1">{settings.tagline}</div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="text-sidebar-foreground font-bold text-sm leading-tight">
+                {settings.companyName}
+              </div>
+              <div className="text-sidebar-foreground/40 text-xs mt-0.5">{settings.tagline}</div>
+            </div>
+          )}
         </div>
 
         {/* Nav */}
@@ -115,7 +133,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <button onClick={() => setMobileOpen(true)} className="p-1 mr-3">
             <Menu size={20} />
           </button>
-          <span className="font-semibold text-sm">AL-RAHMAN TRADERS</span>
+          {settings.logoData ? (
+            <img src={settings.logoData} alt={settings.companyName} className="max-h-7 object-contain" />
+          ) : (
+            <span className="font-semibold text-sm">{settings.companyName}</span>
+          )}
         </div>
 
         {/* Page content */}

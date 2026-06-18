@@ -1,1 +1,3 @@
 - [Orval codegen config](orval-codegen.md) — zod output must use mode:"single", indexFiles:false; manually keep index.ts as single-export
+- [Company settings pattern](company-settings.md) — single-row `company_settings` table; raw pool queries; GET public, PUT owner-only; logo as base64 TEXT.
+- [Products unit+category](products-unit-category.md) — `unit` and `category` added to drizzle schema and DB; products page uses direct fetch (not codegen hooks) to avoid spec regeneration.
