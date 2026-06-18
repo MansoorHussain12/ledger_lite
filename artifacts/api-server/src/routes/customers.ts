@@ -141,7 +141,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
 
   // Get items for those orders
   const orderItemsMap: Map<number, Array<{
-    productId: number; productName: string;
+    productId: number; productName: string; category: string | null;
     qty: number; rate: number; amount: number;
   }>> = new Map();
 
@@ -153,6 +153,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       rate: saleOrderItemsTable.rate,
       amount: saleOrderItemsTable.amount,
       productName: productsTable.name,
+      category: productsTable.category,
     }).from(saleOrderItemsTable)
       .leftJoin(productsTable, eq(saleOrderItemsTable.productId, productsTable.id))
       .where(eq(saleOrderItemsTable.saleOrderId, order.id));
@@ -160,6 +161,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     orderItemsMap.set(order.id, items.map(i => ({
       productId: i.productId,
       productName: i.productName ?? "",
+      category: i.category ?? null,
       qty: parseFloat(i.qty),
       rate: parseFloat(i.rate),
       amount: parseFloat(i.amount),
@@ -243,10 +245,15 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     });
   }
 
+  // Category totals accumulator (only sale values)
+  const categoryTotals = new Map<string, number>();
+
   // Sale order rows — one row per item
   for (const order of orders) {
     const items = orderItemsMap.get(order.id) ?? [];
     for (const item of items) {
+      const cat = item.category?.trim() || "Uncategorised";
+      categoryTotals.set(cat, (categoryTotals.get(cat) ?? 0) + item.amount);
       const tons = item.qty / BAGS_PER_TON;
       const rateTon = item.rate * BAGS_PER_TON;
       rows.push({
@@ -325,6 +332,15 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     };
   });
 
+  const catTotal = Array.from(categoryTotals.values()).reduce((a, b) => a + b, 0);
+  const categoryBreakdown = Array.from(categoryTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([category, amount]) => ({
+      category,
+      amount: Math.round(amount * 100) / 100,
+      share: catTotal > 0 ? Math.round((amount / catTotal) * 1000) / 10 : 0,
+    }));
+
   res.json({
     customer: toCustomerResponse(c, running),
     openingBalance: Math.round(openingBalance * 100) / 100,
@@ -337,6 +353,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     from: fromDate,
     to: toDate,
     entries,
+    categoryBreakdown,
   });
 });
 

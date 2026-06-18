@@ -278,6 +278,31 @@ export default function CustomerDetailPage() {
           </div>
         )}
 
+        {ledger && ledger.categoryBreakdown && ledger.categoryBreakdown.length > 0 && (
+          <div className="mt-4 rounded-xl border border-border bg-card p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              Material Category Summary
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {ledger.categoryBreakdown.map((row) => (
+                <div key={row.category} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm">
+                  <span className="font-medium truncate mr-2">{row.category}</span>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-foreground">Rs. {formatAmount(row.amount)}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">({row.share}%)</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 pt-2 border-t border-border flex justify-between text-sm">
+              <span className="text-muted-foreground font-medium">Total Sales</span>
+              <span className="font-bold">
+                Rs. {formatAmount(ledger.categoryBreakdown.reduce((s, r) => s + r.amount, 0))}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-3 mt-4">
           <Link href={`/sale-orders/new?customerId=${customerId}`}>
             <Button variant="outline" size="sm">New Sale Order</Button>
@@ -445,6 +470,40 @@ export default function CustomerDetailPage() {
           {formatDatePrint(ledger?.to)}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
           {formatAmount(ledger?.closingBalance ?? 0)}
         </div>
+
+        {/* Category breakdown — print */}
+        {ledger && ledger.categoryBreakdown && ledger.categoryBreakdown.length > 0 && (
+          <div style={{ marginTop: "6pt", fontFamily: "Arial", fontSize: "7.5pt" }}>
+            <div style={{ fontWeight: "bold", marginBottom: "3pt", borderBottom: "0.5pt solid #000", paddingBottom: "2pt" }}>
+              Material Category Summary
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", border: "none" }}>
+              <thead>
+                <tr style={{ backgroundColor: "#f0f0f0" }}>
+                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "left" }}>Category</th>
+                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "25%" }}>Amount (Rs)</th>
+                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "12%" }}>Share %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledger.categoryBreakdown.map((row) => (
+                  <tr key={row.category}>
+                    <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt" }}>{row.category}</td>
+                    <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt", textAlign: "right" }}>{formatAmount(row.amount)}</td>
+                    <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt", textAlign: "right" }}>{row.share}%</td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: "bold", backgroundColor: "#f0f0f0" }}>
+                  <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt" }}>Total</td>
+                  <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right" }}>
+                    {formatAmount(ledger.categoryBreakdown.reduce((s, r) => s + r.amount, 0))}
+                  </td>
+                  <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right" }}>100%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Print footer */}
         <div className="print-footer">

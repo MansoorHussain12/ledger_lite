@@ -154,6 +154,12 @@ export interface LedgerEntry {
   balance: number;
 }
 
+export interface CategoryBreakdownItem {
+  category: string;
+  amount: number;
+  share: number;
+}
+
 export interface CustomerLedger {
   customer: Customer;
   openingBalance: number;
@@ -169,6 +175,7 @@ export interface CustomerLedger {
   /** @nullable */
   to: string | null;
   entries: LedgerEntry[];
+  categoryBreakdown: CategoryBreakdownItem[];
 }
 
 export interface CustomerStatement {

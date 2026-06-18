@@ -1471,9 +1471,20 @@ components:
         balance:
           type: number
 
+    CategoryBreakdownItem:
+      type: object
+      required: [category, amount, share]
+      properties:
+        category:
+          type: string
+        amount:
+          type: number
+        share:
+          type: number
+
     CustomerLedger:
       type: object
-      required: [customer, openingBalance, openingBalanceDate, closingBalance, totalReceived, totalSoValue, from, to, entries]
+      required: [customer, openingBalance, openingBalanceDate, closingBalance, totalReceived, totalSoValue, from, to, entries, categoryBreakdown]
       properties:
         customer:
           $ref: "#/components/schemas/Customer"
@@ -1502,6 +1513,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LedgerEntry"
+        categoryBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryBreakdownItem"
 
     CustomerStatement:
       type: object

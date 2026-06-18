@@ -251,6 +251,11 @@ export const GetCustomerLedgerResponse = zod.object({
   "paidAmount": zod.number(),
   "soValue": zod.number(),
   "balance": zod.number()
+})),
+  "categoryBreakdown": zod.array(zod.object({
+  "category": zod.string(),
+  "amount": zod.number(),
+  "share": zod.number()
 }))
 })
 
