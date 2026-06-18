@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useCompany } from "@/lib/company";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -251,6 +252,7 @@ function ProductSearchBar({
 // ── Receipt Dialog ────────────────────────────────────────────────────────────
 
 function ReceiptDialog({ order, onClose, onNewSale }: { order: CompletedOrder; onClose: () => void; onNewSale: () => void }) {
+  const { settings } = useCompany();
   const handlePrint = () => window.print();
 
   return (
@@ -262,8 +264,15 @@ function ReceiptDialog({ order, onClose, onNewSale }: { order: CompletedOrder; o
         <div id="receipt-print" className="border rounded-lg p-4 font-mono text-sm space-y-3">
           {/* Header */}
           <div className="text-center space-y-0.5">
-            <div className="font-bold text-base">AL-RAHMAN TRADERS</div>
-            <div className="text-xs text-muted-foreground">Cement Wholesale</div>
+            {settings.logoData ? (
+              <img src={settings.logoData} alt={settings.companyName}
+                style={{ maxHeight: `${Math.round((settings.logoScale / 100) * 40)}px`, maxWidth: "150px", objectFit: "contain", display: "block", margin: "0 auto" }} />
+            ) : (
+              <div className="font-bold text-base">{settings.companyName}</div>
+            )}
+            {settings.tagline && <div className="text-xs text-muted-foreground">{settings.tagline}</div>}
+            {settings.address && <div className="text-xs text-muted-foreground">{settings.address}</div>}
+            {settings.phone && <div className="text-xs text-muted-foreground">{settings.phone}</div>}
             <div className="text-xs text-muted-foreground">━━━━━━━━━━━━━━━━━━━━━</div>
           </div>
 

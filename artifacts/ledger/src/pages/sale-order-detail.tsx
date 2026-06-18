@@ -3,10 +3,12 @@ import { useGetSaleOrder, getGetSaleOrderQueryKey } from "@workspace/api-client-
 import { formatAmount, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
+import { useCompany } from "@/lib/company";
 
 export default function SaleOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const orderId = parseInt(id ?? "0");
+  const { settings } = useCompany();
 
   const { data: order, isLoading } = useGetSaleOrder(orderId, {
     query: { enabled: !!orderId, queryKey: getGetSaleOrderQueryKey(orderId) }
@@ -36,8 +38,18 @@ export default function SaleOrderDetailPage() {
       <div className="bg-card border border-card-border rounded-xl shadow-xs p-6">
         {/* Print header */}
         <div className="print-only text-center mb-6 pb-4 border-b">
-          <h1 className="text-2xl font-bold">AL-RAHMAN TRADERS</h1>
-          <p className="text-sm text-muted-foreground">Cement Dealers</p>
+          {settings.logoData ? (
+            <img src={settings.logoData} alt={settings.companyName}
+              style={{ maxHeight: `${Math.round((settings.logoScale / 100) * 60)}px`, maxWidth: "220px", objectFit: "contain", display: "block", margin: "0 auto 4px" }} />
+          ) : (
+            <h1 className="text-2xl font-bold">{settings.companyName}</h1>
+          )}
+          {settings.tagline && <p className="text-sm text-muted-foreground">{settings.tagline}</p>}
+          {(settings.address || settings.phone) && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {[settings.address, settings.phone].filter(Boolean).join(" · ")}
+            </p>
+          )}
         </div>
 
         <div className="flex justify-between items-start mb-6">
@@ -82,15 +94,15 @@ export default function SaleOrderDetailPage() {
               <tr key={item.id}>
                 <td className="py-2.5 font-medium">{item.productName}</td>
                 <td className="py-2.5 text-right text-muted-foreground">{item.qty}</td>
-                <td className="py-2.5 text-right text-muted-foreground">Rs. {formatAmount(item.rate)}</td>
-                <td className="py-2.5 text-right font-semibold">Rs. {formatAmount(item.amount)}</td>
+                <td className="py-2.5 text-right text-muted-foreground">{settings.currency} {formatAmount(item.rate)}</td>
+                <td className="py-2.5 text-right font-semibold">{settings.currency} {formatAmount(item.amount)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-border font-bold">
               <td colSpan={3} className="pt-3 text-right">Total Amount:</td>
-              <td className="pt-3 text-right text-red-600">Rs. {formatAmount(order.totalAmount)}</td>
+              <td className="pt-3 text-right text-red-600">{settings.currency} {formatAmount(order.totalAmount)}</td>
             </tr>
           </tfoot>
         </table>

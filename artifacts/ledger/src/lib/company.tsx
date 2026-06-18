@@ -1,3 +1,4 @@
+// @refresh reset
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 
 export type CompanySettings = {
@@ -6,6 +7,10 @@ export type CompanySettings = {
   businessType: string;
   currency: string;
   logoData: string | null;
+  logoScale: number;
+  address: string;
+  phone: string;
+  email: string;
 };
 
 const DEFAULT: CompanySettings = {
@@ -14,6 +19,10 @@ const DEFAULT: CompanySettings = {
   businessType: "Building Materials",
   currency: "Rs",
   logoData: null,
+  logoScale: 100,
+  address: "",
+  phone: "",
+  email: "",
 };
 
 type CompanyCtx = {

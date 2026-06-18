@@ -64,7 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <img
                 src={settings.logoData}
                 alt={settings.companyName}
-                className="max-h-10 max-w-full object-contain"
+                style={{ maxHeight: `${Math.round((settings.logoScale / 100) * 40)}px`, maxWidth: "100%", objectFit: "contain" }}
               />
               {settings.tagline && (
                 <div className="text-sidebar-foreground/40 text-xs mt-1">{settings.tagline}</div>
@@ -134,7 +134,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Menu size={20} />
           </button>
           {settings.logoData ? (
-            <img src={settings.logoData} alt={settings.companyName} className="max-h-7 object-contain" />
+            <img src={settings.logoData} alt={settings.companyName} style={{ maxHeight: `${Math.round((settings.logoScale / 100) * 28)}px`, objectFit: "contain" }} />
           ) : (
             <span className="font-semibold text-sm">{settings.companyName}</span>
           )}

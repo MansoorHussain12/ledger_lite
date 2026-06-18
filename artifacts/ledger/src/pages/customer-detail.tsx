@@ -15,12 +15,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Printer, MessageSquare, Pencil, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCompany } from "@/lib/company";
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const customerId = parseInt(id ?? "0");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { settings } = useCompany();
 
   const today = new Date().toISOString().split("T")[0];
   const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
@@ -294,13 +296,18 @@ export default function CustomerDetailPage() {
             <tbody>
               <tr>
                 <td style={{ border: "none", width: "60%", verticalAlign: "top" }}>
-                  <div style={{ fontSize: "14pt", fontWeight: "bold", fontFamily: "Arial" }}>AL-RAHMAN TRADERS</div>
+                  {settings.logoData ? (
+                    <img src={settings.logoData} alt={settings.companyName}
+                      style={{ maxHeight: `${Math.round((settings.logoScale / 100) * 50)}px`, maxWidth: "180px", objectFit: "contain", display: "block", marginBottom: "2pt" }} />
+                  ) : (
+                    <div style={{ fontSize: "14pt", fontWeight: "bold", fontFamily: "Arial" }}>{settings.companyName}</div>
+                  )}
                   <div style={{ fontSize: "12pt", fontWeight: "bold", fontFamily: "Arial", marginTop: "2pt" }}>CUSTOMER LEDGER REPORT</div>
                 </td>
                 <td style={{ border: "none", width: "40%", textAlign: "right", verticalAlign: "top", fontSize: "7.5pt", fontFamily: "Arial" }}>
-                  <div>G.T Road, Bhatar Mor, Wah Cantt</div>
-                  <div>051-6127869, 03000111903</div>
-                  <div>alrehman903@hotmail.com</div>
+                  {settings.address && <div>{settings.address}</div>}
+                  {settings.phone && <div>{settings.phone}</div>}
+                  {settings.email && <div>{settings.email}</div>}
                 </td>
               </tr>
             </tbody>
