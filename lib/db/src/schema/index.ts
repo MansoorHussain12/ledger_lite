@@ -7,3 +7,4 @@ export * from "./cashbook";
 export * from "./purchases";
 export * from "./inventory";
 export * from "./installments";
+export * from "./lookups";

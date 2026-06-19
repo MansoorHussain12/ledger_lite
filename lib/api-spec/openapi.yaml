@@ -31,6 +31,8 @@ tags:
     description: Suppliers & purchase invoices
   - name: cashbook
     description: Cashbook & expenses
+  - name: lookups
+    description: Configurable lookup values (categories & units)
 
 paths:
   /healthz:
@@ -1283,6 +1285,107 @@ paths:
         "204":
           description: Deleted
 
+  # ── LOOKUPS ───────────────────────────────────────────────────────────────
+  /lookups/{type}:
+    get:
+      operationId: listLookups
+      tags: [lookups]
+      summary: List all lookup values for a given type (category or unit)
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [category, unit]
+      responses:
+        "200":
+          description: Lookup values
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LookupValue"
+    post:
+      operationId: createLookup
+      tags: [lookups]
+      summary: Create a new lookup value (owner only)
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [category, unit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupValue"
+        "409":
+          description: Value already exists
+
+  /lookups/{type}/{id}:
+    patch:
+      operationId: updateLookup
+      tags: [lookups]
+      summary: Rename a lookup value (owner only)
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [category, unit]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupValue"
+    delete:
+      operationId: deleteLookup
+      tags: [lookups]
+      summary: Delete a lookup value (owner only, blocked if in use)
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [category, unit]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Value is still in use by products
+
 components:
   schemas:
     HealthStatus:
@@ -1291,6 +1394,31 @@ components:
       properties:
         status:
           type: string
+
+    # ── LOOKUPS ───────────────────────────────────────────────────────────────
+    LookupValue:
+      type: object
+      required: [id, type, value, createdAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [category, unit]
+        value:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    LookupInput:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          minLength: 1
+          maxLength: 100
 
     # ── AUTH ──────────────────────────────────────────────────────────────
     LoginInput:

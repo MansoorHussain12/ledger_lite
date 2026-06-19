@@ -57,6 +57,8 @@ import type {
   ListPurchasesParams,
   ListSaleOrdersParams,
   LoginInput,
+  LookupInput,
+  LookupValue,
   MonthlySalesReport,
   OutstandingRow,
   Payment,
@@ -5046,5 +5048,300 @@ export const useDeleteExpense = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteExpenseMutationOptions(options));
+    }
+
+export const getListLookupsUrl = (type: 'category' | 'unit',) => {
+
+
+
+
+  return `/api/lookups/${type}`
+}
+
+/**
+ * @summary List all lookup values for a given type (category or unit)
+ */
+export const listLookups = async (type: 'category' | 'unit', options?: RequestInit): Promise<LookupValue[]> => {
+
+  return customFetch<LookupValue[]>(getListLookupsUrl(type),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLookupsQueryKey = (type: 'category' | 'unit',) => {
+    return [
+    `/api/lookups/${type}`
+    ] as const;
+    }
+
+
+export const getListLookupsQueryOptions = <TData = Awaited<ReturnType<typeof listLookups>>, TError = ErrorType<unknown>>(type: 'category' | 'unit', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLookups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLookupsQueryKey(type);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLookups>>> = ({ signal }) => listLookups(type, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(type), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLookups>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLookupsQueryResult = NonNullable<Awaited<ReturnType<typeof listLookups>>>
+export type ListLookupsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all lookup values for a given type (category or unit)
+ */
+
+export function useListLookups<TData = Awaited<ReturnType<typeof listLookups>>, TError = ErrorType<unknown>>(
+ type: 'category' | 'unit', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLookups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLookupsQueryOptions(type,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateLookupUrl = (type: 'category' | 'unit',) => {
+
+
+
+
+  return `/api/lookups/${type}`
+}
+
+/**
+ * @summary Create a new lookup value (owner only)
+ */
+export const createLookup = async (type: 'category' | 'unit',
+    lookupInput: LookupInput, options?: RequestInit): Promise<LookupValue> => {
+
+  return customFetch<LookupValue>(getCreateLookupUrl(type),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      lookupInput,)
+  }
+);}
+
+
+
+
+export const getCreateLookupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLookup>>, TError,{type: 'category' | 'unit';data: BodyType<LookupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createLookup>>, TError,{type: 'category' | 'unit';data: BodyType<LookupInput>}, TContext> => {
+
+const mutationKey = ['createLookup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createLookup>>, {type: 'category' | 'unit';data: BodyType<LookupInput>}> = (props) => {
+          const {type,data} = props ?? {};
+
+          return  createLookup(type,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateLookupMutationResult = NonNullable<Awaited<ReturnType<typeof createLookup>>>
+    export type CreateLookupMutationBody = BodyType<LookupInput>
+    export type CreateLookupMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a new lookup value (owner only)
+ */
+export const useCreateLookup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLookup>>, TError,{type: 'category' | 'unit';data: BodyType<LookupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createLookup>>,
+        TError,
+        {type: 'category' | 'unit';data: BodyType<LookupInput>},
+        TContext
+      > => {
+      return useMutation(getCreateLookupMutationOptions(options));
+    }
+
+export const getUpdateLookupUrl = (type: 'category' | 'unit',
+    id: number,) => {
+
+
+
+
+  return `/api/lookups/${type}/${id}`
+}
+
+/**
+ * @summary Rename a lookup value (owner only)
+ */
+export const updateLookup = async (type: 'category' | 'unit',
+    id: number,
+    lookupInput: LookupInput, options?: RequestInit): Promise<LookupValue> => {
+
+  return customFetch<LookupValue>(getUpdateLookupUrl(type,id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      lookupInput,)
+  }
+);}
+
+
+
+
+export const getUpdateLookupMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLookup>>, TError,{type: 'category' | 'unit';id: number;data: BodyType<LookupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateLookup>>, TError,{type: 'category' | 'unit';id: number;data: BodyType<LookupInput>}, TContext> => {
+
+const mutationKey = ['updateLookup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateLookup>>, {type: 'category' | 'unit';id: number;data: BodyType<LookupInput>}> = (props) => {
+          const {type,id,data} = props ?? {};
+
+          return  updateLookup(type,id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateLookupMutationResult = NonNullable<Awaited<ReturnType<typeof updateLookup>>>
+    export type UpdateLookupMutationBody = BodyType<LookupInput>
+    export type UpdateLookupMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Rename a lookup value (owner only)
+ */
+export const useUpdateLookup = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLookup>>, TError,{type: 'category' | 'unit';id: number;data: BodyType<LookupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateLookup>>,
+        TError,
+        {type: 'category' | 'unit';id: number;data: BodyType<LookupInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateLookupMutationOptions(options));
+    }
+
+export const getDeleteLookupUrl = (type: 'category' | 'unit',
+    id: number,) => {
+
+
+
+
+  return `/api/lookups/${type}/${id}`
+}
+
+/**
+ * @summary Delete a lookup value (owner only, blocked if in use)
+ */
+export const deleteLookup = async (type: 'category' | 'unit',
+    id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteLookupUrl(type,id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteLookupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLookup>>, TError,{type: 'category' | 'unit';id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteLookup>>, TError,{type: 'category' | 'unit';id: number}, TContext> => {
+
+const mutationKey = ['deleteLookup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLookup>>, {type: 'category' | 'unit';id: number}> = (props) => {
+          const {type,id} = props ?? {};
+
+          return  deleteLookup(type,id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteLookupMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLookup>>>
+
+    export type DeleteLookupMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a lookup value (owner only, blocked if in use)
+ */
+export const useDeleteLookup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLookup>>, TError,{type: 'category' | 'unit';id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteLookup>>,
+        TError,
+        {type: 'category' | 'unit';id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteLookupMutationOptions(options));
     }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -19,17 +19,21 @@ type Product = {
 };
 
 type ProductRate = { id: number; productId: number; rate: number; effectiveDate: string };
+type LookupValue = { id: number; type: string; value: string; createdAt: string };
 
 type ProductForm = {
   name: string; currentRate: string; costPrice: string;
   openingStock: string; minStock: string; unit: string; category: string;
 };
 
-const UNITS = ["bag", "piece", "ton", "kg", "foot", "meter", "sq. ft.", "cu. ft.", "liter", "bundle", "sheet"];
-const COMMON_CATEGORIES = ["Cement", "Bricks", "Steel / TMT Bars", "Sand", "Gravel / Crush", "Tiles", "PVC Pipes", "Paint", "Hardware", "Other"];
-
 async function fetchProducts(): Promise<Product[]> {
   const r = await fetch(`${BASE}/api/products`, { credentials: "include" });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+
+async function fetchLookups(type: "category" | "unit"): Promise<LookupValue[]> {
+  const r = await fetch(`${BASE}/api/lookups/${type}`, { credentials: "include" });
   if (!r.ok) throw new Error("Failed");
   return r.json();
 }
@@ -66,20 +70,20 @@ async function deleteProduct(id: number): Promise<void> {
   if (!r.ok) throw new Error("Failed");
 }
 
-const BLANK: ProductForm = { name: "", currentRate: "", costPrice: "", openingStock: "0", minStock: "0", unit: "bag", category: "" };
+const BLANK: ProductForm = { name: "", currentRate: "", costPrice: "", openingStock: "0", minStock: "0", unit: "", category: "" };
 
 export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<ProductForm>(BLANK);
   const [showHistory, setShowHistory] = useState<number | null>(null);
-  const [catInput, setCatInput] = useState("");
-  const [showCatSuggestions, setShowCatSuggestions] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
   const { settings } = useCompany();
 
   const { data: products = [], isLoading } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
+  const { data: categories = [] } = useQuery({ queryKey: ["lookups", "category"], queryFn: () => fetchLookups("category") });
+  const { data: units = [] } = useQuery({ queryKey: ["lookups", "unit"], queryFn: () => fetchLookups("unit") });
   const { data: rateHistory = [] } = useQuery({
     queryKey: ["product-rates", showHistory],
     queryFn: () => fetchRates(showHistory!),
@@ -105,8 +109,7 @@ export default function ProductsPage() {
 
   const openNew = () => {
     setEditId(null);
-    setForm(BLANK);
-    setCatInput("");
+    setForm({ ...BLANK, unit: units[0]?.value ?? "" });
     setShowForm(true);
   };
 
@@ -116,7 +119,6 @@ export default function ProductsPage() {
       name: p.name, currentRate: String(p.currentRate), costPrice: p.costPrice != null ? String(p.costPrice) : "",
       openingStock: String(p.openingStock), minStock: String(p.minStock), unit: p.unit, category: p.category ?? "",
     });
-    setCatInput(p.category ?? "");
     setShowForm(true);
   };
 
@@ -135,9 +137,17 @@ export default function ProductsPage() {
     return acc;
   }, {});
 
-  const catSuggestions = COMMON_CATEGORIES.filter(c =>
-    c.toLowerCase().includes(catInput.toLowerCase()) && c !== catInput
-  );
+  // All category values from the lookup list plus any orphaned values on existing products
+  const categoryValues = categories.map(c => c.value);
+  const allProductCategories = [...new Set(products.map(p => p.category).filter(Boolean) as string[])];
+  const orphanCategories = allProductCategories.filter(c => !categoryValues.includes(c));
+  const allCategories = [...categoryValues, ...orphanCategories];
+
+  // All unit values from lookup plus any orphaned values
+  const unitValues = units.map(u => u.value);
+  const allProductUnits = [...new Set(products.map(p => p.unit).filter(Boolean))];
+  const orphanUnits = allProductUnits.filter(u => !unitValues.includes(u));
+  const allUnits = [...unitValues, ...orphanUnits];
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -230,39 +240,34 @@ export default function ProductsPage() {
               <Input value={form.name} onChange={e => setField("name", e.target.value)} placeholder="e.g. DG Khan Cement, Class A Brick" required />
             </div>
 
-            {/* Category with autocomplete */}
-            <div className="space-y-1.5 relative">
+            {/* Category — dropdown from lookup list */}
+            <div className="space-y-1.5">
               <Label>Category</Label>
-              <Input
-                value={catInput}
-                onChange={e => { setCatInput(e.target.value); setField("category", e.target.value); setShowCatSuggestions(true); }}
-                onFocus={() => setShowCatSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowCatSuggestions(false), 150)}
-                placeholder="e.g. Cement, Bricks, Steel…"
-              />
-              {showCatSuggestions && catSuggestions.length > 0 && (
-                <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-popover border rounded-lg shadow-lg overflow-hidden">
-                  {catSuggestions.map(s => (
-                    <button
-                      key={s} type="button"
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted/30 transition-colors"
-                      onMouseDown={() => { setCatInput(s); setField("category", s); setShowCatSuggestions(false); }}
-                    >
-                      {s}
-                    </button>
+              <Select value={form.category} onValueChange={v => setField("category", v === "__none__" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a category…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— No category —</SelectItem>
+                  {allCategories.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">Groups products in the catalogue. Type anything or pick a suggestion.</p>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Manage the list in Settings → Categories &amp; Units</p>
             </div>
 
-            {/* Unit */}
+            {/* Unit — dropdown from lookup list */}
             <div className="space-y-1.5">
               <Label>Unit of Measurement *</Label>
               <Select value={form.unit} onValueChange={v => setField("unit", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a unit…" />
+                </SelectTrigger>
                 <SelectContent>
-                  {UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                  {allUnits.map(u => (
+                    <SelectItem key={u} value={u}>{u}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">Used in invoices, POS, and stock tracking</p>
@@ -271,11 +276,11 @@ export default function ProductsPage() {
             {/* Rates */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Sale Rate / {form.unit} ({settings.currency}) *</Label>
+                <Label>Sale Rate / {form.unit || "unit"} ({settings.currency}) *</Label>
                 <Input type="number" value={form.currentRate} onChange={e => setField("currentRate", e.target.value)} placeholder="0" required min="0" />
               </div>
               <div className="space-y-1.5">
-                <Label>Cost Price / {form.unit} ({settings.currency})</Label>
+                <Label>Cost Price / {form.unit || "unit"} ({settings.currency})</Label>
                 <Input type="number" value={form.costPrice} onChange={e => setField("costPrice", e.target.value)} placeholder="optional" min="0" />
               </div>
             </div>
@@ -284,25 +289,25 @@ export default function ProductsPage() {
             {!editId && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Opening Stock ({form.unit})</Label>
+                  <Label>Opening Stock ({form.unit || "unit"})</Label>
                   <Input type="number" value={form.openingStock} onChange={e => setField("openingStock", e.target.value)} placeholder="0" min="0" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Min Stock ({form.unit})</Label>
+                  <Label>Min Stock ({form.unit || "unit"})</Label>
                   <Input type="number" value={form.minStock} onChange={e => setField("minStock", e.target.value)} placeholder="0" min="0" />
                 </div>
               </div>
             )}
             {editId && (
               <div className="space-y-1.5">
-                <Label>Min Stock ({form.unit})</Label>
+                <Label>Min Stock ({form.unit || "unit"})</Label>
                 <Input type="number" value={form.minStock} onChange={e => setField("minStock", e.target.value)} placeholder="0" min="0" />
               </div>
             )}
 
             <div className="flex gap-2 pt-1">
               <Button type="button" variant="outline" onClick={() => setShowForm(false)} className="flex-1">Cancel</Button>
-              <Button type="submit" className="flex-1" disabled={saveMutation.isPending}>
+              <Button type="submit" className="flex-1" disabled={saveMutation.isPending || !form.unit}>
                 {editId ? "Update" : "Add"} Product
               </Button>
             </div>

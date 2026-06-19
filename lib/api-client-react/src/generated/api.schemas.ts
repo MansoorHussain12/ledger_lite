@@ -9,6 +9,29 @@ export interface HealthStatus {
   status: string;
 }
 
+export type LookupValueType = typeof LookupValueType[keyof typeof LookupValueType];
+
+
+export const LookupValueType = {
+  category: 'category',
+  unit: 'unit',
+} as const;
+
+export interface LookupValue {
+  id: number;
+  type: LookupValueType;
+  value: string;
+  createdAt: string;
+}
+
+export interface LookupInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  value: string;
+}
+
 export interface LoginInput {
   username: string;
   password: string;

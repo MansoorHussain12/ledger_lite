@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Settings, Upload, X, Building2, Palette, Save, CheckCircle2, Phone, MapPin, Mail, ZoomIn } from "lucide-react";
+import { Settings, Upload, X, Building2, Palette, Save, CheckCircle2, Phone, MapPin, Mail, ZoomIn, Tag, Ruler, Plus, Pencil, Trash2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,9 +7,204 @@ import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/lib/company";
 import { useAuth } from "@/lib/auth";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const CURRENCIES = ["Rs", "PKR", "USD", "$", "€", "£", "AED", "SAR"];
+
+type LookupValue = { id: number; type: string; value: string; createdAt: string };
+
+async function fetchLookups(type: "category" | "unit"): Promise<LookupValue[]> {
+  const r = await fetch(`${BASE}/api/lookups/${type}`, { credentials: "include" });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+
+async function createLookup(type: string, value: string): Promise<LookupValue> {
+  const r = await fetch(`${BASE}/api/lookups/${type}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value }),
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
+  return r.json();
+}
+
+async function updateLookup(type: string, id: number, value: string): Promise<LookupValue> {
+  const r = await fetch(`${BASE}/api/lookups/${type}/${id}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value }),
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
+  return r.json();
+}
+
+async function deleteLookup(type: string, id: number): Promise<void> {
+  const r = await fetch(`${BASE}/api/lookups/${type}/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
+}
+
+function LookupList({ type, label, icon: Icon, isOwner }: {
+  type: "category" | "unit";
+  label: string;
+  icon: React.ElementType;
+  isOwner: boolean;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [addValue, setAddValue] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ["lookups", type],
+    queryFn: () => fetchLookups(type),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (value: string) => createLookup(type, value),
+    onSuccess: () => {
+      toast({ title: `${label.slice(0, -1)} added` });
+      qc.invalidateQueries({ queryKey: ["lookups", type] });
+      setAddValue("");
+    },
+    onError: (e: Error) => toast({ title: "Failed to add", description: e.message, variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, value }: { id: number; value: string }) => updateLookup(type, id, value),
+    onSuccess: () => {
+      toast({ title: "Renamed" });
+      qc.invalidateQueries({ queryKey: ["lookups", type] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      setEditId(null);
+    },
+    onError: (e: Error) => toast({ title: "Failed to rename", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ id }: { id: number }) => deleteLookup(type, id),
+    onSuccess: () => {
+      toast({ title: "Deleted" });
+      qc.invalidateQueries({ queryKey: ["lookups", type] });
+    },
+    onError: (e: Error) => toast({ title: "Cannot delete", description: e.message, variant: "destructive" }),
+  });
+
+  const handleAdd = () => {
+    if (!addValue.trim()) return;
+    createMutation.mutate(addValue.trim());
+  };
+
+  const handleRename = (id: number) => {
+    if (!editValue.trim()) return;
+    updateMutation.mutate({ id, value: editValue.trim() });
+  };
+
+  const startEdit = (item: LookupValue) => {
+    setEditId(item.id);
+    setEditValue(item.value);
+  };
+
+  const handleDelete = (item: LookupValue) => {
+    if (!confirm(`Delete "${item.value}"? This will fail if products still use it.`)) return;
+    deleteMutation.mutate({ id: item.id });
+  };
+
+  return (
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center gap-2 mb-3">
+        <Icon size={14} className="text-primary" />
+        <h3 className="font-semibold text-sm">{label}</h3>
+        <span className="text-xs text-muted-foreground ml-auto">{items.length} items</span>
+      </div>
+
+      <div className="space-y-1 min-h-[80px]">
+        {isLoading && <p className="text-xs text-muted-foreground py-4 text-center">Loading…</p>}
+        {items.map(item => (
+          <div key={item.id} className="flex items-center gap-1 group">
+            {editId === item.id ? (
+              <>
+                <Input
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  className="h-7 text-xs flex-1"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === "Enter") handleRename(item.id);
+                    if (e.key === "Escape") setEditId(null);
+                  }}
+                />
+                <button
+                  onClick={() => handleRename(item.id)}
+                  disabled={updateMutation.isPending}
+                  className="p-1 text-emerald-500 hover:text-emerald-400 transition-colors"
+                  title="Save"
+                >
+                  <Check size={13} />
+                </button>
+                <button
+                  onClick={() => setEditId(null)}
+                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  title="Cancel"
+                >
+                  <X size={13} />
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-sm flex-1 px-1 py-0.5 truncate">{item.value}</span>
+                {isOwner && (
+                  <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => startEdit(item)}
+                      className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                      title="Rename"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item)}
+                      disabled={deleteMutation.isPending}
+                      className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+        {!isLoading && items.length === 0 && (
+          <p className="text-xs text-muted-foreground py-3 text-center">No {label.toLowerCase()} yet</p>
+        )}
+      </div>
+
+      {isOwner && (
+        <div className="flex gap-1.5 mt-3 pt-3 border-t border-border">
+          <Input
+            value={addValue}
+            onChange={e => setAddValue(e.target.value)}
+            placeholder={`New ${label.slice(0, -1).toLowerCase()}…`}
+            className="h-7 text-xs flex-1"
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAdd(); } }}
+          />
+          <Button type="button" size="sm" variant="outline" className="h-7 px-2" disabled={!addValue.trim() || createMutation.isPending} onClick={handleAdd}>
+            <Plus size={13} />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { settings, refresh } = useCompany();
@@ -105,7 +300,6 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex items-start gap-5 mb-4">
-            {/* Preview box */}
             <div className="flex-shrink-0 w-36 h-20 bg-sidebar rounded-lg border border-border flex items-center justify-center overflow-hidden">
               {logoData ? (
                 <img
@@ -139,7 +333,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Zoom slider */}
           {logoData && (
             <div className="pt-3 border-t border-border space-y-2">
               <div className="flex items-center justify-between">
@@ -205,7 +398,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Contact info — used in print headers */}
+        {/* Contact info */}
         <div className="bg-card border rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-2 mb-1">
             <Phone size={15} className="text-primary" />
@@ -228,6 +421,23 @@ export default function SettingsPage() {
               <Input className="mt-1.5" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="e.g. info@company.com" disabled={!isOwner} />
             </div>
+          </div>
+        </div>
+
+        {/* Categories & Units */}
+        <div className="bg-card border rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Tag size={15} className="text-primary" />
+            <h2 className="font-semibold">Categories &amp; Units</h2>
+            <span className="text-xs text-muted-foreground ml-1">— used in the Products catalogue</span>
+          </div>
+          {!isOwner && (
+            <p className="text-xs text-muted-foreground mb-3">Only the Owner can add, rename, or delete categories and units.</p>
+          )}
+          <div className="flex gap-6">
+            <LookupList type="category" label="Categories" icon={Tag} isOwner={isOwner} />
+            <div className="w-px bg-border self-stretch" />
+            <LookupList type="unit" label="Units" icon={Ruler} isOwner={isOwner} />
           </div>
         </div>
 

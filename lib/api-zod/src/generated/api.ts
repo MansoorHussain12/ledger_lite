@@ -1343,3 +1343,68 @@ export const CreateExpenseBody = zod.object({
 export const DeleteExpenseParams = zod.object({
   "id": zod.coerce.number()
 })
+
+
+/**
+ * @summary List all lookup values for a given type (category or unit)
+ */
+export const ListLookupsParams = zod.object({
+  "type": zod.enum(['category', 'unit'])
+})
+
+export const ListLookupsResponseItem = zod.object({
+  "id": zod.number(),
+  "type": zod.enum(['category', 'unit']),
+  "value": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLookupsResponse = zod.array(ListLookupsResponseItem)
+
+
+/**
+ * @summary Create a new lookup value (owner only)
+ */
+export const CreateLookupParams = zod.object({
+  "type": zod.enum(['category', 'unit'])
+})
+
+export const createLookupBodyValueMax = 100;
+
+
+
+export const CreateLookupBody = zod.object({
+  "value": zod.string().min(1).max(createLookupBodyValueMax)
+})
+
+
+/**
+ * @summary Rename a lookup value (owner only)
+ */
+export const UpdateLookupParams = zod.object({
+  "type": zod.enum(['category', 'unit']),
+  "id": zod.coerce.number()
+})
+
+export const updateLookupBodyValueMax = 100;
+
+
+
+export const UpdateLookupBody = zod.object({
+  "value": zod.string().min(1).max(updateLookupBodyValueMax)
+})
+
+export const UpdateLookupResponse = zod.object({
+  "id": zod.number(),
+  "type": zod.enum(['category', 'unit']),
+  "value": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a lookup value (owner only, blocked if in use)
+ */
+export const DeleteLookupParams = zod.object({
+  "type": zod.enum(['category', 'unit']),
+  "id": zod.coerce.number()
+})

@@ -12,6 +12,7 @@ import suppliersRouter from "./suppliers";
 import inventoryRouter from "./inventory";
 import installmentsRouter from "./installments";
 import settingsRouter from "./settings";
+import lookupsRouter from "./lookups";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(suppliersRouter);
 router.use(inventoryRouter);
 router.use(installmentsRouter);
 router.use(settingsRouter);
+router.use(lookupsRouter);
 
 export default router;
