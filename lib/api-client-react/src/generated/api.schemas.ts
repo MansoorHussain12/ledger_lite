@@ -213,6 +213,9 @@ export interface Product {
   /** @nullable */
   costPrice?: number | null;
   currentRate: number;
+  unit: string;
+  /** @nullable */
+  category?: string | null;
   createdAt: string;
 }
 

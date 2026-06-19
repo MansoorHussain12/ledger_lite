@@ -1660,7 +1660,7 @@ components:
     # ── PRODUCTS ──────────────────────────────────────────────────────────
     Product:
       type: object
-      required: [id, name, currentRate, createdAt]
+      required: [id, name, currentRate, unit, createdAt]
       properties:
         id:
           type: integer
@@ -1670,6 +1670,10 @@ components:
           type: ["number", "null"]
         currentRate:
           type: number
+        unit:
+          type: string
+        category:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time

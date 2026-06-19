@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
-  ArrowLeft, Plus, Trash2, ShoppingBag, ChevronDown, Package
+  ArrowLeft, Plus, Trash2, ShoppingBag, Package
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -21,17 +20,19 @@ function fmt(n: number) {
 function today() { return new Date().toISOString().slice(0, 10); }
 
 type Supplier = { id: number; name: string; payableBalance: number };
-type Product = { id: number; name: string; costPrice: string | null; currentRate: string };
+type Product = { id: number; name: string; costPrice: string | null; currentRate: string; unit: string; category: string | null };
+type LookupValue = { id: number; type: string; value: string };
 
 type LineItem = {
   productId: number | "";
   productName: string;
   qty: string;
   rate: string;
+  unit: string;
 };
 
 function blankLine(): LineItem {
-  return { productId: "", productName: "", qty: "", rate: "" };
+  return { productId: "", productName: "", qty: "", rate: "", unit: "" };
 }
 
 async function fetchSuppliers(): Promise<Supplier[]> {
@@ -42,6 +43,12 @@ async function fetchSuppliers(): Promise<Supplier[]> {
 
 async function fetchProducts(): Promise<Product[]> {
   const r = await fetch(`${BASE}/api/products`, { credentials: "include" });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+
+async function fetchUnits(): Promise<LookupValue[]> {
+  const r = await fetch(`${BASE}/api/lookups/unit`, { credentials: "include" });
   if (!r.ok) throw new Error("Failed");
   return r.json();
 }
@@ -69,6 +76,7 @@ export default function PurchaseNewPage() {
 
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers"], queryFn: fetchSuppliers });
   const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
+  const { data: units = [] } = useQuery({ queryKey: ["lookups", "unit"], queryFn: fetchUnits });
 
   const lineTotal = (l: LineItem) => {
     const qty = parseFloat(l.qty) || 0;
@@ -126,7 +134,7 @@ export default function PurchaseNewPage() {
 
   function selectProduct(idx: number, product: Product) {
     setLines(prev => prev.map((l, i) => i === idx
-      ? { ...l, productId: product.id, productName: product.name, rate: product.costPrice ?? product.currentRate }
+      ? { ...l, productId: product.id, productName: product.name, rate: product.costPrice ?? product.currentRate, unit: product.unit }
       : l
     ));
     setProductSearch(prev => ({ ...prev, [idx]: "" }));
@@ -139,6 +147,20 @@ export default function PurchaseNewPage() {
   function removeLine(idx: number) {
     setLines(prev => prev.filter((_, i) => i !== idx));
   }
+
+  const categorisedProducts = (search: string) => {
+    const filtered = products.filter(p =>
+      p.name.toLowerCase().includes(search.toLowerCase())
+    ).slice(0, 20);
+
+    const groups: Record<string, Product[]> = {};
+    for (const p of filtered) {
+      const key = p.category ?? "Uncategorised";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    }
+    return groups;
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-3xl mx-auto">
@@ -214,19 +236,21 @@ export default function PurchaseNewPage() {
               <thead>
                 <tr className="bg-muted/30 border-b">
                   <th className="text-left px-3 py-2 font-medium text-muted-foreground">Product</th>
-                  <th className="text-right px-3 py-2 font-medium text-muted-foreground w-24">Qty</th>
-                  <th className="text-right px-3 py-2 font-medium text-muted-foreground w-32">Rate (Rs)</th>
-                  <th className="text-right px-3 py-2 font-medium text-muted-foreground w-32">Amount</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground w-20">Qty</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-24">Unit</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Rate (Rs)</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Amount</th>
                   <th className="w-8 px-2"></th>
                 </tr>
               </thead>
               <tbody>
                 {lines.map((line, idx) => {
                   const search = productSearch[idx] ?? "";
-                  const filteredProducts = products.filter(p =>
-                    p.name.toLowerCase().includes(search.toLowerCase())
-                  );
                   const isSelected = line.productId !== "";
+                  const grouped = categorisedProducts(search);
+                  const categoryNames = Object.keys(grouped).sort((a, b) =>
+                    a === "Uncategorised" ? 1 : b === "Uncategorised" ? -1 : a.localeCompare(b)
+                  );
 
                   return (
                     <tr key={idx} className="border-b border-border/50">
@@ -248,19 +272,26 @@ export default function PurchaseNewPage() {
                               placeholder="Search product…"
                               className="h-8 text-sm"
                             />
-                            {search && filteredProducts.length > 0 && (
-                              <div className="absolute top-full left-0 right-0 z-10 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto mt-0.5">
-                                {filteredProducts.slice(0, 8).map(p => (
-                                  <button
-                                    key={p.id}
-                                    onClick={() => selectProduct(idx, p)}
-                                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center justify-between"
-                                  >
-                                    <span>{p.name}</span>
-                                    {p.costPrice && (
-                                      <span className="text-xs text-muted-foreground">Rs {fmt(parseFloat(p.costPrice))}</span>
-                                    )}
-                                  </button>
+                            {search && categoryNames.length > 0 && (
+                              <div className="absolute top-full left-0 right-0 z-10 bg-popover border rounded-md shadow-lg max-h-52 overflow-y-auto mt-0.5">
+                                {categoryNames.map(cat => (
+                                  <div key={cat}>
+                                    <div className="px-3 py-1 text-xs font-semibold text-muted-foreground bg-muted/40 uppercase tracking-wide sticky top-0">
+                                      {cat}
+                                    </div>
+                                    {grouped[cat].map(p => (
+                                      <button
+                                        key={p.id}
+                                        onClick={() => selectProduct(idx, p)}
+                                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center justify-between"
+                                      >
+                                        <span>{p.name}</span>
+                                        <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                                          {p.unit}{p.costPrice ? ` · Rs ${fmt(parseFloat(p.costPrice))}` : ""}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
                                 ))}
                               </div>
                             )}
@@ -275,6 +306,21 @@ export default function PurchaseNewPage() {
                           className="h-8 text-sm text-right"
                           placeholder="0"
                         />
+                      </td>
+                      <td className="px-2 py-2">
+                        <select
+                          className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background h-8"
+                          value={line.unit}
+                          onChange={e => setLine(idx, "unit", e.target.value)}
+                        >
+                          <option value="">— unit —</option>
+                          {units.map(u => (
+                            <option key={u.id} value={u.value}>{u.value}</option>
+                          ))}
+                          {line.unit && !units.some(u => u.value === line.unit) && (
+                            <option value={line.unit}>{line.unit}</option>
+                          )}
+                        </select>
                       </td>
                       <td className="px-2 py-2">
                         <Input
@@ -301,7 +347,7 @@ export default function PurchaseNewPage() {
               </tbody>
               <tfoot>
                 <tr className="bg-muted/20 font-semibold">
-                  <td colSpan={3} className="px-3 py-2 text-right text-sm text-muted-foreground">Total</td>
+                  <td colSpan={4} className="px-3 py-2 text-right text-sm text-muted-foreground">Total</td>
                   <td className="px-3 py-2 text-right text-sm">Rs {fmt(totalAmount)}</td>
                   <td />
                 </tr>
