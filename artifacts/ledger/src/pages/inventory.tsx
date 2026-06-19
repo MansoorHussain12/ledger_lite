@@ -23,11 +23,14 @@ const fmt = (n: number) => new Intl.NumberFormat("en-PK", { minimumFractionDigit
 const fmtQty = (n: number) => new Intl.NumberFormat("en-PK", { maximumFractionDigits: 2 }).format(n);
 
 type InventoryRow = {
-  id: number; name: string; currentRate: number; costPrice: number | null;
+  id: number; name: string; category: string | null; unit: string | null;
+  currentRate: number; costPrice: number | null;
   openingStock: number; minStock: number;
   purchased: number; sold: number; adjusted: number;
   currentStock: number; status: "ok" | "low" | "out";
 };
+
+type LookupValue = { id: number; type: string; value: string };
 
 type MovementEntry = {
   id: string; type: "opening" | "in" | "out" | "adj_in" | "adj_out";
@@ -378,12 +381,19 @@ function MovementsDialog({ productId, open, onClose }: { productId: number; open
   );
 }
 
+async function fetchCategories(): Promise<LookupValue[]> {
+  const r = await fetch(`${BASE}/api/lookups/category`, { credentials: "include" });
+  if (!r.ok) return [];
+  return r.json();
+}
+
 // ── Main Inventory Page ───────────────────────────────────────────────────────
 
 export default function InventoryPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "ok" | "low" | "out">("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [settingsProd, setSettingsProd] = useState<InventoryRow | null>(null);
   const [adjustProd, setAdjustProd] = useState<InventoryRow | null>(null);
   const [movementsProdId, setMovementsProdId] = useState<number | null>(null);
@@ -393,10 +403,16 @@ export default function InventoryPage() {
     queryFn: fetchInventory,
   });
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ["lookups-category"],
+    queryFn: fetchCategories,
+  });
+
   const filtered = inventory.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
     const matchFilter = filter === "all" || p.status === filter;
-    return matchSearch && matchFilter;
+    const matchCategory = categoryFilter === "all" || p.category === categoryFilter;
+    return matchSearch && matchFilter && matchCategory;
   });
 
   const counts = {
@@ -463,6 +479,19 @@ export default function InventoryPage() {
             className="pl-8"
           />
         </div>
+        {categories.length > 0 && (
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-44 h-9 text-sm">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map(c => (
+                <SelectItem key={c.id} value={c.value}>{c.value}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="flex gap-1.5">
           {(["all", "ok", "low", "out"] as const).map(f => (
             <button

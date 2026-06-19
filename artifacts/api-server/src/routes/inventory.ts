@@ -57,13 +57,19 @@ async function calcStock(productId: number) {
 
 // ── GET /inventory ────────────────────────────────────────────────────────────
 
-router.get("/inventory", requireAuth, async (_req, res) => {
+router.get("/inventory", requireAuth, async (req, res) => {
+  const categoryFilter = req.query.category ? String(req.query.category) : null;
   const products = await db.select().from(productsTable).orderBy(productsTable.name);
-  const rows = await Promise.all(products.map(async (p) => {
+  const filtered = categoryFilter
+    ? products.filter(p => p.category === categoryFilter)
+    : products;
+  const rows = await Promise.all(filtered.map(async (p) => {
     const stock = await calcStock(p.id);
     return {
       id: p.id,
       name: p.name,
+      category: p.category ?? null,
+      unit: p.unit ?? null,
       currentRate: parseFloat(p.currentRate),
       costPrice: p.costPrice ? parseFloat(p.costPrice) : null,
       openingStock: parseFloat(p.openingStock ?? "0"),

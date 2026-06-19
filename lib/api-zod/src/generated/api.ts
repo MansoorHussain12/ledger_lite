@@ -663,7 +663,8 @@ export const GetMonthlySalesReportResponse = zod.object({
  */
 export const GetDailyProfitReportQueryParams = zod.object({
   "from": zod.date(),
-  "to": zod.date()
+  "to": zod.date(),
+  "category": zod.coerce.string().optional().describe('Filter results to a specific product category')
 })
 
 export const GetDailyProfitReportResponse = zod.object({

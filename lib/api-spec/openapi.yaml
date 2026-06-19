@@ -704,6 +704,12 @@ paths:
           schema:
             type: string
             format: date
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter results to a specific product category
       responses:
         "200":
           description: Daily profit report

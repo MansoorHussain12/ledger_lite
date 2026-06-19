@@ -95,6 +95,7 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
   const todayStr = now.toISOString().slice(0, 10);
   const from = (req.query.from as string) || firstOfMonth;
   const to = (req.query.to as string) || todayStr;
+  const categoryFilter = req.query.category ? String(req.query.category) : null;
 
   // Fetch all sale orders in range with their items
   const orders = await db
@@ -103,6 +104,10 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
     .where(and(gte(saleOrdersTable.date, from), lte(saleOrdersTable.date, to)));
 
   const allProducts = await db.select().from(productsTable);
+  // Build a set of product IDs matching the category filter
+  const filteredProductIds = categoryFilter
+    ? new Set(allProducts.filter(p => p.category === categoryFilter).map(p => p.id))
+    : null;
   const productMap = new Map(allProducts.map(p => [p.id, p]));
 
   // Fetch all expenses in range
@@ -127,15 +132,18 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
       dayMap.set(dateStr, { revenue: 0, cogs: 0, expenses: 0, orders: 0, qty: 0 });
     }
     const day = dayMap.get(dateStr)!;
-    day.revenue += parseFloat(order.totalAmount);
-    day.orders += 1;
 
     const items = await db
       .select()
       .from(saleOrderItemsTable)
       .where(eq(saleOrderItemsTable.saleOrderId, order.id));
 
+    let orderHasMatchingItems = false;
     for (const item of items) {
+      // Skip items not in the filtered category (when a filter is active)
+      if (filteredProductIds && !filteredProductIds.has(item.productId)) continue;
+
+      orderHasMatchingItems = true;
       const qty = parseFloat(item.qty);
       const saleAmount = parseFloat(item.amount);
       const product = productMap.get(item.productId);
@@ -144,6 +152,7 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
 
       day.qty += qty;
       day.cogs += itemCogs;
+      day.revenue += saleAmount;
 
       // Product breakdown
       if (!byProduct.has(item.productId)) {
@@ -157,6 +166,19 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
       prod.qty += qty;
       prod.revenue += saleAmount;
       prod.cogs += itemCogs;
+    }
+
+    // When no category filter, add full order revenue (avoids rounding discrepancies)
+    // When a filter is active, revenue is already accumulated per item above
+    if (!filteredProductIds) {
+      day.revenue += parseFloat(order.totalAmount);
+      // Undo the per-item revenue we added (to avoid double-counting)
+      for (const item of items) {
+        day.revenue -= parseFloat(item.amount);
+      }
+    }
+    if (orderHasMatchingItems || !filteredProductIds) {
+      day.orders += 1;
     }
   }
 

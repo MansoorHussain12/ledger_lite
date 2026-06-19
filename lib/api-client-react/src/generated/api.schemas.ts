@@ -996,6 +996,10 @@ month?: number;
 export type GetDailyProfitReportParams = {
 from: string;
 to: string;
+/**
+ * Filter results to a specific product category
+ */
+category?: string;
 };
 
 export type UpdateInventorySettings200 = { [key: string]: unknown };

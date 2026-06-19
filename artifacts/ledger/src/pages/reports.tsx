@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetAgingReport, getGetAgingReportQueryKey,
   useGetDailyCollectionReport, getGetDailyCollectionReportQueryKey,
@@ -8,11 +9,24 @@ import {
 } from "@workspace/api-client-react";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, DollarSign, Package, ShoppingCart,
   AlertTriangle, ChevronUp, ChevronDown
 } from "lucide-react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+type LookupValue = { id: number; type: string; value: string };
+
+async function fetchCategories(): Promise<LookupValue[]> {
+  const r = await fetch(`${BASE}/api/lookups/category`, { credentials: "include" });
+  if (!r.ok) return [];
+  return r.json();
+}
 
 const tabs = ["Daily Profit", "Aging", "Daily Collection", "Monthly Sales", "Outstanding"] as const;
 type Tab = typeof tabs[number];
@@ -68,10 +82,20 @@ function DailyProfitTab() {
   const [from, setFrom] = useState(firstOfMonth);
   const [to, setTo] = useState(today);
   const [view, setView] = useState<"days" | "products">("days");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["lookups-category"],
+    queryFn: fetchCategories,
+  });
+
+  const params = categoryFilter !== "all"
+    ? { from, to, category: categoryFilter }
+    : { from, to };
 
   const { data, isLoading } = useGetDailyProfitReport(
-    { from, to },
-    { query: { queryKey: getGetDailyProfitReportQueryKey({ from, to }) } }
+    params,
+    { query: { queryKey: getGetDailyProfitReportQueryKey(params) } }
   );
 
   const s = data?.summary;
@@ -79,7 +103,7 @@ function DailyProfitTab() {
 
   return (
     <div className="space-y-5">
-      {/* Date range */}
+      {/* Date range + Category filter */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="text-xs text-muted-foreground block mb-1">From</label>
@@ -89,6 +113,22 @@ function DailyProfitTab() {
           <label className="text-xs text-muted-foreground block mb-1">To</label>
           <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="w-36 h-9 text-sm" />
         </div>
+        {categories.length > 0 && (
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Category</label>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-44 h-9 text-sm">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map(c => (
+                  <SelectItem key={c.id} value={c.value}>{c.value}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {/* Quick ranges */}
         <div className="flex gap-2 pb-0.5">
           {[
