@@ -190,10 +190,9 @@ export default function CustomerDetailPage() {
                   <th className="px-2 py-2.5 text-left font-semibold">Item</th>
                   <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap">Billty #</th>
                   <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap">Vehicle #</th>
-                  <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap">Tons</th>
-                  <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap">Rate/Ton</th>
-                  <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap">Bags</th>
-                  <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap">Rate/Bag</th>
+                  <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap">Qty</th>
+                  <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap">Unit</th>
+                  <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap">Rate</th>
                   <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-emerald-700">Received</th>
                   <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-red-700">SO Value</th>
                   <th className="px-2 py-2.5 text-right font-semibold">Balance</th>
@@ -205,16 +204,16 @@ export default function CustomerDetailPage() {
                   <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
                     {formatDate(ledger?.openingBalanceDate ?? fromDate)}
                   </td>
-                  <td className="px-2 py-2 font-medium text-muted-foreground" colSpan={12}>Opening Balance</td>
+                  <td className="px-2 py-2 font-medium text-muted-foreground" colSpan={11}>Opening Balance</td>
                   <td className="px-2 py-2 text-right font-bold text-blue-700 whitespace-nowrap">
                     Rs. {formatAmount(ledger?.openingBalance ?? 0)}
                   </td>
                 </tr>
                 {ledgerLoading && (
-                  <tr><td colSpan={15} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>
+                  <tr><td colSpan={14} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>
                 )}
                 {!ledgerLoading && ledger?.entries.length === 0 && (
-                  <tr><td colSpan={15} className="px-4 py-8 text-center text-muted-foreground">No transactions in this period</td></tr>
+                  <tr><td colSpan={14} className="px-4 py-8 text-center text-muted-foreground">No transactions in this period</td></tr>
                 )}
                 {ledger?.entries.map((entry) => {
                   const isSale = entry.transactionType === "Sale Order";
@@ -233,9 +232,8 @@ export default function CustomerDetailPage() {
                       <td className="px-2 py-2 font-medium">{entry.item ?? ""}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{entry.billtyNo ?? ""}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{entry.vehicleNo ?? ""}</td>
-                      <td className="px-2 py-2 text-right">{entry.weightTons != null ? entry.weightTons.toFixed(2) : "—"}</td>
-                      <td className="px-2 py-2 text-right">{entry.rateTon != null ? formatAmount(entry.rateTon) : "—"}</td>
                       <td className="px-2 py-2 text-right">{entry.qtyBags != null ? formatAmount(entry.qtyBags) : "—"}</td>
+                      <td className="px-2 py-2 text-xs text-muted-foreground">{entry.unit ?? ""}</td>
                       <td className="px-2 py-2 text-right">{entry.rateBag != null ? formatAmount(entry.rateBag) : "—"}</td>
                       <td className="px-2 py-2 text-right font-semibold text-emerald-600">
                         {entry.receivedAmount > 0 ? formatAmount(entry.receivedAmount) : "—"}
@@ -253,7 +251,6 @@ export default function CustomerDetailPage() {
                 {ledger && ledger.entries.length > 0 && (
                   <tr className="bg-muted/50 font-bold border-t-2 border-border">
                     <td colSpan={8} className="px-3 py-2.5 text-xs uppercase tracking-wide text-muted-foreground">Totals</td>
-                    <td className="px-2 py-2.5 text-right">{(ledger.totalTons ?? 0).toFixed(2)}</td>
                     <td colSpan={3} className="px-2 py-2.5"></td>
                     <td className="px-2 py-2.5 text-right text-emerald-600">{formatAmount(ledger.totalReceived)}</td>
                     <td className="px-2 py-2.5 text-right text-red-600">{formatAmount(ledger.totalSoValue)}</td>
@@ -283,23 +280,36 @@ export default function CustomerDetailPage() {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
               Material Category Summary
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {ledger.categoryBreakdown.map((row) => (
-                <div key={row.category} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm">
-                  <span className="font-medium truncate mr-2">{row.category}</span>
-                  <div className="text-right shrink-0">
-                    <span className="font-bold text-foreground">Rs. {formatAmount(row.amount)}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">({row.share}%)</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 pt-2 border-t border-border flex justify-between text-sm">
-              <span className="text-muted-foreground font-medium">Total Sales</span>
-              <span className="font-bold">
-                Rs. {formatAmount(ledger.categoryBreakdown.reduce((s, r) => s + r.amount, 0))}
-              </span>
-            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="pb-1.5 text-left font-semibold">Category</th>
+                  <th className="pb-1.5 text-left font-semibold pl-4">Unit</th>
+                  <th className="pb-1.5 text-right font-semibold">Amount (Rs.)</th>
+                  <th className="pb-1.5 text-right font-semibold pl-4">Share %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {ledger.categoryBreakdown.map((row) => (
+                  <tr key={row.category} className="hover:bg-muted/20">
+                    <td className="py-1.5 font-medium">{row.category}</td>
+                    <td className="py-1.5 pl-4 text-muted-foreground text-xs">{row.unit ?? "—"}</td>
+                    <td className="py-1.5 text-right font-bold">{formatAmount(row.amount)}</td>
+                    <td className="py-1.5 pl-4 text-right text-muted-foreground">{row.share}%</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border font-bold text-sm">
+                  <td className="pt-2">Total Sales</td>
+                  <td className="pt-2 pl-4"></td>
+                  <td className="pt-2 text-right">
+                    Rs. {formatAmount(ledger.categoryBreakdown.reduce((s, r) => s + r.amount, 0))}
+                  </td>
+                  <td className="pt-2 pl-4 text-right text-muted-foreground">100%</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         )}
 
@@ -377,31 +387,23 @@ export default function CustomerDetailPage() {
         {/* Main Ledger Table — exact PDF format */}
         <table className="print-ledger-table">
           <thead>
-            {/* Row 1: Group headers */}
             <tr>
-              <th rowSpan={2} className="col-center" style={{ width: "2%" }}>Sr<br/>No.</th>
-              <th rowSpan={2} className="col-center" style={{ width: "5%" }}>Transaction<br/>Date</th>
-              <th rowSpan={2} className="col-center" style={{ width: "8%" }}>Transaction<br/>Type</th>
-              <th rowSpan={2} className="col-center" style={{ width: "9%" }}>Remarks</th>
-              <th rowSpan={2} className="col-center" style={{ width: "7%" }}>Document<br/>#</th>
-              <th rowSpan={2} className="col-center" style={{ width: "3%" }}>Bill<br/>#</th>
-              <th rowSpan={2} className="col-center" style={{ width: "7%" }}>Item</th>
-              <th rowSpan={2} className="col-center" style={{ width: "4%" }}>Billty<br/>#</th>
-              <th rowSpan={2} className="col-center" style={{ width: "5%" }}>Vehicle<br/>#</th>
-              <th colSpan={2} className="col-center" style={{ width: "9%" }}>Tons</th>
-              <th colSpan={2} className="col-center" style={{ width: "9%" }}>Bags</th>
-              <th colSpan={2} className="col-center" style={{ width: "12%" }}>Dr</th>
-              <th rowSpan={2} className="col-center" style={{ width: "7%" }}>SO Value</th>
-              <th rowSpan={2} className="col-center" style={{ width: "8%" }}>Balance</th>
-            </tr>
-            {/* Row 2: Sub-headers */}
-            <tr>
-              <th className="col-center" style={{ fontSize: "5.5pt" }}>Weight<br/>(ton)</th>
-              <th className="col-center" style={{ fontSize: "5.5pt" }}>Rate/<br/>ton</th>
-              <th className="col-center" style={{ fontSize: "5.5pt" }}>Qty<br/>Bags</th>
-              <th className="col-center" style={{ fontSize: "5.5pt" }}>Rate/<br/>Bag</th>
-              <th className="col-center" style={{ fontSize: "5.5pt" }}>Received<br/>Amount</th>
-              <th className="col-center" style={{ fontSize: "5.5pt" }}>Paid<br/>Amount</th>
+              <th className="col-center" style={{ width: "2%" }}>Sr<br/>No.</th>
+              <th className="col-center" style={{ width: "5%" }}>Transaction<br/>Date</th>
+              <th className="col-center" style={{ width: "9%" }}>Transaction<br/>Type</th>
+              <th className="col-center" style={{ width: "9%" }}>Remarks</th>
+              <th className="col-center" style={{ width: "7%" }}>Document<br/>#</th>
+              <th className="col-center" style={{ width: "3%" }}>Bill<br/>#</th>
+              <th className="col-center" style={{ width: "9%" }}>Item</th>
+              <th className="col-center" style={{ width: "4%" }}>Billty<br/>#</th>
+              <th className="col-center" style={{ width: "5%" }}>Vehicle<br/>#</th>
+              <th className="col-center" style={{ width: "5%" }}>Qty</th>
+              <th className="col-center" style={{ width: "4%" }}>Unit</th>
+              <th className="col-center" style={{ width: "6%" }}>Rate</th>
+              <th className="col-center" style={{ width: "7%" }}>Received<br/>Amount</th>
+              <th className="col-center" style={{ width: "6%" }}>Paid<br/>Amount</th>
+              <th className="col-center" style={{ width: "7%" }}>SO Value</th>
+              <th className="col-center" style={{ width: "8%" }}>Balance</th>
             </tr>
           </thead>
           <tbody>
@@ -409,9 +411,7 @@ export default function CustomerDetailPage() {
             <tr className="opening-row">
               <td className="col-center">—</td>
               <td className="col-center">{formatDatePrint(ledger?.openingBalanceDate)}</td>
-              <td colSpan={6} style={{ fontStyle: "italic" }}>Opening Balance</td>
-              <td className="col-right"></td>
-              <td className="col-right"></td>
+              <td colSpan={7} style={{ fontStyle: "italic" }}>Opening Balance</td>
               <td className="col-right"></td>
               <td className="col-right"></td>
               <td className="col-right"></td>
@@ -434,13 +434,12 @@ export default function CustomerDetailPage() {
                 <td style={{ whiteSpace: "nowrap" }}>{entry.item ?? ""}</td>
                 <td className="col-center">{entry.billtyNo ?? ""}</td>
                 <td className="col-center" style={{ whiteSpace: "nowrap" }}>{entry.vehicleNo ?? ""}</td>
-                <td className="col-right">{entry.weightTons != null ? entry.weightTons.toFixed(2) : "0.00"}</td>
-                <td className="col-right">{entry.rateTon != null ? formatAmount(entry.rateTon) : "0"}</td>
-                <td className="col-right">{entry.qtyBags != null ? entry.qtyBags.toFixed(2) : "0.00"}</td>
-                <td className="col-right">{entry.rateBag != null ? formatAmount(entry.rateBag) : "0"}</td>
-                <td className="col-right">{entry.receivedAmount > 0 ? formatAmount(entry.receivedAmount) : "0.00"}</td>
+                <td className="col-right">{entry.qtyBags != null ? entry.qtyBags.toFixed(2) : ""}</td>
+                <td className="col-center" style={{ fontSize: "5.5pt" }}>{entry.unit ?? ""}</td>
+                <td className="col-right">{entry.rateBag != null ? formatAmount(entry.rateBag) : ""}</td>
+                <td className="col-right">{entry.receivedAmount > 0 ? formatAmount(entry.receivedAmount) : ""}</td>
                 <td className="col-right">{(entry.paidAmount ?? 0) > 0 ? formatAmount(entry.paidAmount ?? 0) : ""}</td>
-                <td className="col-right">{entry.soValue > 0 ? formatAmount(entry.soValue) : "0.00"}</td>
+                <td className="col-right">{entry.soValue > 0 ? formatAmount(entry.soValue) : ""}</td>
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(entry.balance)}</td>
               </tr>
             ))}
@@ -451,7 +450,6 @@ export default function CustomerDetailPage() {
                 <td colSpan={9} className="col-right" style={{ paddingRight: "4pt" }}>
                   <strong>Totals :</strong>
                 </td>
-                <td className="col-right" style={{ fontWeight: "bold" }}>{(ledger.totalTons ?? 0).toFixed(2)}</td>
                 <td></td>
                 <td></td>
                 <td></td>
@@ -481,20 +479,23 @@ export default function CustomerDetailPage() {
               <thead>
                 <tr style={{ backgroundColor: "#f0f0f0" }}>
                   <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "left" }}>Category</th>
-                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "25%" }}>Amount (Rs)</th>
-                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "12%" }}>Share %</th>
+                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "left", width: "12%" }}>Unit</th>
+                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "22%" }}>Amount (Rs)</th>
+                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "10%" }}>Share %</th>
                 </tr>
               </thead>
               <tbody>
                 {ledger.categoryBreakdown.map((row) => (
                   <tr key={row.category}>
                     <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt" }}>{row.category}</td>
+                    <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt" }}>{row.unit ?? "—"}</td>
                     <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt", textAlign: "right" }}>{formatAmount(row.amount)}</td>
                     <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt", textAlign: "right" }}>{row.share}%</td>
                   </tr>
                 ))}
                 <tr style={{ fontWeight: "bold", backgroundColor: "#f0f0f0" }}>
                   <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt" }}>Total</td>
+                  <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt" }}></td>
                   <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right" }}>
                     {formatAmount(ledger.categoryBreakdown.reduce((s, r) => s + r.amount, 0))}
                   </td>

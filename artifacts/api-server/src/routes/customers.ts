@@ -141,7 +141,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
 
   // Get items for those orders
   const orderItemsMap: Map<number, Array<{
-    productId: number; productName: string; category: string | null;
+    productId: number; productName: string; category: string | null; unit: string | null;
     qty: number; rate: number; amount: number;
   }>> = new Map();
 
@@ -154,6 +154,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       amount: saleOrderItemsTable.amount,
       productName: productsTable.name,
       category: productsTable.category,
+      unit: productsTable.unit,
     }).from(saleOrderItemsTable)
       .leftJoin(productsTable, eq(saleOrderItemsTable.productId, productsTable.id))
       .where(eq(saleOrderItemsTable.saleOrderId, order.id));
@@ -162,6 +163,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       productId: i.productId,
       productName: i.productName ?? "",
       category: i.category ?? null,
+      unit: i.unit ?? null,
       qty: parseFloat(i.qty),
       rate: parseFloat(i.rate),
       amount: parseFloat(i.amount),
@@ -205,10 +207,9 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     documentNo: string | null;
     billNo: string | null;
     item: string | null;
+    unit: string | null;
     billtyNo: string | null;
     vehicleNo: string | null;
-    weightTons: number | null;
-    rateTon: number | null;
     qtyBags: number | null;
     rateBag: number | null;
     receivedAmount: number;
@@ -233,10 +234,9 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       documentNo,
       billNo: null,
       item: null,
+      unit: null,
       billtyNo: null,
       vehicleNo: null,
-      weightTons: null,
-      rateTon: null,
       qtyBags: null,
       rateBag: null,
       receivedAmount: parseFloat(p.amount),
@@ -247,6 +247,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
 
   // Category totals accumulator (only sale values)
   const categoryTotals = new Map<string, number>();
+  const categoryUnits = new Map<string, string>();
 
   // Sale order rows — one row per item
   for (const order of orders) {
@@ -254,8 +255,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     for (const item of items) {
       const cat = item.category?.trim() || "Uncategorised";
       categoryTotals.set(cat, (categoryTotals.get(cat) ?? 0) + item.amount);
-      const tons = item.qty / BAGS_PER_TON;
-      const rateTon = item.rate * BAGS_PER_TON;
+      if (item.unit) categoryUnits.set(cat, item.unit);
       rows.push({
         date: order.date,
         sortKey: `${order.date}_1_${String(order.id).padStart(8, "0")}`,
@@ -264,10 +264,9 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
         documentNo: `SO-${order.id}`,
         billNo: null,
         item: item.productName,
+        unit: item.unit ?? null,
         billtyNo: order.billtyNo ?? null,
         vehicleNo: order.vehicleNo ?? null,
-        weightTons: Math.round(tons * 100) / 100,
-        rateTon: Math.round(rateTon),
         qtyBags: item.qty,
         rateBag: item.rate,
         receivedAmount: 0,
@@ -285,10 +284,9 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
         documentNo: `SO-${order.id}`,
         billNo: null,
         item: null,
+        unit: null,
         billtyNo: order.billtyNo ?? null,
         vehicleNo: order.vehicleNo ?? null,
-        weightTons: null,
-        rateTon: null,
         qtyBags: null,
         rateBag: null,
         receivedAmount: 0,
@@ -303,14 +301,13 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
 
   // Compute running balance
   let running = openingBalance;
-  let totalReceived = 0, totalPaid = 0, totalSoValue = 0, totalTons = 0;
+  let totalReceived = 0, totalPaid = 0, totalSoValue = 0;
 
   const entries = rows.map((row, i) => {
     running = running - row.receivedAmount + row.paidAmount + row.soValue;
     totalReceived += row.receivedAmount;
     totalPaid += row.paidAmount;
     totalSoValue += row.soValue;
-    totalTons += row.weightTons ?? 0;
     return {
       srNo: i + 1,
       date: row.date,
@@ -319,10 +316,9 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       documentNo: row.documentNo,
       billNo: row.billNo,
       item: row.item,
+      unit: row.unit,
       billtyNo: row.billtyNo,
       vehicleNo: row.vehicleNo,
-      weightTons: row.weightTons,
-      rateTon: row.rateTon,
       qtyBags: row.qtyBags,
       rateBag: row.rateBag,
       receivedAmount: row.receivedAmount,
@@ -337,6 +333,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     .sort((a, b) => b[1] - a[1])
     .map(([category, amount]) => ({
       category,
+      unit: categoryUnits.get(category) ?? null,
       amount: Math.round(amount * 100) / 100,
       share: catTotal > 0 ? Math.round((amount / catTotal) * 1000) / 10 : 0,
     }));
@@ -349,7 +346,6 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     totalReceived: Math.round(totalReceived * 100) / 100,
     totalPaid: Math.round(totalPaid * 100) / 100,
     totalSoValue: Math.round(totalSoValue * 100) / 100,
-    totalTons: Math.round(totalTons * 100) / 100,
     from: fromDate,
     to: toDate,
     entries,

@@ -1578,14 +1578,12 @@ components:
           type: ["string", "null"]
         item:
           type: ["string", "null"]
+        unit:
+          type: ["string", "null"]
         billtyNo:
           type: ["string", "null"]
         vehicleNo:
           type: ["string", "null"]
-        weightTons:
-          type: ["number", "null"]
-        rateTon:
-          type: ["number", "null"]
         qtyBags:
           type: ["number", "null"]
         rateBag:
@@ -1605,6 +1603,8 @@ components:
       properties:
         category:
           type: string
+        unit:
+          type: ["string", "null"]
         amount:
           type: number
         share:

@@ -241,10 +241,9 @@ export const GetCustomerLedgerResponse = zod.object({
   "documentNo": zod.string().nullable(),
   "billNo": zod.string().nullish(),
   "item": zod.string().nullish(),
+  "unit": zod.string().nullish(),
   "billtyNo": zod.string().nullish(),
   "vehicleNo": zod.string().nullish(),
-  "weightTons": zod.number().nullish(),
-  "rateTon": zod.number().nullish(),
   "qtyBags": zod.number().nullish(),
   "rateBag": zod.number().nullish(),
   "receivedAmount": zod.number(),
@@ -254,6 +253,7 @@ export const GetCustomerLedgerResponse = zod.object({
 })),
   "categoryBreakdown": zod.array(zod.object({
   "category": zod.string(),
+  "unit": zod.string().nullish(),
   "amount": zod.number(),
   "share": zod.number()
 }))

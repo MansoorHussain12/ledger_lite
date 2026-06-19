@@ -160,13 +160,11 @@ export interface LedgerEntry {
   /** @nullable */
   item?: string | null;
   /** @nullable */
+  unit?: string | null;
+  /** @nullable */
   billtyNo?: string | null;
   /** @nullable */
   vehicleNo?: string | null;
-  /** @nullable */
-  weightTons?: number | null;
-  /** @nullable */
-  rateTon?: number | null;
   /** @nullable */
   qtyBags?: number | null;
   /** @nullable */
@@ -179,6 +177,8 @@ export interface LedgerEntry {
 
 export interface CategoryBreakdownItem {
   category: string;
+  /** @nullable */
+  unit?: string | null;
   amount: number;
   share: number;
 }
