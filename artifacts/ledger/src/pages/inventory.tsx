@@ -557,7 +557,14 @@ export default function InventoryPage() {
                     )}
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium">{p.name}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{p.name}</span>
+                        {p.category ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/20 leading-none">
+                            {p.category}
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         Rate: Rs {fmt(p.currentRate)}
                         {p.costPrice != null && ` · Cost: Rs ${fmt(p.costPrice)}`}
