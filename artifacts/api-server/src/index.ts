@@ -1,3 +1,5 @@
+import "./env";
+import "dotenv/config";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureSessionTable } from "./middlewares/session";

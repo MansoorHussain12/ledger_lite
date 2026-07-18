@@ -1,0 +1,16 @@
+services:
+  - name: ledger-lite
+    type: web
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@latest && pnpm install && (pnpm approve-builds --all || true) && pnpm --filter @workspace/ledger run build && pnpm --filter @workspace/api-server run build
+    startCommand: node artifacts/api-server/dist/index.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 24
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false

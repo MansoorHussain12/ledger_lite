@@ -31,25 +31,32 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-sidebar-primary mb-4">
-            <span className="text-white font-bold text-xl">AR</span>
+            {/* <span className="text-white font-bold text-xl">AR</span> */}
           </div>
-          <h1 className="text-white font-bold text-2xl">AL-RAHMAN TRADERS</h1>
-          <p className="text-sidebar-foreground/50 text-sm mt-1">Ledger Management System</p>
+          <h1 className="text-white font-bold text-2xl">
+            Ledger Management System
+          </h1>
+          {/* <p className="text-sidebar-foreground/50 text-sm mt-1">Ledger Management System</p> */}
         </div>
 
         {/* Card */}
         <div className="bg-card rounded-xl border border-card-border shadow-xl p-6">
-          <h2 className="text-foreground font-semibold text-lg mb-5">Sign in to continue</h2>
+          <h2 className="text-foreground font-semibold text-lg mb-5">
+            Sign in to continue
+          </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="username">Username</Label>
               <div className="relative">
-                <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <User
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
                 <Input
                   id="username"
                   placeholder="Enter username"
                   value={username}
-                  onChange={e => setUsername(e.target.value)}
+                  onChange={(e) => setUsername(e.target.value)}
                   className="pl-9"
                   autoComplete="username"
                   required
@@ -60,13 +67,16 @@ export default function LoginPage() {
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Lock
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
                 <Input
                   id="password"
                   type="password"
                   placeholder="Enter password"
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="pl-9"
                   autoComplete="current-password"
                   required
