@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Printer, MessageSquare, Pencil, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCompany } from "@/lib/company";
+import { useAuth } from "@/lib/auth";
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +24,7 @@ export default function CustomerDetailPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { settings } = useCompany();
+  const { user } = useAuth();
 
   const today = new Date().toISOString().split("T")[0];
   const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
@@ -512,13 +514,13 @@ export default function CustomerDetailPage() {
             <tbody>
               <tr>
                 <td style={{ border: "none", fontSize: "6.5pt", fontFamily: "Arial" }}>
-                  {printDateTime}
+                  Printed: {printDateTime}
                 </td>
                 <td style={{ border: "none", textAlign: "center", fontSize: "6.5pt", fontFamily: "Arial" }}>
-                  User: ADMIN
+                  {customer?.name}
                 </td>
                 <td style={{ border: "none", textAlign: "right", fontSize: "6.5pt", fontFamily: "Arial" }}>
-                  Page 1
+                  Printed by: {user?.name ?? "—"}
                 </td>
               </tr>
             </tbody>

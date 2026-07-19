@@ -47,14 +47,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-20 lg:hidden no-print"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-30 w-60 bg-sidebar flex flex-col transition-transform duration-200 lg:relative lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-30 w-60 bg-sidebar flex flex-col transition-transform duration-200 lg:relative lg:translate-x-0 no-print",
         mobileOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Logo / Company name */}
@@ -129,7 +129,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
-        <div className="lg:hidden flex items-center px-4 py-3 border-b bg-card">
+        <div className="lg:hidden flex items-center px-4 py-3 border-b bg-card no-print">
           <button onClick={() => setMobileOpen(true)} className="p-1 mr-3">
             <Menu size={20} />
           </button>

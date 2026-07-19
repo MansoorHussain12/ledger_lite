@@ -30,9 +30,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-sidebar-primary mb-4">
-            {/* <span className="text-white font-bold text-xl">AR</span> */}
-          </div>
+          {/* <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-sidebar-primary mb-4">
+            <span className="text-white font-bold text-xl">AR</span>
+          </div> */}
           <h1 className="text-white font-bold text-2xl">
             Ledger Management System
           </h1>
