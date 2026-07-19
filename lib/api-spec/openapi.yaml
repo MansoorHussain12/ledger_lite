@@ -33,6 +33,8 @@ tags:
     description: Cashbook & expenses
   - name: lookups
     description: Configurable lookup values (categories & units)
+  - name: auditLogs
+    description: Audit trail of data-changing actions
 
 paths:
   /healthz:
@@ -944,7 +946,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/UpdateInventorySettingsResponse"
 
   /inventory/adjustments:
     post:
@@ -963,7 +965,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/StockAdjustment"
 
   /inventory/adjustments/{id}:
     delete:
@@ -1391,6 +1393,45 @@ paths:
           description: Deleted
         "409":
           description: Value is still in use by products
+
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [auditLogs]
+      summary: List audit log entries (owner only)
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: action
+          in: query
+          schema:
+            type: string
+            enum: [create, update, delete]
+        - name: entityType
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLog"
 
 components:
   schemas:
@@ -2213,6 +2254,40 @@ components:
         notes:
           type: string
 
+    UpdateInventorySettingsResponse:
+      type: object
+      required: [id, openingStock, minStock]
+      properties:
+        id:
+          type: integer
+        openingStock:
+          type: number
+        minStock:
+          type: number
+
+    StockAdjustment:
+      type: object
+      required: [id, productId, date, qty, reason, createdAt]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        date:
+          type: string
+          format: date
+        qty:
+          type: number
+        reason:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdById:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
     # ── DAILY PROFIT SCHEMAS ──────────────────────────────────────────────
     DailyProfitDay:
       type: object
@@ -2626,3 +2701,30 @@ components:
           enum: [cash, bank, easypaisa, jazzcash, cheque, other]
         notes:
           type: string
+
+    AuditLog:
+      type: object
+      required: [id, userId, userName, method, path, entityType, entityId, action, description, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        userName:
+          type: ["string", "null"]
+        method:
+          type: string
+        path:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: ["integer", "null"]
+        action:
+          type: string
+          enum: [create, update, delete]
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time

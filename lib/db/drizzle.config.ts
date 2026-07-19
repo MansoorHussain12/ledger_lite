@@ -14,4 +14,11 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // company_settings (raw-pool managed, see CLAUDE.md) and user_sessions
+  // (created by ensureSessionTable()) intentionally have no Drizzle schema.
+  // Without this, `push`/`push-force` treats them as drift and DROPS them
+  // to match the schema files — this actually happened once during
+  // development. Exclude them from the diff entirely so they're untouched
+  // no matter what schema changes get pushed.
+  tablesFilter: ["!company_settings", "!user_sessions"],
 });

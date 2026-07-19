@@ -6,6 +6,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { sessionMiddleware } from "./middlewares/session";
+import { auditLog } from "./middlewares/audit";
 
 const app: Express = express();
 
@@ -35,6 +36,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(sessionMiddleware);
+app.use(auditLog);
 
 app.use("/api", router);
 

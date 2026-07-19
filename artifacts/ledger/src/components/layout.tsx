@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { useCompany } from "@/lib/company";
 import {
   LayoutDashboard, Users, ShoppingCart, CreditCard,
-  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen, Truck, ShoppingBag, Boxes, CalendarClock, Monitor, HelpCircle, Settings
+  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen, Truck, ShoppingBag, Boxes, CalendarClock, Monitor, HelpCircle, Settings, History
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ const navItems = [
   { href: "/products", label: "Products", icon: Package, roles: ["owner", "salesman"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["owner"] },
   { href: "/users", label: "Users", icon: UserCog, roles: ["owner"] },
+  { href: "/audit-log", label: "Audit Log", icon: History, roles: ["owner"] },
   { href: "/settings", label: "Settings", icon: Settings, roles: ["owner"] },
   { href: "/guide", label: "Guide", icon: HelpCircle, roles: ["owner", "cashier", "salesman"] },
 ];

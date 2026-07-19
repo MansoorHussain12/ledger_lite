@@ -13,6 +13,7 @@ import inventoryRouter from "./inventory";
 import installmentsRouter from "./installments";
 import settingsRouter from "./settings";
 import lookupsRouter from "./lookups";
+import auditLogsRouter from "./auditLogs";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(inventoryRouter);
 router.use(installmentsRouter);
 router.use(settingsRouter);
 router.use(lookupsRouter);
+router.use(auditLogsRouter);
 
 export default router;

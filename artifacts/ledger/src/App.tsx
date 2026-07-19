@@ -26,6 +26,7 @@ import InventoryPage from "@/pages/inventory";
 import ProductsPage from "@/pages/products";
 import ReportsPage from "@/pages/reports";
 import UsersPage from "@/pages/users";
+import AuditLogPage from "@/pages/audit-log";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -75,6 +76,7 @@ function AuthenticatedApp() {
         <Route path="/products" component={ProductsPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/users" component={UsersPage} />
+        <Route path="/audit-log" component={AuditLogPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
