@@ -1646,12 +1646,14 @@ components:
 
     CategoryBreakdownItem:
       type: object
-      required: [category, amount, share]
+      required: [category, qty, amount, share]
       properties:
         category:
           type: string
         unit:
           type: ["string", "null"]
+        qty:
+          type: number
         amount:
           type: number
         share:

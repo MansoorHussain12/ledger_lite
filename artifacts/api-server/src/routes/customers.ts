@@ -247,6 +247,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
 
   // Category totals accumulator (only sale values)
   const categoryTotals = new Map<string, number>();
+  const categoryQtys = new Map<string, number>();
   const categoryUnits = new Map<string, string>();
 
   // Sale order rows — one row per item
@@ -255,6 +256,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     for (const item of items) {
       const cat = item.category?.trim() || "Uncategorised";
       categoryTotals.set(cat, (categoryTotals.get(cat) ?? 0) + item.amount);
+      categoryQtys.set(cat, (categoryQtys.get(cat) ?? 0) + item.qty);
       if (item.unit) categoryUnits.set(cat, item.unit);
       rows.push({
         date: order.date,
@@ -334,6 +336,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     .map(([category, amount]) => ({
       category,
       unit: categoryUnits.get(category) ?? null,
+      qty: Math.round((categoryQtys.get(category) ?? 0) * 100) / 100,
       amount: Math.round(amount * 100) / 100,
       share: catTotal > 0 ? Math.round((amount / catTotal) * 1000) / 10 : 0,
     }));

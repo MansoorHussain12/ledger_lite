@@ -286,6 +286,7 @@ export default function CustomerDetailPage() {
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="pb-1.5 text-left font-semibold">Category</th>
+                  <th className="pb-1.5 text-right font-semibold pl-4">Quantity</th>
                   <th className="pb-1.5 text-left font-semibold pl-4">Unit</th>
                   <th className="pb-1.5 text-right font-semibold">Amount (Rs.)</th>
                   <th className="pb-1.5 text-right font-semibold pl-4">Share %</th>
@@ -295,6 +296,7 @@ export default function CustomerDetailPage() {
                 {ledger.categoryBreakdown.map((row) => (
                   <tr key={row.category} className="hover:bg-muted/20">
                     <td className="py-1.5 font-medium">{row.category}</td>
+                    <td className="py-1.5 pl-4 text-right">{formatAmount(row.qty)}</td>
                     <td className="py-1.5 pl-4 text-muted-foreground text-xs">{row.unit ?? "—"}</td>
                     <td className="py-1.5 text-right font-bold">{formatAmount(row.amount)}</td>
                     <td className="py-1.5 pl-4 text-right text-muted-foreground">{row.share}%</td>
@@ -304,6 +306,7 @@ export default function CustomerDetailPage() {
               <tfoot>
                 <tr className="border-t-2 border-border font-bold text-sm">
                   <td className="pt-2">Total Sales</td>
+                  <td className="pt-2 pl-4"></td>
                   <td className="pt-2 pl-4"></td>
                   <td className="pt-2 text-right">
                     Rs. {formatAmount(ledger.categoryBreakdown.reduce((s, r) => s + r.amount, 0))}
@@ -481,8 +484,9 @@ export default function CustomerDetailPage() {
               <thead>
                 <tr style={{ backgroundColor: "#f0f0f0" }}>
                   <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "left" }}>Category</th>
+                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "12%" }}>Quantity</th>
                   <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "left", width: "12%" }}>Unit</th>
-                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "22%" }}>Amount (Rs)</th>
+                  <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "20%" }}>Amount (Rs)</th>
                   <th style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right", width: "10%" }}>Share %</th>
                 </tr>
               </thead>
@@ -490,6 +494,7 @@ export default function CustomerDetailPage() {
                 {ledger.categoryBreakdown.map((row) => (
                   <tr key={row.category}>
                     <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt" }}>{row.category}</td>
+                    <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt", textAlign: "right" }}>{formatAmount(row.qty)}</td>
                     <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt" }}>{row.unit ?? "—"}</td>
                     <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt", textAlign: "right" }}>{formatAmount(row.amount)}</td>
                     <td style={{ border: "0.5pt solid #ccc", padding: "2pt 4pt", textAlign: "right" }}>{row.share}%</td>
@@ -497,6 +502,7 @@ export default function CustomerDetailPage() {
                 ))}
                 <tr style={{ fontWeight: "bold", backgroundColor: "#f0f0f0" }}>
                   <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt" }}>Total</td>
+                  <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt" }}></td>
                   <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt" }}></td>
                   <td style={{ border: "0.5pt solid #999", padding: "2pt 4pt", textAlign: "right" }}>
                     {formatAmount(ledger.categoryBreakdown.reduce((s, r) => s + r.amount, 0))}

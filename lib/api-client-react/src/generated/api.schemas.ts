@@ -179,6 +179,7 @@ export interface CategoryBreakdownItem {
   category: string;
   /** @nullable */
   unit?: string | null;
+  qty: number;
   amount: number;
   share: number;
 }
