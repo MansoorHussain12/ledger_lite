@@ -85,7 +85,9 @@ function DailyProfitTab() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const { data: categories = [] } = useQuery({
-    queryKey: ["lookups-category"],
+    // Matches the key Settings/Products use ("lookups", type) so a category rename/add
+    // there invalidates this too, instead of the two drifting out of sync.
+    queryKey: ["lookups", "category"],
     queryFn: fetchCategories,
   });
 

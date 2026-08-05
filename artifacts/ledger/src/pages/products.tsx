@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getListProductsQueryKey } from "@workspace/api-client-react";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +97,13 @@ export default function ProductsPage() {
       toast({ title: editId ? "Product updated" : "Product added" });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
+      // Sale Order New reads products via the codegen-generated list key, a separate
+      // cache from the raw ["products"] one used here — invalidate both.
+      qc.invalidateQueries({ queryKey: getListProductsQueryKey() });
+      // A rate edit inserts a new product_rates row server-side — invalidate the cached
+      // history so other pages (e.g. the POS cart's "Previous Rate" column) pick up the
+      // change on next visit instead of showing stale data until a full reload.
+      if (editId != null) qc.invalidateQueries({ queryKey: ["product-rates", editId] });
       setShowForm(false);
     },
     onError: (e: Error) => toast({ title: "Failed to save", description: e.message, variant: "destructive" }),
@@ -103,7 +111,11 @@ export default function ProductsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteProduct,
-    onSuccess: () => { toast({ title: "Product deleted" }); qc.invalidateQueries({ queryKey: ["products"] }); },
+    onSuccess: () => {
+      toast({ title: "Product deleted" });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: getListProductsQueryKey() });
+    },
     onError: () => toast({ title: "Cannot delete — product has existing orders", variant: "destructive" }),
   });
 

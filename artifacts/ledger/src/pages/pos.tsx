@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
+  getListCustomersQueryKey, getListSaleOrdersQueryKey, getListPaymentsQueryKey,
+} from "@workspace/api-client-react";
+import {
   ShoppingCart, Search, X, Plus, Minus, Printer, CheckCircle2,
   User, Package, AlertCircle, ChevronDown, Calendar, Truck, FileText,
 } from "lucide-react";
@@ -411,7 +414,9 @@ export default function PosPage() {
 
   // Data
   const { data: customers = [] } = useQuery({ queryKey: ["customers-list"], queryFn: fetchCustomers });
-  const { data: products = [] } = useQuery({ queryKey: ["products-list"], queryFn: fetchProducts });
+  // Shared "products" key (not a POS-local one) so edits made on the Products page —
+  // which invalidate ["products"] — are reflected here without a full reload.
+  const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
   const { data: inventory = [] } = useQuery({ queryKey: ["inventory"], queryFn: fetchInventory });
 
   const stockMap = new Map<number, number>(inventory.map((p: any) => [p.id, p.currentStock ?? 0]));
@@ -567,11 +572,15 @@ export default function PosPage() {
         }
       }
 
-      // Invalidate caches
-      qc.invalidateQueries({ queryKey: ["sale-orders"] });
+      // Invalidate caches — both the POS-local raw keys and the codegen-generated keys
+      // used by the Sale Orders / Payments / Customers pages, so a sale made here shows
+      // up there (and vice versa) without a full reload.
       qc.invalidateQueries({ queryKey: ["customers-list"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["cashbook"] });
+      qc.invalidateQueries({ queryKey: getListSaleOrdersQueryKey() });
+      qc.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+      if (paymentResult) qc.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
 
       setReceipt({
         id: order.id, date, customerName: customer.name, customerId: customer.id,

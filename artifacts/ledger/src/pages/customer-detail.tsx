@@ -4,7 +4,7 @@ import {
   useGetCustomer, getGetCustomerQueryKey,
   useGetCustomerLedger, getGetCustomerLedgerQueryKey,
   useGetCustomerStatement, getGetCustomerStatementQueryKey,
-  useUpdateCustomer,
+  useUpdateCustomer, getListCustomersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatAmount, formatDate, formatDatePrint } from "@/lib/format";
@@ -93,6 +93,11 @@ export default function CustomerDetailPage() {
       });
       queryClient.invalidateQueries({ queryKey: getGetCustomerQueryKey(customerId) });
       queryClient.invalidateQueries({ queryKey: getGetCustomerLedgerQueryKey(customerId, ledgerParams) });
+      // This edits name/balance/credit-limit, which every customer list/picker in the app
+      // shows — invalidate both list-cache flavors (codegen + POS/Installments' raw one)
+      // so they reflect the change without a full reload.
+      queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["customers-list"] });
       setShowEdit(false);
       toast({ title: "Customer updated" });
     } catch {

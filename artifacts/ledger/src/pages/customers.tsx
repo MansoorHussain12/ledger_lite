@@ -49,6 +49,9 @@ export default function CustomersPage() {
         }
       });
       queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+      // POS and Installments read customers via a separate raw ["customers-list"] query —
+      // invalidate that too so they pick up the new customer without a full reload.
+      queryClient.invalidateQueries({ queryKey: ["customers-list"] });
       setShowForm(false);
       setForm({ name: "", area: "", contact: "", creditLimit: "", openingBalance: "" });
       toast({ title: "Customer added successfully" });
@@ -62,6 +65,7 @@ export default function CustomersPage() {
     try {
       await deleteMutation.mutateAsync({ id });
       queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["customers-list"] });
       toast({ title: "Customer deleted" });
     } catch {
       toast({ title: "Cannot delete customer", variant: "destructive" });

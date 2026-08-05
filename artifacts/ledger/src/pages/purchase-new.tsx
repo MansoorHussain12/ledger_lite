@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getListProductsQueryKey } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import {
   ArrowLeft, Plus, Trash2, ShoppingBag, Package
@@ -122,6 +123,9 @@ export default function PurchaseNewPage() {
       qc.invalidateQueries({ queryKey: ["cashbook"] });
       qc.invalidateQueries({ queryKey: ["cashbook-summary"] });
       qc.invalidateQueries({ queryKey: ["products"] });
+      // A purchase can update product cost prices (updateCostPrice) — invalidate the
+      // codegen product list too (used by Sale Order New) alongside the raw one above.
+      qc.invalidateQueries({ queryKey: getListProductsQueryKey() });
       toast({ title: `Purchase #${data.id} recorded`, description: `Rs ${fmt(data.totalAmount)} from ${data.supplierName}` });
       navigate("/purchases");
     },

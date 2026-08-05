@@ -72,6 +72,9 @@ function SupplierDialog({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["suppliers"] });
+      // Editing here doesn't refresh the separate ["supplier", id] cache the detail
+      // page reads — invalidate it too so an already-cached detail view stays in sync.
+      if (isEdit) qc.invalidateQueries({ queryKey: ["supplier", String(editId)] });
       toast({ title: isEdit ? "Supplier updated" : "Supplier added" });
       onClose();
       setForm(blank);

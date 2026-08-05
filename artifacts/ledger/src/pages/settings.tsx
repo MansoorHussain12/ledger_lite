@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/lib/company";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getListLookupsQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const CURRENCIES = ["Rs", "PKR", "USD", "$", "€", "£", "AED", "SAR"];
@@ -72,6 +73,8 @@ function LookupList({ type, label, icon: Icon, isOwner }: {
     onSuccess: () => {
       toast({ title: `${label.slice(0, -1)} added` });
       qc.invalidateQueries({ queryKey: ["lookups", type] });
+      // Sale Order New reads lookups via the codegen-generated key — invalidate both.
+      qc.invalidateQueries({ queryKey: getListLookupsQueryKey(type) });
       setAddValue("");
     },
     onError: (e: Error) => toast({ title: "Failed to add", description: e.message, variant: "destructive" }),
@@ -82,7 +85,10 @@ function LookupList({ type, label, icon: Icon, isOwner }: {
     onSuccess: () => {
       toast({ title: "Renamed" });
       qc.invalidateQueries({ queryKey: ["lookups", type] });
+      qc.invalidateQueries({ queryKey: getListLookupsQueryKey(type) });
+      // Renaming a category/unit changes how it displays on products elsewhere.
       qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: getListProductsQueryKey() });
       setEditId(null);
     },
     onError: (e: Error) => toast({ title: "Failed to rename", description: e.message, variant: "destructive" }),
@@ -93,6 +99,7 @@ function LookupList({ type, label, icon: Icon, isOwner }: {
     onSuccess: () => {
       toast({ title: "Deleted" });
       qc.invalidateQueries({ queryKey: ["lookups", type] });
+      qc.invalidateQueries({ queryKey: getListLookupsQueryKey(type) });
     },
     onError: (e: Error) => toast({ title: "Cannot delete", description: e.message, variant: "destructive" }),
   });
