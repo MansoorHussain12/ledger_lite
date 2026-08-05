@@ -44,6 +44,7 @@ import type {
   GetDailyCollectionReportParams,
   GetDailyProfitReportParams,
   GetMonthlySalesReportParams,
+  GetProfitBreakdownParams,
   HealthStatus,
   InstallmentPaymentInput,
   InstallmentPlanDetail,
@@ -69,6 +70,7 @@ import type {
   ProductInput,
   ProductRate,
   ProductUpdate,
+  ProfitBreakdown,
   PurchaseInvoiceDetail,
   PurchaseInvoiceInput,
   PurchaseInvoiceRow,
@@ -2907,6 +2909,90 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetProfitBreakdownUrl = (params?: GetProfitBreakdownParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/profit-breakdown?${stringifiedParams}` : `/api/dashboard/profit-breakdown`
+}
+
+/**
+ * @summary Customer-wise, item-level profit breakdown for a single day (defaults to today)
+ */
+export const getProfitBreakdown = async (params?: GetProfitBreakdownParams, options?: RequestInit): Promise<ProfitBreakdown> => {
+
+  return customFetch<ProfitBreakdown>(getGetProfitBreakdownUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProfitBreakdownQueryKey = (params?: GetProfitBreakdownParams,) => {
+    return [
+    `/api/dashboard/profit-breakdown`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetProfitBreakdownQueryOptions = <TData = Awaited<ReturnType<typeof getProfitBreakdown>>, TError = ErrorType<unknown>>(params?: GetProfitBreakdownParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProfitBreakdown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProfitBreakdownQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProfitBreakdown>>> = ({ signal }) => getProfitBreakdown(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProfitBreakdown>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProfitBreakdownQueryResult = NonNullable<Awaited<ReturnType<typeof getProfitBreakdown>>>
+export type GetProfitBreakdownQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Customer-wise, item-level profit breakdown for a single day (defaults to today)
+ */
+
+export function useGetProfitBreakdown<TData = Awaited<ReturnType<typeof getProfitBreakdown>>, TError = ErrorType<unknown>>(
+ params?: GetProfitBreakdownParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProfitBreakdown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProfitBreakdownQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

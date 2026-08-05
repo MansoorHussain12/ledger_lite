@@ -1,9 +1,92 @@
 import { Router, type IRouter } from "express";
 import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable } from "@workspace/db";
-import { eq, sql, desc, and } from "drizzle-orm";
+import { eq, sql, desc, and, inArray } from "drizzle-orm";
+import { z } from "zod";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// Shared by /dashboard/summary (todayProfit) and /dashboard/profit-breakdown, so the
+// KPI card total and the drill-down dialog's grand total can never disagree.
+async function getProfitBreakdownForDate(date: string) {
+  const orders = await db.select().from(saleOrdersTable).where(eq(saleOrdersTable.date, date));
+
+  const orderIds = orders.map(o => o.id);
+  const items = orderIds.length
+    ? await db.select().from(saleOrderItemsTable).where(inArray(saleOrderItemsTable.saleOrderId, orderIds))
+    : [];
+
+  const productIds = Array.from(new Set(items.map(i => i.productId)));
+  const products = productIds.length
+    ? await db.select().from(productsTable).where(inArray(productsTable.id, productIds))
+    : [];
+  const productMap = new Map(products.map(p => [p.id, p]));
+
+  const customerIds = Array.from(new Set(orders.map(o => o.customerId)));
+  const customers = customerIds.length
+    ? await db.select().from(customersTable).where(inArray(customersTable.id, customerIds))
+    : [];
+  const customerMap = new Map(customers.map(c => [c.id, c]));
+
+  const itemsByOrderId = new Map<number, typeof items>();
+  for (const item of items) {
+    if (!itemsByOrderId.has(item.saleOrderId)) itemsByOrderId.set(item.saleOrderId, []);
+    itemsByOrderId.get(item.saleOrderId)!.push(item);
+  }
+
+  type BreakdownItem = {
+    productId: number; productName: string; category: string | null; unit: string;
+    qty: number; amount: number; profit: number | null;
+  };
+  const byCustomer = new Map<number, {
+    customerId: number; customerName: string; items: BreakdownItem[];
+    subtotalAmount: number; subtotalProfit: number;
+  }>();
+
+  let hasMissingCost = false;
+
+  for (const order of orders) {
+    if (!byCustomer.has(order.customerId)) {
+      byCustomer.set(order.customerId, {
+        customerId: order.customerId,
+        customerName: customerMap.get(order.customerId)?.name ?? "",
+        items: [], subtotalAmount: 0, subtotalProfit: 0,
+      });
+    }
+    const bucket = byCustomer.get(order.customerId)!;
+
+    for (const item of itemsByOrderId.get(order.id) ?? []) {
+      const product = productMap.get(item.productId);
+      const qty = parseFloat(item.qty);
+      const amount = parseFloat(item.amount);
+      const costPrice = product?.costPrice != null ? parseFloat(product.costPrice) : null;
+      const profit = costPrice != null ? amount - qty * costPrice : null;
+      if (profit == null) hasMissingCost = true;
+
+      bucket.items.push({
+        productId: item.productId,
+        productName: product?.name ?? "",
+        category: product?.category ?? null,
+        unit: product?.unit ?? "bag",
+        qty: round2(qty), amount: round2(amount),
+        profit: profit != null ? round2(profit) : null,
+      });
+      bucket.subtotalAmount += amount;
+      if (profit != null) bucket.subtotalProfit += profit;
+    }
+  }
+
+  const customersArr = Array.from(byCustomer.values())
+    .map(c => ({ ...c, subtotalAmount: round2(c.subtotalAmount), subtotalProfit: round2(c.subtotalProfit) }))
+    .sort((a, b) => b.subtotalAmount - a.subtotalAmount);
+
+  const totalAmount = round2(customersArr.reduce((s, c) => s + c.subtotalAmount, 0));
+  const totalProfit = round2(customersArr.reduce((s, c) => s + c.subtotalProfit, 0));
+
+  return { date, totalAmount, totalProfit, hasMissingCost, customers: customersArr };
+}
 
 router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> => {
   const today = new Date().toISOString().split("T")[0];
@@ -18,6 +101,7 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
 
   const todayCollections = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(eq(paymentsTable.date, today));
   const todaySales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(eq(saleOrdersTable.date, today));
+  const todayProfit = (await getProfitBreakdownForDate(today)).totalProfit;
 
   const activeProducts = await db.select({ count: sql<number>`count(*)` }).from(productsTable);
 
@@ -25,9 +109,19 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
     totalOutstanding,
     todayCollections: parseFloat(String(todayCollections[0]?.total ?? 0)),
     todaySales: parseFloat(String(todaySales[0]?.total ?? 0)),
+    todayProfit,
     totalCustomers: customers.length,
     activeProducts: parseInt(String(activeProducts[0]?.count ?? 0)),
   });
+});
+
+router.get("/dashboard/profit-breakdown", requireAuth, async (req, res): Promise<void> => {
+  const Query = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
+  const parsed = Query.safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const date = parsed.data.date ?? new Date().toISOString().split("T")[0];
+
+  res.json(await getProfitBreakdownForDate(date));
 });
 
 router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<void> => {

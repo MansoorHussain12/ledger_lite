@@ -812,8 +812,39 @@ export const GetDashboardSummaryResponse = zod.object({
   "totalOutstanding": zod.number(),
   "todayCollections": zod.number(),
   "todaySales": zod.number(),
+  "todayProfit": zod.number(),
   "totalCustomers": zod.number(),
   "activeProducts": zod.number()
+})
+
+
+/**
+ * @summary Customer-wise, item-level profit breakdown for a single day (defaults to today)
+ */
+export const GetProfitBreakdownQueryParams = zod.object({
+  "date": zod.date().optional()
+})
+
+export const GetProfitBreakdownResponse = zod.object({
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "totalProfit": zod.number(),
+  "hasMissingCost": zod.boolean(),
+  "customers": zod.array(zod.object({
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "category": zod.string().nullable(),
+  "unit": zod.string(),
+  "qty": zod.number(),
+  "amount": zod.number(),
+  "profit": zod.number().nullable()
+})),
+  "subtotalAmount": zod.number(),
+  "subtotalProfit": zod.number()
+}))
 })
 
 

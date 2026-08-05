@@ -416,8 +416,37 @@ export interface DashboardSummary {
   totalOutstanding: number;
   todayCollections: number;
   todaySales: number;
+  todayProfit: number;
   totalCustomers: number;
   activeProducts: number;
+}
+
+export interface ProfitBreakdownItem {
+  productId: number;
+  productName: string;
+  /** @nullable */
+  category: string | null;
+  unit: string;
+  qty: number;
+  amount: number;
+  /** @nullable */
+  profit: number | null;
+}
+
+export interface ProfitBreakdownCustomer {
+  customerId: number;
+  customerName: string;
+  items: ProfitBreakdownItem[];
+  subtotalAmount: number;
+  subtotalProfit: number;
+}
+
+export interface ProfitBreakdown {
+  date: string;
+  totalAmount: number;
+  totalProfit: number;
+  hasMissingCost: boolean;
+  customers: ProfitBreakdownCustomer[];
 }
 
 export interface DebtorRow {
@@ -1045,6 +1074,10 @@ to: string;
  * Filter results to a specific product category
  */
 category?: string;
+};
+
+export type GetProfitBreakdownParams = {
+date?: string;
 };
 
 export type ListPurchasesParams = {

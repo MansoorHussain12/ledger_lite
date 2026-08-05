@@ -1,14 +1,26 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   useGetDashboardSummary, getGetDashboardSummaryQueryKey,
   useGetTopDebtors, getGetTopDebtorsQueryKey,
   useGetRecentActivity, getGetRecentActivityQueryKey,
+  useGetProfitBreakdown, getGetProfitBreakdownQueryKey,
 } from "@workspace/api-client-react";
 import { formatAmount, formatDate } from "@/lib/format";
-import { TrendingUp, Users, ShoppingCart, CreditCard, ArrowRight } from "lucide-react";
+import {
+  TrendingUp, TrendingDown, Users, ShoppingCart, CreditCard,
+  ArrowRight, AlertTriangle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+
+function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 export default function DashboardPage() {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
   const { data: summary, isLoading: sumLoading } = useGetDashboardSummary({
     query: { queryKey: getGetDashboardSummaryQueryKey() }
   });
@@ -19,6 +31,9 @@ export default function DashboardPage() {
     query: { queryKey: getGetRecentActivityQueryKey() }
   });
 
+  const todayProfit = summary?.todayProfit ?? 0;
+  const profitPositive = todayProfit >= 0;
+
   const statCards = [
     {
       label: "Total Outstanding",
@@ -26,6 +41,7 @@ export default function DashboardPage() {
       icon: TrendingUp,
       color: "text-red-500",
       bg: "bg-red-50",
+      clickable: false,
     },
     {
       label: "Today's Collections",
@@ -33,6 +49,7 @@ export default function DashboardPage() {
       icon: CreditCard,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
+      clickable: false,
     },
     {
       label: "Today's Sales",
@@ -40,6 +57,15 @@ export default function DashboardPage() {
       icon: ShoppingCart,
       color: "text-blue-600",
       bg: "bg-blue-50",
+      clickable: true,
+    },
+    {
+      label: "Today's Profit",
+      value: `Rs. ${formatAmount(todayProfit)}`,
+      icon: profitPositive ? TrendingUp : TrendingDown,
+      color: profitPositive ? "text-emerald-600" : "text-red-500",
+      bg: profitPositive ? "bg-emerald-50" : "bg-red-50",
+      clickable: true,
     },
     {
       label: "Total Customers",
@@ -47,6 +73,7 @@ export default function DashboardPage() {
       icon: Users,
       color: "text-purple-600",
       bg: "bg-purple-50",
+      clickable: false,
     },
   ];
 
@@ -58,21 +85,31 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {statCards.map((card) => (
-          <div key={card.label} className="bg-card border border-card-border rounded-xl p-4 shadow-xs">
+          <div
+            key={card.label}
+            onClick={card.clickable ? () => setShowBreakdown(true) : undefined}
+            className={cn(
+              "bg-card border border-card-border rounded-xl p-4 shadow-xs",
+              card.clickable && "cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
+            )}
+          >
             <div className="flex items-center justify-between mb-3">
               <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{card.label}</span>
               <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", card.bg)}>
                 <card.icon size={15} className={card.color} />
               </div>
             </div>
-            <div className={cn("text-xl font-bold", sumLoading ? "text-muted-foreground" : "text-foreground")}>
+            <div className={cn("text-xl font-bold flex items-center gap-1", sumLoading ? "text-muted-foreground" : "text-foreground")}>
               {sumLoading ? "..." : card.value}
+              {card.clickable && !sumLoading && <ArrowRight size={13} className="text-muted-foreground/50" />}
             </div>
           </div>
         ))}
       </div>
+
+      <ProfitBreakdownDialog open={showBreakdown} onOpenChange={setShowBreakdown} />
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Top Debtors */}
@@ -135,5 +172,107 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Today's Profit drill-down ───────────────────────────────────────────────
+
+function ProfitBreakdownDialog({
+  open, onOpenChange,
+}: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const params = { date: todayStr() };
+  const { data, isLoading } = useGetProfitBreakdown(params, {
+    query: { queryKey: getGetProfitBreakdownQueryKey(params), enabled: open },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between pr-6">
+            <span>Today's Profit Breakdown</span>
+            {data && <span className="text-sm font-normal text-muted-foreground">{formatDate(data.date)}</span>}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading && <div className="text-center py-12 text-muted-foreground text-sm">Calculating…</div>}
+
+        {!isLoading && data && (
+          <div className="space-y-4">
+            {data.hasMissingCost && (
+              <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-amber-400">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                <span>Some items don't have a cost price set — their profit isn't included in the totals below.</span>
+              </div>
+            )}
+
+            {data.customers.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground text-sm">No sales today yet</div>
+            )}
+
+            {data.customers.map((c) => (
+              <div key={c.customerId} className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold">{c.customerName}</h3>
+                  <div className="text-xs text-muted-foreground">
+                    Rs. {formatAmount(c.subtotalAmount)} · <span className={c.subtotalProfit >= 0 ? "text-emerald-500" : "text-red-500"}>
+                      {c.subtotalProfit >= 0 ? "+" : "-"}Rs. {formatAmount(Math.abs(c.subtotalProfit))}
+                    </span>
+                  </div>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-muted-foreground">
+                      <th className="pb-1.5 text-left font-semibold">Item</th>
+                      <th className="pb-1.5 text-left font-semibold pl-4">Category</th>
+                      <th className="pb-1.5 text-right font-semibold pl-4">Qty</th>
+                      <th className="pb-1.5 text-left font-semibold pl-4">Unit</th>
+                      <th className="pb-1.5 text-right font-semibold pl-4">Amount (Rs.)</th>
+                      <th className="pb-1.5 text-right font-semibold pl-4">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {c.items.map((item, i) => (
+                      <tr key={`${item.productId}-${i}`} className="hover:bg-muted/20">
+                        <td className="py-1.5 font-medium">{item.productName}</td>
+                        <td className="py-1.5 pl-4 text-muted-foreground text-xs">{item.category ?? "—"}</td>
+                        <td className="py-1.5 pl-4 text-right">{formatAmount(item.qty)}</td>
+                        <td className="py-1.5 pl-4 text-muted-foreground text-xs">{item.unit}</td>
+                        <td className="py-1.5 pl-4 text-right font-bold">{formatAmount(item.amount)}</td>
+                        <td className={cn(
+                          "py-1.5 pl-4 text-right",
+                          item.profit == null ? "text-muted-foreground" : item.profit >= 0 ? "text-emerald-500" : "text-red-500"
+                        )}>
+                          {item.profit == null ? "—" : `${item.profit >= 0 ? "+" : "-"}Rs. ${formatAmount(Math.abs(item.profit))}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+
+            {data.customers.length > 0 && (
+              <div className="rounded-xl border border-border bg-muted/10 px-4 py-3 flex items-center justify-between font-bold text-sm">
+                <span>Total</span>
+                <span>
+                  Rs. {formatAmount(data.totalAmount)} · <span className={data.totalProfit >= 0 ? "text-emerald-500" : "text-red-500"}>
+                    {data.totalProfit >= 0 ? "+" : "-"}Rs. {formatAmount(Math.abs(data.totalProfit))}
+                  </span>
+                </span>
+              </div>
+            )}
+
+            <div className="text-right">
+              <Link href="/reports">
+                <span className="text-xs text-primary flex items-center justify-end gap-1 hover:underline cursor-pointer">
+                  View full report <ArrowRight size={12} />
+                </span>
+              </Link>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

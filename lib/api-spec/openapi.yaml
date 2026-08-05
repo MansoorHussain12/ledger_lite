@@ -749,6 +749,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  /dashboard/profit-breakdown:
+    get:
+      operationId: getProfitBreakdown
+      tags: [dashboard]
+      summary: Customer-wise, item-level profit breakdown for a single day (defaults to today)
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Profit breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfitBreakdown"
+
   /dashboard/top-debtors:
     get:
       operationId: getTopDebtors
@@ -2029,7 +2049,7 @@ components:
     # ── DASHBOARD ────────────────────────────────────────────────────────
     DashboardSummary:
       type: object
-      required: [totalOutstanding, todayCollections, todaySales, totalCustomers, activeProducts]
+      required: [totalOutstanding, todayCollections, todaySales, todayProfit, totalCustomers, activeProducts]
       properties:
         totalOutstanding:
           type: number
@@ -2037,10 +2057,66 @@ components:
           type: number
         todaySales:
           type: number
+        todayProfit:
+          type: number
         totalCustomers:
           type: integer
         activeProducts:
           type: integer
+
+    ProfitBreakdownItem:
+      type: object
+      required: [productId, productName, category, unit, qty, amount, profit]
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        category:
+          type: ["string", "null"]
+        unit:
+          type: string
+        qty:
+          type: number
+        amount:
+          type: number
+        profit:
+          type: ["number", "null"]
+
+    ProfitBreakdownCustomer:
+      type: object
+      required: [customerId, customerName, items, subtotalAmount, subtotalProfit]
+      properties:
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProfitBreakdownItem"
+        subtotalAmount:
+          type: number
+        subtotalProfit:
+          type: number
+
+    ProfitBreakdown:
+      type: object
+      required: [date, totalAmount, totalProfit, hasMissingCost, customers]
+      properties:
+        date:
+          type: string
+          format: date
+        totalAmount:
+          type: number
+        totalProfit:
+          type: number
+        hasMissingCost:
+          type: boolean
+        customers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProfitBreakdownCustomer"
 
     DebtorRow:
       type: object
