@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useCompany } from "@/lib/company";
+import { useAuth } from "@/lib/auth";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -388,6 +389,8 @@ function ReceiptDialog({ order, onClose, onNewSale }: { order: CompletedOrder; o
 export default function PosPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canSeeProfit = user?.role === "owner";
 
   // State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -435,6 +438,22 @@ export default function PosPage() {
   // Derived
   const subtotal = cart.reduce((s, i) => s + i.amount, 0);
   const totalQty  = cart.reduce((s, i) => s + i.qty, 0);
+
+  // Invoice profit (owner-only) — rate minus each product's cost price, summed across the cart.
+  const costPriceMap = useMemo(
+    () => new Map<number, number | null>(products.map((p: Product) => [p.id, p.costPrice])),
+    [products]
+  );
+  const { profit: cartProfit, missingCost: profitMissingCost } = useMemo(() => {
+    let profit = 0;
+    let missingCost = false;
+    for (const item of cart) {
+      const cost = costPriceMap.get(item.productId);
+      if (cost == null) { missingCost = true; continue; }
+      profit += (item.rate - cost) * item.qty;
+    }
+    return { profit, missingCost };
+  }, [cart, costPriceMap]);
 
   // Auto-set pay amount when type=full
   useEffect(() => {
@@ -697,6 +716,21 @@ export default function PosPage() {
                     <span>Total</span>
                     <span className="text-primary">Rs {fmt(subtotal)}</span>
                   </div>
+                  {canSeeProfit && (
+                    <div className="flex justify-between text-sm font-semibold pt-1 border-t border-dashed">
+                      <span className="text-muted-foreground">
+                        Profit{profitMissingCost && " *"}
+                      </span>
+                      <span className={cartProfit >= 0 ? "text-emerald-400" : "text-red-400"}>
+                        Rs {fmt(cartProfit)}
+                      </span>
+                    </div>
+                  )}
+                  {canSeeProfit && profitMissingCost && (
+                    <p className="text-[10px] text-muted-foreground text-right">
+                      * excludes item(s) with no cost price set
+                    </p>
+                  )}
                 </div>
               </>
             )}
