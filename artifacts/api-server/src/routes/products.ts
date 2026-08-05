@@ -99,7 +99,7 @@ router.get("/products/:id/rates", requireAuth, async (req, res): Promise<void> =
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const rates = await db.select().from(productRatesTable)
     .where(eq(productRatesTable.productId, id))
-    .orderBy(desc(productRatesTable.effectiveDate));
+    .orderBy(desc(productRatesTable.effectiveDate), desc(productRatesTable.id));
   res.json(rates.map(r => ({ id: r.id, productId: r.productId, rate: parseFloat(r.rate), effectiveDate: r.effectiveDate })));
 });
 

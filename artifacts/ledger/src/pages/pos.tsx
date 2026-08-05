@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   ShoppingCart, Search, X, Plus, Minus, Printer, CheckCircle2,
   User, Package, AlertCircle, ChevronDown, Calendar, Truck, FileText,
@@ -44,7 +44,7 @@ type PaymentMode = "cash" | "bank" | "cheque" | "credit";
 type CompletedOrder = {
   id: number; date: string; customerName: string; customerId: number;
   items: CartItem[]; totalAmount: number;
-  payment: { amount: number; mode: PaymentMode } | null;
+  payment: { amount: number; change: number; mode: PaymentMode } | null;
   vehicleNo: string; driverName: string; billtyNo: string;
 };
 
@@ -62,6 +62,11 @@ async function fetchProducts(): Promise<Product[]> {
 }
 async function fetchInventory(): Promise<Product[]> {
   const r = await fetch(`${BASE}/api/inventory`, { credentials: "include" });
+  if (!r.ok) return [];
+  return r.json();
+}
+async function fetchProductRates(productId: number): Promise<{ rate: number; effectiveDate: string }[]> {
+  const r = await fetch(`${BASE}/api/products/${productId}/rates`, { credentials: "include" });
   if (!r.ok) return [];
   return r.json();
 }
@@ -344,10 +349,10 @@ function ReceiptDialog({ order, onClose, onNewSale }: { order: CompletedOrder; o
                     <span>Rs {fmt(order.totalAmount - order.payment.amount)}</span>
                   </div>
                 )}
-                {order.payment.amount > order.totalAmount && (
+                {order.payment.change > 0 && (
                   <div className="flex justify-between text-emerald-400 text-xs">
                     <span>Change</span>
-                    <span>Rs {fmt(order.payment.amount - order.totalAmount)}</span>
+                    <span>Rs {fmt(order.payment.change)}</span>
                   </div>
                 )}
               </>
@@ -408,6 +413,25 @@ export default function PosPage() {
 
   const stockMap = new Map<number, number>(inventory.map((p: any) => [p.id, p.currentStock ?? 0]));
 
+  // Previous rate (the rate in effect before the current one) for each product in the cart —
+  // shown alongside the editable rate so the cashier has context when re-pricing a line.
+  const cartProductIds = useMemo(() => Array.from(new Set(cart.map(i => i.productId))), [cart]);
+  const rateHistoryResults = useQueries({
+    queries: cartProductIds.map(id => ({
+      queryKey: ["product-rates", id],
+      queryFn: () => fetchProductRates(id),
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+  const previousRateMap = useMemo(() => {
+    const map = new Map<number, number | null>();
+    cartProductIds.forEach((id, idx) => {
+      const rates = rateHistoryResults[idx]?.data;
+      map.set(id, rates && rates.length > 1 ? rates[1].rate : null);
+    });
+    return map;
+  }, [cartProductIds, rateHistoryResults]);
+
   // Derived
   const subtotal = cart.reduce((s, i) => s + i.amount, 0);
   const totalQty  = cart.reduce((s, i) => s + i.qty, 0);
@@ -420,7 +444,13 @@ export default function PosPage() {
 
   const paidAmt  = parseFloat(payAmount) || 0;
   const change   = payType === "full" ? Math.max(0, paidAmt - subtotal) : 0;
+  // Amount actually applied toward the invoice/ledger — excess cash tendered on a
+  // "full" sale is change handed back, not extra credit, so it must never be posted.
+  const ledgerAmt = Math.max(0, paidAmt - change);
   const balDue   = Math.max(0, subtotal - paidAmt);
+  // A "partial" payment is, by definition, less than the total — anything at or
+  // above the total should go through "full" (which handles tender/change) instead.
+  const partialExceedsTotal = payType === "partial" && subtotal > 0 && paidAmt > subtotal;
 
   // ── Cart operations ──
 
@@ -473,6 +503,10 @@ export default function PosPage() {
   const completeSale = async () => {
     if (!customer) { toast({ title: "Select a customer", variant: "destructive" }); return; }
     if (cart.length === 0) { toast({ title: "Add items to the cart", variant: "destructive" }); return; }
+    if (partialExceedsTotal) {
+      toast({ title: "Partial amount can't exceed the total", description: "Use 'Full' if the customer is paying the whole amount (or more).", variant: "destructive" });
+      return;
+    }
     setCompleting(true);
     try {
       // 1. Create sale order
@@ -503,14 +537,14 @@ export default function PosPage() {
             customerId: customer.id,
             date,
             type: apiType,
-            amount: paidAmt,
+            amount: ledgerAmt,
             bankAccount: bankAccount || undefined,
             chequeNo: chequeNo || undefined,
             notes: notes || undefined,
           }),
         });
         if (payRes.ok) {
-          paymentResult = { amount: paidAmt, mode: payMode };
+          paymentResult = { amount: ledgerAmt, change, mode: payMode };
         }
       }
 
@@ -532,7 +566,7 @@ export default function PosPage() {
     }
   };
 
-  const isReady = customer && cart.length > 0;
+  const isReady = customer && cart.length > 0 && !partialExceedsTotal;
 
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
@@ -579,9 +613,10 @@ export default function PosPage() {
             ) : (
               <>
                 {/* Cart header */}
-                <div className="grid grid-cols-[1fr_100px_110px_90px_28px] gap-2 px-4 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/10">
+                <div className="grid grid-cols-[1fr_100px_90px_110px_90px_28px] gap-2 px-4 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/10">
                   <span>Product</span>
                   <span className="text-right">Qty (bags)</span>
+                  <span className="text-right">Previous Rate</span>
                   <span className="text-right">Rate (Rs)</span>
                   <span className="text-right">Amount</span>
                   <span />
@@ -589,8 +624,10 @@ export default function PosPage() {
 
                 {/* Cart rows */}
                 <div className="divide-y">
-                  {cart.map((item) => (
-                    <div key={item.key} className="grid grid-cols-[1fr_100px_110px_90px_28px] gap-2 px-4 py-2.5 items-center hover:bg-muted/10 group">
+                  {cart.map((item) => {
+                    const previousRate = previousRateMap.get(item.productId);
+                    return (
+                    <div key={item.key} className="grid grid-cols-[1fr_100px_90px_110px_90px_28px] gap-2 px-4 py-2.5 items-center hover:bg-muted/10 group">
                       {/* Name */}
                       <div className="font-medium text-sm truncate">{item.productName}</div>
 
@@ -618,6 +655,11 @@ export default function PosPage() {
                         </button>
                       </div>
 
+                      {/* Previous rate */}
+                      <div className="text-right text-sm text-muted-foreground">
+                        {previousRate != null ? fmt(previousRate) : "—"}
+                      </div>
+
                       {/* Rate */}
                       <div className="flex justify-end">
                         <input
@@ -642,7 +684,8 @@ export default function PosPage() {
                         <X size={14} />
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Cart footer totals */}
@@ -761,8 +804,16 @@ export default function PosPage() {
                       type="number"
                       value={payAmount}
                       onChange={e => setPayAmount(e.target.value)}
-                      className="mt-1 w-full px-3 py-1.5 text-sm font-bold bg-card border rounded-lg outline-none focus:border-primary transition-colors text-right"
+                      className={cn(
+                        "mt-1 w-full px-3 py-1.5 text-sm font-bold bg-card border rounded-lg outline-none focus:border-primary transition-colors text-right",
+                        partialExceedsTotal && "border-red-500 focus:border-red-500"
+                      )}
                     />
+                    {partialExceedsTotal && (
+                      <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                        <AlertCircle size={11} /> Can't exceed total (Rs {fmt(subtotal)}) — use "Full" instead
+                      </p>
+                    )}
                   </div>
 
                   {/* Bank/Cheque extras */}
