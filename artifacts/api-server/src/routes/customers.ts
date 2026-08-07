@@ -13,6 +13,12 @@ import {
 
 const router: IRouter = Router();
 
+// Zod coerces date strings to JS Date objects. Format them back to YYYY-MM-DD for Postgres.
+function toDateStr(d: Date | string): string {
+  if (d instanceof Date) return d.toISOString().split("T")[0];
+  return String(d);
+}
+
 async function computeCustomerBalance(customerId: number, openingBalance: string) {
   const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` })
     .from(saleOrdersTable).where(eq(saleOrdersTable.customerId, customerId));
@@ -69,7 +75,7 @@ router.post("/customers", requireAuth, async (req, res): Promise<void> => {
     contact: contact ?? null,
     creditLimit: creditLimit != null ? String(creditLimit) : null,
     openingBalance: openingBalance != null ? String(openingBalance) : "0",
-    openingBalanceDate: openingBalanceDate ? String(openingBalanceDate) : null,
+    openingBalanceDate: openingBalanceDate ? toDateStr(openingBalanceDate) : null,
   }).returning();
   res.status(201).json(toCustomerResponse(c, parseFloat(c.openingBalance ?? "0")));
 });
@@ -96,7 +102,7 @@ router.patch("/customers/:id", requireAuth, async (req, res): Promise<void> => {
   if (parsed.data.contact !== undefined) updates.contact = parsed.data.contact ?? null;
   if (parsed.data.creditLimit !== undefined) updates.creditLimit = parsed.data.creditLimit != null ? String(parsed.data.creditLimit) : null;
   if (parsed.data.openingBalance != null) updates.openingBalance = String(parsed.data.openingBalance);
-  if (parsed.data.openingBalanceDate !== undefined) updates.openingBalanceDate = parsed.data.openingBalanceDate ? String(parsed.data.openingBalanceDate) : null;
+  if (parsed.data.openingBalanceDate !== undefined) updates.openingBalanceDate = parsed.data.openingBalanceDate ? toDateStr(parsed.data.openingBalanceDate) : null;
   const [c] = await db.update(customersTable).set(updates).where(eq(customersTable.id, params.data.id)).returning();
   if (!c) { res.status(404).json({ error: "Customer not found" }); return; }
   const balance = await computeCustomerBalance(c.id, c.openingBalance ?? "0");
