@@ -37,6 +37,7 @@ async function buildSaleOrderResponse(orderId: number) {
     items: items.map(({ item, product }) => ({
       id: item.id, productId: item.productId, productName: product?.name ?? "",
       qty: parseFloat(item.qty), rate: parseFloat(item.rate), amount: parseFloat(item.amount),
+      notes: item.notes ?? null,
     })),
   };
 }
@@ -68,6 +69,7 @@ router.get("/sale-orders", requireAuth, async (req, res): Promise<void> => {
       items: items.map(({ item, product }) => ({
         id: item.id, productId: item.productId, productName: product?.name ?? "",
         qty: parseFloat(item.qty), rate: parseFloat(item.rate), amount: parseFloat(item.amount),
+        notes: item.notes ?? null,
       })),
     };
   }));
@@ -87,7 +89,7 @@ router.post("/sale-orders", requireAuth, async (req, res): Promise<void> => {
     const rate = item.rate ?? (product ? parseFloat(product.currentRate) : 0);
     const amount = parseFloat(String(item.qty)) * rate;
     totalAmount += amount;
-    return { productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount) };
+    return { productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount), notes: item.notes ?? null };
   }));
 
   const [order] = await db.insert(saleOrdersTable).values({
@@ -132,7 +134,7 @@ router.patch("/sale-orders/:id", requireAuth, async (req, res): Promise<void> =>
       const rate = item.rate ?? (product ? parseFloat(product.currentRate) : 0);
       const amount = parseFloat(String(item.qty)) * rate;
       totalAmount += amount;
-      await db.insert(saleOrderItemsTable).values({ saleOrderId: params.data.id, productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount) });
+      await db.insert(saleOrderItemsTable).values({ saleOrderId: params.data.id, productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount), notes: item.notes ?? null });
     }
     updates.totalAmount = String(totalAmount);
   }

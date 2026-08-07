@@ -23,6 +23,7 @@ export const saleOrderItemsTable = pgTable("sale_order_items", {
   qty: numeric("qty", { precision: 10, scale: 2 }).notNull(),
   rate: numeric("rate", { precision: 14, scale: 2 }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  notes: text("notes"),
 });
 
 export const insertSaleOrderSchema = createInsertSchema(saleOrdersTable).omit({ id: true, createdAt: true });

@@ -1799,6 +1799,8 @@ components:
           type: number
         amount:
           type: number
+        notes:
+          type: ["string", "null"]
 
     SaleOrder:
       type: object
@@ -1841,6 +1843,8 @@ components:
           type: number
         rate:
           type: number
+        notes:
+          type: string
 
     SaleOrderInput:
       type: object

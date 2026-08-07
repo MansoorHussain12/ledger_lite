@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, Link } from "wouter";
 import {
   useCreateSaleOrder, useListCustomers, getListCustomersQueryKey,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 
 interface LineItem {
@@ -19,11 +20,14 @@ interface LineItem {
   qty: string;
   rate: string;
   unit: string;
+  notes: string;
 }
 
 export default function SaleOrderNewPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canSeeProfit = user?.role === "owner";
   const queryClient = useQueryClient();
 
   const searchParams = new URLSearchParams(window.location.search);
@@ -35,7 +39,7 @@ export default function SaleOrderNewPage() {
   const [driverName, setDriverName] = useState("");
   const [billtyNo, setBilltyNo] = useState("");
   const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<LineItem[]>([{ productId: 0, productName: "", qty: "", rate: "", unit: "" }]);
+  const [items, setItems] = useState<LineItem[]>([{ productId: 0, productName: "", qty: "", rate: "", unit: "", notes: "" }]);
 
   const { data: customers = [] } = useListCustomers(undefined, { query: { queryKey: getListCustomersQueryKey() } });
   const { data: products = [] } = useListProducts({ query: { queryKey: getListProductsQueryKey() } });
@@ -51,7 +55,7 @@ export default function SaleOrderNewPage() {
     ));
   };
 
-  const addLine = () => setItems(prev => [...prev, { productId: 0, productName: "", qty: "", rate: "", unit: "" }]);
+  const addLine = () => setItems(prev => [...prev, { productId: 0, productName: "", qty: "", rate: "", unit: "", notes: "" }]);
   const removeLine = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
 
   const totalAmount = items.reduce((s, item) => {
@@ -59,6 +63,25 @@ export default function SaleOrderNewPage() {
     const rate = parseFloat(item.rate) || 0;
     return s + qty * rate;
   }, 0);
+
+  // Order profit (owner-only) — rate minus each product's cost price, summed across the items.
+  const costPriceMap = useMemo(
+    () => new Map<number, number | null | undefined>(products.map(p => [p.id, p.costPrice])),
+    [products]
+  );
+  const { profit: orderProfit, missingCost: profitMissingCost } = useMemo(() => {
+    let profit = 0;
+    let missingCost = false;
+    for (const item of items) {
+      const qty = parseFloat(item.qty) || 0;
+      const rate = parseFloat(item.rate) || 0;
+      if (!item.productId || qty <= 0) continue;
+      const cost = costPriceMap.get(item.productId);
+      if (cost == null) { missingCost = true; continue; }
+      profit += (rate - cost) * qty;
+    }
+    return { profit, missingCost };
+  }, [items, costPriceMap]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +102,7 @@ export default function SaleOrderNewPage() {
             productId: i.productId,
             qty: parseFloat(i.qty),
             rate: parseFloat(i.rate) || undefined,
+            notes: i.notes || undefined,
           })),
         }
       });
@@ -157,6 +181,8 @@ export default function SaleOrderNewPage() {
           <div className="space-y-3">
             {items.map((item, idx) => {
               const amt = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+              const product = products.find(p => p.id === item.productId);
+              const isRateOverridden = !!product && item.rate !== "" && parseFloat(item.rate) !== product.currentRate;
               return (
                 <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-4">
@@ -199,6 +225,7 @@ export default function SaleOrderNewPage() {
                       value={item.rate}
                       onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, rate: e.target.value } : it))}
                       min="0"
+                      className={isRateOverridden ? "border-amber-400/70" : undefined}
                     />
                   </div>
                   <div className="col-span-1 text-right text-sm font-semibold text-muted-foreground">
@@ -210,6 +237,14 @@ export default function SaleOrderNewPage() {
                         <Trash2 size={14} />
                       </button>
                     )}
+                  </div>
+                  <div className="col-span-12">
+                    <Input
+                      value={item.notes}
+                      onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, notes: e.target.value } : it))}
+                      placeholder="Note — e.g. reason for rate change (optional)"
+                      className="h-8 text-xs"
+                    />
                   </div>
                 </div>
               );
@@ -224,6 +259,21 @@ export default function SaleOrderNewPage() {
             <span className="text-sm text-muted-foreground">Total Amount</span>
             <span className="text-xl font-bold text-red-600">Rs. {formatAmount(totalAmount)}</span>
           </div>
+          {canSeeProfit && (
+            <div className="mt-1 flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">
+                Profit{profitMissingCost && " *"}
+              </span>
+              <span className={`text-sm font-semibold ${orderProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                Rs. {formatAmount(orderProfit)}
+              </span>
+            </div>
+          )}
+          {canSeeProfit && profitMissingCost && (
+            <p className="mt-1 text-[10px] text-muted-foreground text-right">
+              * excludes item(s) with no cost price set
+            </p>
+          )}
         </div>
 
         <div className="flex gap-3">

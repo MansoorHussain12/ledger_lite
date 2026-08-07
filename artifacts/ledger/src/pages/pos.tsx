@@ -40,7 +40,7 @@ type Product = {
 
 type CartItem = {
   key: string; productId: number; productName: string;
-  qty: number; rate: number; amount: number;
+  qty: number; rate: number; amount: number; note?: string;
 };
 
 type PaymentMode = "cash" | "bank" | "cheque" | "credit";
@@ -397,6 +397,8 @@ export default function PosPage() {
 
   // State
   const [cart, setCart] = useState<CartItem[]>([]);
+  // Which cart row currently has its "reason for rate change" note expanded/open.
+  const [openNoteKey, setOpenNoteKey] = useState<string | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [date, setDate] = useState(todayStr());
   const [vehicleNo, setVehicleNo] = useState("");
@@ -447,6 +449,12 @@ export default function PosPage() {
   // Invoice profit (owner-only) — rate minus each product's cost price, summed across the cart.
   const costPriceMap = useMemo(
     () => new Map<number, number | null>(products.map((p: Product) => [p.id, p.costPrice])),
+    [products]
+  );
+  // Each product's list rate — used to flag cart rows where the cashier has overridden it,
+  // nudging toward leaving a note on why.
+  const currentRateMap = useMemo(
+    () => new Map<number, number>(products.map((p: Product) => [p.id, p.currentRate])),
     [products]
   );
   const { profit: cartProfit, missingCost: profitMissingCost } = useMemo(() => {
@@ -504,12 +512,17 @@ export default function PosPage() {
     setCart(prev => prev.map(i => i.key === key ? { ...i, rate, amount: i.qty * rate } : i));
   };
 
+  const updateNote = (key: string, note: string) => {
+    setCart(prev => prev.map(i => i.key === key ? { ...i, note } : i));
+  };
+
   const removeItem = (key: string) => {
     setCart(prev => prev.filter(i => i.key !== key));
   };
 
   const clearAll = () => {
     setCart([]);
+    setOpenNoteKey(null);
     setCustomer(null);
     setPayAmount("");
     setPayType("full");
@@ -544,7 +557,7 @@ export default function PosPage() {
           driverName: driverName || undefined,
           billtyNo: billtyNo || undefined,
           notes: notes || undefined,
-          items: cart.map(i => ({ productId: i.productId, qty: i.qty, rate: i.rate })),
+          items: cart.map(i => ({ productId: i.productId, qty: i.qty, rate: i.rate, notes: i.note || undefined })),
         }),
       });
       if (!orderRes.ok) { const e = await orderRes.json(); throw new Error(e.error ?? "Failed to create order"); }
@@ -654,6 +667,8 @@ export default function PosPage() {
                 <div className="divide-y">
                   {cart.map((item) => {
                     const previousRate = previousRateMap.get(item.productId);
+                    const isRateOverridden = currentRateMap.get(item.productId) != null
+                      && item.rate !== currentRateMap.get(item.productId);
                     return (
                     <div key={item.key} className="grid grid-cols-[1fr_100px_90px_110px_90px_28px] gap-2 px-4 py-2.5 items-center hover:bg-muted/10 group">
                       {/* Name */}
@@ -689,14 +704,28 @@ export default function PosPage() {
                       </div>
 
                       {/* Rate */}
-                      <div className="flex justify-end">
+                      <div className="flex items-center justify-end gap-1">
                         <input
                           type="number"
                           value={item.rate}
                           min="1"
                           onChange={e => updateRate(item.key, parseFloat(e.target.value) || 0)}
-                          className="w-24 text-right text-sm bg-transparent border-b border-border/50 outline-none focus:border-primary py-0.5"
+                          className={cn(
+                            "w-20 text-right text-sm bg-transparent border-b outline-none focus:border-primary py-0.5",
+                            isRateOverridden ? "border-amber-400/70" : "border-border/50"
+                          )}
                         />
+                        <button
+                          type="button"
+                          onClick={() => setOpenNoteKey(k => k === item.key ? null : item.key)}
+                          title="Note — e.g. reason for rate change"
+                          className={cn(
+                            "shrink-0 transition-colors",
+                            item.note ? "text-amber-400" : "text-muted-foreground/30 hover:text-muted-foreground"
+                          )}
+                        >
+                          <FileText size={13} />
+                        </button>
                       </div>
 
                       {/* Amount */}
@@ -711,6 +740,21 @@ export default function PosPage() {
                       >
                         <X size={14} />
                       </button>
+
+                      {/* Note (reason for rate change) — expanded on demand */}
+                      {openNoteKey === item.key && (
+                        <div className="col-span-full -mt-1">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={item.note ?? ""}
+                            onChange={e => updateNote(item.key, e.target.value)}
+                            onBlur={() => { if (!item.note) setOpenNoteKey(null); }}
+                            placeholder="Note — e.g. reason for rate change"
+                            className="w-full text-xs bg-muted/20 border border-border/50 rounded px-2 py-1 outline-none focus:border-primary"
+                          />
+                        </div>
+                      )}
                     </div>
                     );
                   })}

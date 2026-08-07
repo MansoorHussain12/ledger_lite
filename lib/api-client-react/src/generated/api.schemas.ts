@@ -247,6 +247,8 @@ export interface SaleOrderItem {
   qty: number;
   rate: number;
   amount: number;
+  /** @nullable */
+  notes?: string | null;
 }
 
 export interface SaleOrder {
@@ -271,6 +273,7 @@ export interface SaleOrderItemInput {
   productId: number;
   qty: number;
   rate?: number;
+  notes?: string;
 }
 
 export interface SaleOrderInput {

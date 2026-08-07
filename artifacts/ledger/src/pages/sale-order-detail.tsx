@@ -1,18 +1,42 @@
+import { useMemo } from "react";
 import { useParams, Link } from "wouter";
-import { useGetSaleOrder, getGetSaleOrderQueryKey } from "@workspace/api-client-react";
+import { useGetSaleOrder, getGetSaleOrderQueryKey, useListProducts, getListProductsQueryKey } from "@workspace/api-client-react";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 import { useCompany } from "@/lib/company";
+import { useAuth } from "@/lib/auth";
 
 export default function SaleOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const orderId = parseInt(id ?? "0");
   const { settings } = useCompany();
+  const { user } = useAuth();
+  const canSeeProfit = user?.role === "owner";
 
   const { data: order, isLoading } = useGetSaleOrder(orderId, {
     query: { enabled: !!orderId, queryKey: getGetSaleOrderQueryKey(orderId) }
   });
+  const { data: products = [] } = useListProducts({
+    query: { enabled: canSeeProfit, queryKey: getListProductsQueryKey() }
+  });
+
+  // Order profit (owner-only) — rate minus each item's product cost price, summed across items.
+  const costPriceMap = useMemo(
+    () => new Map<number, number | null | undefined>(products.map(p => [p.id, p.costPrice])),
+    [products]
+  );
+  const { profit: orderProfit, missingCost: profitMissingCost } = useMemo(() => {
+    if (!order) return { profit: 0, missingCost: false };
+    let profit = 0;
+    let missingCost = false;
+    for (const item of order.items) {
+      const cost = costPriceMap.get(item.productId);
+      if (cost == null) { missingCost = true; continue; }
+      profit += (item.rate - cost) * item.qty;
+    }
+    return { profit, missingCost };
+  }, [order, costPriceMap]);
 
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
   if (!order) return <div className="p-8 text-center text-muted-foreground">Order not found</div>;
@@ -92,7 +116,12 @@ export default function SaleOrderDetailPage() {
           <tbody className="divide-y divide-border">
             {order.items.map(item => (
               <tr key={item.id}>
-                <td className="py-2.5 font-medium">{item.productName}</td>
+                <td className="py-2.5 font-medium">
+                  {item.productName}
+                  {item.notes && (
+                    <div className="no-print text-xs text-muted-foreground italic mt-0.5">{item.notes}</div>
+                  )}
+                </td>
                 <td className="py-2.5 text-right text-muted-foreground">{item.qty}</td>
                 <td className="py-2.5 text-right text-muted-foreground">{settings.currency} {formatAmount(item.rate)}</td>
                 <td className="py-2.5 text-right font-semibold">{settings.currency} {formatAmount(item.amount)}</td>
@@ -106,6 +135,22 @@ export default function SaleOrderDetailPage() {
             </tr>
           </tfoot>
         </table>
+
+        {canSeeProfit && (
+          <div className="no-print flex justify-between items-center mb-4 text-sm">
+            <span className="text-muted-foreground">
+              Profit{profitMissingCost && " *"}
+            </span>
+            <span className={`font-semibold ${orderProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              {settings.currency} {formatAmount(orderProfit)}
+            </span>
+          </div>
+        )}
+        {canSeeProfit && profitMissingCost && (
+          <p className="no-print text-[10px] text-muted-foreground text-right -mt-3 mb-4">
+            * excludes item(s) with no cost price set
+          </p>
+        )}
 
         {order.notes && (
           <div className="text-sm text-muted-foreground border-t border-border pt-3">

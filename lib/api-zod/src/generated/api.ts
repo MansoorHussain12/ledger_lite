@@ -436,7 +436,8 @@ export const ListSaleOrdersResponseItem = zod.object({
   "productName": zod.string(),
   "qty": zod.number(),
   "rate": zod.number(),
-  "amount": zod.number()
+  "amount": zod.number(),
+  "notes": zod.string().nullish()
 }))
 })
 export const ListSaleOrdersResponse = zod.array(ListSaleOrdersResponseItem)
@@ -455,7 +456,8 @@ export const CreateSaleOrderBody = zod.object({
   "items": zod.array(zod.object({
   "productId": zod.number(),
   "qty": zod.number(),
-  "rate": zod.number().optional()
+  "rate": zod.number().optional(),
+  "notes": zod.string().optional()
 }))
 })
 
@@ -476,7 +478,8 @@ export const CreateSaleOrderResponse = zod.object({
   "productName": zod.string(),
   "qty": zod.number(),
   "rate": zod.number(),
-  "amount": zod.number()
+  "amount": zod.number(),
+  "notes": zod.string().nullish()
 }))
 })
 
@@ -505,7 +508,8 @@ export const GetSaleOrderResponse = zod.object({
   "productName": zod.string(),
   "qty": zod.number(),
   "rate": zod.number(),
-  "amount": zod.number()
+  "amount": zod.number(),
+  "notes": zod.string().nullish()
 }))
 })
 
@@ -526,7 +530,8 @@ export const UpdateSaleOrderBody = zod.object({
   "items": zod.array(zod.object({
   "productId": zod.number(),
   "qty": zod.number(),
-  "rate": zod.number().optional()
+  "rate": zod.number().optional(),
+  "notes": zod.string().optional()
 })).optional()
 })
 
@@ -547,7 +552,8 @@ export const UpdateSaleOrderResponse = zod.object({
   "productName": zod.string(),
   "qty": zod.number(),
   "rate": zod.number(),
-  "amount": zod.number()
+  "amount": zod.number(),
+  "notes": zod.string().nullish()
 }))
 })
 
