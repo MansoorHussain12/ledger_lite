@@ -38,6 +38,7 @@ async function buildSaleOrderResponse(orderId: number) {
       id: item.id, productId: item.productId, productName: product?.name ?? "",
       qty: parseFloat(item.qty), rate: parseFloat(item.rate), amount: parseFloat(item.amount),
       notes: item.notes ?? null,
+      costPrice: item.costPrice != null ? parseFloat(item.costPrice) : null,
     })),
   };
 }
@@ -70,6 +71,7 @@ router.get("/sale-orders", requireAuth, async (req, res): Promise<void> => {
         id: item.id, productId: item.productId, productName: product?.name ?? "",
         qty: parseFloat(item.qty), rate: parseFloat(item.rate), amount: parseFloat(item.amount),
         notes: item.notes ?? null,
+        costPrice: item.costPrice != null ? parseFloat(item.costPrice) : null,
       })),
     };
   }));
@@ -89,7 +91,10 @@ router.post("/sale-orders", requireAuth, async (req, res): Promise<void> => {
     const rate = item.rate ?? (product ? parseFloat(product.currentRate) : 0);
     const amount = parseFloat(String(item.qty)) * rate;
     totalAmount += amount;
-    return { productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount), notes: item.notes ?? null };
+    // Snapshot the product's cost price at sale time — frozen from here on, even if
+    // the product's cost price changes later (see costPrice column comment).
+    const costPrice = product?.costPrice ?? null;
+    return { productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount), notes: item.notes ?? null, costPrice };
   }));
 
   const [order] = await db.insert(saleOrdersTable).values({
@@ -134,7 +139,8 @@ router.patch("/sale-orders/:id", requireAuth, async (req, res): Promise<void> =>
       const rate = item.rate ?? (product ? parseFloat(product.currentRate) : 0);
       const amount = parseFloat(String(item.qty)) * rate;
       totalAmount += amount;
-      await db.insert(saleOrderItemsTable).values({ saleOrderId: params.data.id, productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount), notes: item.notes ?? null });
+      const costPrice = product?.costPrice ?? null;
+      await db.insert(saleOrderItemsTable).values({ saleOrderId: params.data.id, productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount), notes: item.notes ?? null, costPrice });
     }
     updates.totalAmount = String(totalAmount);
   }

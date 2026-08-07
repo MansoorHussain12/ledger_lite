@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useParams, Link } from "wouter";
-import { useGetSaleOrder, getGetSaleOrderQueryKey, useListProducts, getListProductsQueryKey } from "@workspace/api-client-react";
+import { useGetSaleOrder, getGetSaleOrderQueryKey } from "@workspace/api-client-react";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
@@ -17,26 +17,22 @@ export default function SaleOrderDetailPage() {
   const { data: order, isLoading } = useGetSaleOrder(orderId, {
     query: { enabled: !!orderId, queryKey: getGetSaleOrderQueryKey(orderId) }
   });
-  const { data: products = [] } = useListProducts({
-    query: { enabled: canSeeProfit, queryKey: getListProductsQueryKey() }
-  });
 
-  // Order profit (owner-only) — rate minus each item's product cost price, summed across items.
-  const costPriceMap = useMemo(
-    () => new Map<number, number | null | undefined>(products.map(p => [p.id, p.costPrice])),
-    [products]
-  );
+  // Order profit (owner-only) — rate minus each item's own snapshotted cost price
+  // (captured at sale time), summed across items. Using the frozen per-item snapshot
+  // rather than the product's current cost price keeps this figure accurate to what
+  // it was on the day of sale, even if the product's cost price changes later.
   const { profit: orderProfit, missingCost: profitMissingCost } = useMemo(() => {
     if (!order) return { profit: 0, missingCost: false };
     let profit = 0;
     let missingCost = false;
     for (const item of order.items) {
-      const cost = costPriceMap.get(item.productId);
+      const cost = item.costPrice;
       if (cost == null) { missingCost = true; continue; }
       profit += (item.rate - cost) * item.qty;
     }
     return { profit, missingCost };
-  }, [order, costPriceMap]);
+  }, [order]);
 
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
   if (!order) return <div className="p-8 text-center text-muted-foreground">Order not found</div>;

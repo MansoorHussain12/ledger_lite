@@ -249,6 +249,8 @@ export interface SaleOrderItem {
   amount: number;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  costPrice?: number | null;
 }
 
 export interface SaleOrder {

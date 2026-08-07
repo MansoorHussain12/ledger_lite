@@ -147,7 +147,10 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
       const qty = parseFloat(item.qty);
       const saleAmount = parseFloat(item.amount);
       const product = productMap.get(item.productId);
-      const costPrice = product?.costPrice ? parseFloat(product.costPrice) : 0;
+      // Prefer the frozen per-sale snapshot; fall back to the product's live cost price
+      // only for legacy rows created before cost price was captured at sale time.
+      const costPriceRaw = item.costPrice ?? product?.costPrice ?? null;
+      const costPrice = costPriceRaw ? parseFloat(costPriceRaw) : 0;
       const itemCogs = qty * costPrice;
 
       day.qty += qty;

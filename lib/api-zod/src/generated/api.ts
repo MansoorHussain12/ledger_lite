@@ -437,7 +437,8 @@ export const ListSaleOrdersResponseItem = zod.object({
   "qty": zod.number(),
   "rate": zod.number(),
   "amount": zod.number(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "costPrice": zod.number().nullish()
 }))
 })
 export const ListSaleOrdersResponse = zod.array(ListSaleOrdersResponseItem)
@@ -479,7 +480,8 @@ export const CreateSaleOrderResponse = zod.object({
   "qty": zod.number(),
   "rate": zod.number(),
   "amount": zod.number(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "costPrice": zod.number().nullish()
 }))
 })
 
@@ -509,7 +511,8 @@ export const GetSaleOrderResponse = zod.object({
   "qty": zod.number(),
   "rate": zod.number(),
   "amount": zod.number(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "costPrice": zod.number().nullish()
 }))
 })
 
@@ -553,7 +556,8 @@ export const UpdateSaleOrderResponse = zod.object({
   "qty": zod.number(),
   "rate": zod.number(),
   "amount": zod.number(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "costPrice": zod.number().nullish()
 }))
 })
 

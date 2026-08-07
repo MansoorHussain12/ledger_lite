@@ -1801,6 +1801,8 @@ components:
           type: number
         notes:
           type: ["string", "null"]
+        costPrice:
+          type: ["number", "null"]
 
     SaleOrder:
       type: object

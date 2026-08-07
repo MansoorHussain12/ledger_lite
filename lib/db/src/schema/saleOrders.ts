@@ -24,6 +24,10 @@ export const saleOrderItemsTable = pgTable("sale_order_items", {
   rate: numeric("rate", { precision: 14, scale: 2 }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   notes: text("notes"),
+  // Snapshot of the product's cost price at the moment of sale — never user-entered,
+  // captured automatically so historical profit stays frozen even if the product's
+  // cost price changes later. Null on rows created before this column existed.
+  costPrice: numeric("cost_price", { precision: 14, scale: 2 }),
 });
 
 export const insertSaleOrderSchema = createInsertSchema(saleOrdersTable).omit({ id: true, createdAt: true });

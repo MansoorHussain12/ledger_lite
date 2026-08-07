@@ -61,7 +61,10 @@ async function getProfitBreakdownForDate(date: string) {
       const product = productMap.get(item.productId);
       const qty = parseFloat(item.qty);
       const amount = parseFloat(item.amount);
-      const costPrice = product?.costPrice != null ? parseFloat(product.costPrice) : null;
+      // Prefer the frozen per-sale snapshot; fall back to the product's live cost price
+      // only for legacy rows created before cost price was captured at sale time.
+      const costPriceRaw = item.costPrice ?? product?.costPrice ?? null;
+      const costPrice = costPriceRaw != null ? parseFloat(costPriceRaw) : null;
       const profit = costPrice != null ? amount - qty * costPrice : null;
       if (profit == null) hasMissingCost = true;
 
