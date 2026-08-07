@@ -709,6 +709,7 @@ export default function PosPage() {
                           type="number"
                           value={item.rate}
                           min="1"
+                          step="0.01"
                           onChange={e => updateRate(item.key, parseFloat(e.target.value) || 0)}
                           className={cn(
                             "w-20 text-right text-sm bg-transparent border-b outline-none focus:border-primary py-0.5",
@@ -890,6 +891,7 @@ export default function PosPage() {
                     <input
                       type="number"
                       value={payAmount}
+                      step="0.01"
                       onChange={e => setPayAmount(e.target.value)}
                       className={cn(
                         "mt-1 w-full px-3 py-1.5 text-sm font-bold bg-card border rounded-lg outline-none focus:border-primary transition-colors text-right",

@@ -567,7 +567,7 @@ export default function CustomerDetailPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Opening Balance (Rs.)</Label>
-                <Input type="number" value={editForm.openingBalance} onChange={e => setEditForm(f => ({ ...f, openingBalance: e.target.value }))} />
+                <Input type="number" value={editForm.openingBalance} onChange={e => setEditForm(f => ({ ...f, openingBalance: e.target.value }))} step="0.01" />
               </div>
               <div className="space-y-1.5">
                 <Label>Opening Balance Date</Label>
@@ -575,7 +575,7 @@ export default function CustomerDetailPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Credit Limit (Rs.)</Label>
-                <Input type="number" value={editForm.creditLimit} onChange={e => setEditForm(f => ({ ...f, creditLimit: e.target.value }))} />
+                <Input type="number" value={editForm.creditLimit} onChange={e => setEditForm(f => ({ ...f, creditLimit: e.target.value }))} step="0.01" />
               </div>
             </div>
             <div className="flex gap-2 pt-2">

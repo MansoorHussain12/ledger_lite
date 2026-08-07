@@ -225,6 +225,7 @@ export default function SaleOrderNewPage() {
                       value={item.rate}
                       onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, rate: e.target.value } : it))}
                       min="0"
+                      step="0.01"
                       className={isRateOverridden ? "border-amber-400/70" : undefined}
                     />
                   </div>

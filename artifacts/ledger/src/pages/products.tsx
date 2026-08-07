@@ -289,11 +289,11 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Sale Rate / {form.unit || "unit"} ({settings.currency}) *</Label>
-                <Input type="number" value={form.currentRate} onChange={e => setField("currentRate", e.target.value)} placeholder="0" required min="0" />
+                <Input type="number" value={form.currentRate} onChange={e => setField("currentRate", e.target.value)} placeholder="0" required min="0" step="0.01" />
               </div>
               <div className="space-y-1.5">
                 <Label>Cost Price / {form.unit || "unit"} ({settings.currency})</Label>
-                <Input type="number" value={form.costPrice} onChange={e => setField("costPrice", e.target.value)} placeholder="optional" min="0" />
+                <Input type="number" value={form.costPrice} onChange={e => setField("costPrice", e.target.value)} placeholder="optional" min="0" step="0.01" />
               </div>
             </div>
 
@@ -302,18 +302,18 @@ export default function ProductsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Opening Stock ({form.unit || "unit"})</Label>
-                  <Input type="number" value={form.openingStock} onChange={e => setField("openingStock", e.target.value)} placeholder="0" min="0" />
+                  <Input type="number" value={form.openingStock} onChange={e => setField("openingStock", e.target.value)} placeholder="0" min="0" step="0.01" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Min Stock ({form.unit || "unit"})</Label>
-                  <Input type="number" value={form.minStock} onChange={e => setField("minStock", e.target.value)} placeholder="0" min="0" />
+                  <Input type="number" value={form.minStock} onChange={e => setField("minStock", e.target.value)} placeholder="0" min="0" step="0.01" />
                 </div>
               </div>
             )}
             {editId && (
               <div className="space-y-1.5">
                 <Label>Min Stock ({form.unit || "unit"})</Label>
-                <Input type="number" value={form.minStock} onChange={e => setField("minStock", e.target.value)} placeholder="0" min="0" />
+                <Input type="number" value={form.minStock} onChange={e => setField("minStock", e.target.value)} placeholder="0" min="0" step="0.01" />
               </div>
             )}
 
