@@ -158,9 +158,12 @@ router.post("/sale-orders/:id/correct", requireRole("owner"), async (req, res): 
 
   const result = await db.transaction(async (tx) => {
     // 1. Insert the reversal — a literal mirror of the original, for the paper trail.
+    // Its notes carry the submitted correction reason (falling back to the original's
+    // own notes if none given) — reversal rows are never shown directly, only surfaced
+    // as the "why" behind a correction/void in the history view.
     const [reversal] = await tx.insert(saleOrdersTable).values({
       customerId: original.customerId, date: original.date, vehicleNo: original.vehicleNo,
-      driverName: original.driverName, billtyNo: original.billtyNo, notes: original.notes,
+      driverName: original.driverName, billtyNo: original.billtyNo, notes: parsed.data.reason ?? original.notes,
       totalAmount: original.totalAmount, status: "reversal", reversesId: original.id,
     }).returning();
     for (const item of originalItems) {

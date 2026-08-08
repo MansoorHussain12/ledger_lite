@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen, TrendingUp, TrendingDown, Wallet, Building2,
@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -15,7 +14,8 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { VoidToggle } from "@/components/correction-fields";
+import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -417,7 +417,8 @@ export default function CashbookPage() {
   const [toDate, setToDate] = useState(today);
   const [typeFilter, setTypeFilter] = useState("__all__");
   const [modeFilter, setModeFilter] = useState("__all__");
-  const [showReversed, setShowReversed] = useState(false);
+  const [expandedLedgerIds, setExpandedLedgerIds] = useState<Set<number>>(new Set());
+  const [expandedExpenseIds, setExpandedExpenseIds] = useState<Set<number>>(new Set());
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -427,15 +428,18 @@ export default function CashbookPage() {
     queryFn: fetchSummary,
   });
 
+  // Always pull the full chain (including reversed/reversal rows) — grouping needs them
+  // client-side to reconstruct each transaction's history, even though only one row per
+  // logical transaction ends up rendered.
   const ledgerQ = useQuery({
-    queryKey: ["cashbook", fromDate, toDate, typeFilter, modeFilter, showReversed],
-    queryFn: () => fetchLedger({ from: fromDate, to: toDate, type: typeFilter === "__all__" ? undefined : typeFilter, paymentMode: modeFilter === "__all__" ? undefined : modeFilter, includeReversed: showReversed }),
+    queryKey: ["cashbook", fromDate, toDate, typeFilter, modeFilter],
+    queryFn: () => fetchLedger({ from: fromDate, to: toDate, type: typeFilter === "__all__" ? undefined : typeFilter, paymentMode: modeFilter === "__all__" ? undefined : modeFilter, includeReversed: true }),
     enabled: tab === "ledger",
   });
 
   const expensesQ = useQuery({
-    queryKey: ["expenses", fromDate, toDate, showReversed],
-    queryFn: () => fetchExpenses({ from: fromDate, to: toDate, includeReversed: showReversed }),
+    queryKey: ["expenses", fromDate, toDate],
+    queryFn: () => fetchExpenses({ from: fromDate, to: toDate, includeReversed: true }),
     enabled: tab === "expenses",
   });
 
@@ -536,6 +540,22 @@ export default function CashbookPage() {
   const ledger = ledgerQ.data;
   const expenses = expensesQ.data;
 
+  // One row per logical transaction: `head` is its current effective state.
+  const ledgerGroups = groupCorrections(ledger?.entries ?? []);
+  const toggleLedgerExpanded = (id: number) => setExpandedLedgerIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const expenseGroups = groupCorrections(expenses ?? []);
+  const toggleExpenseExpanded = (id: number) => setExpandedExpenseIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const totalExpenses = expenseGroups.filter(g => !g.isVoid).reduce((s, g) => s + g.head.amount, 0);
+
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-6xl mx-auto">
       {/* Header */}
@@ -635,10 +655,6 @@ export default function CashbookPage() {
             </div>
           </>
         )}
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer h-8 ml-auto">
-          <Checkbox checked={showReversed} onCheckedChange={v => setShowReversed(v === true)} />
-          Show reversed/voided
-        </label>
       </div>
 
       {/* Ledger tab */}
@@ -653,7 +669,7 @@ export default function CashbookPage() {
               <span className={cn("font-semibold", ledger.netBalance >= 0 ? "text-emerald-400" : "text-red-400")}>
                 NET: Rs {fmt(ledger.netBalance)}
               </span>
-              <span className="text-muted-foreground ml-auto">{ledger.entries.length} entries</span>
+              <span className="text-muted-foreground ml-auto">{ledgerGroups.length} entries</span>
             </div>
           )}
 
@@ -679,7 +695,7 @@ export default function CashbookPage() {
                   {ledgerQ.isError && (
                     <tr><td colSpan={8} className="text-center text-red-400 py-8">Failed to load</td></tr>
                   )}
-                  {ledger?.entries.length === 0 && (
+                  {ledgerGroups.length === 0 && (
                     <tr>
                       <td colSpan={8} className="text-center text-muted-foreground py-12">
                         <BookOpen size={32} className="mx-auto mb-2 opacity-30" />
@@ -687,24 +703,18 @@ export default function CashbookPage() {
                       </td>
                     </tr>
                   )}
-                  {ledger?.entries.map((e) => {
-                    const isLive = e.status === "posted";
+                  {ledgerGroups.map((g) => {
+                    const e = g.head;
+                    const expanded = expandedLedgerIds.has(e.id);
                     return (
-                    <tr key={e.id} className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors", !isLive && "opacity-50")}>
+                    <Fragment key={e.id}>
+                    <tr className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors", g.isVoid && "opacity-50")}>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{e.date}</td>
                       <td className="px-4 py-3 max-w-[200px]">
-                        <div className={cn("font-medium text-foreground truncate", !isLive && "line-through decoration-1")}>{e.description}</div>
+                        <div className={cn("font-medium text-foreground truncate", g.isVoid && "line-through decoration-1")}>{e.description}</div>
                         {e.notes && <div className="text-muted-foreground text-xs truncate">{e.notes}</div>}
                         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                          {e.status === "reversed" && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
-                          )}
-                          {e.status === "reversal" && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{e.reversesId}</span>
-                          )}
-                          {e.correctsId != null && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{e.correctsId}</span>
-                          )}
+                          <CorrectionBadge isVoid={g.isVoid} historyCount={g.history.length} expanded={expanded} onToggle={() => toggleLedgerExpanded(e.id)} />
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -727,7 +737,7 @@ export default function CashbookPage() {
                         Rs {fmt(e.runningBalance)}
                       </td>
                       <td className="px-4 py-3">
-                        {isLive && USER_EDITABLE_SOURCES.includes(e.source) && (
+                        {!g.isVoid && USER_EDITABLE_SOURCES.includes(e.source) && (
                           <button
                             onClick={() => openCorrect(e)}
                             className="text-muted-foreground hover:text-primary transition-colors p-1"
@@ -738,6 +748,35 @@ export default function CashbookPage() {
                         )}
                       </td>
                     </tr>
+                    {expanded && (
+                      <tr className="bg-muted/10 border-b border-border/50">
+                        <td colSpan={8} className="px-4 py-3">
+                          <div className="text-xs space-y-2 max-w-2xl">
+                            {g.isVoid && (
+                              <div className="text-muted-foreground">
+                                Voided{g.voidReversal?.notes ? ` — ${g.voidReversal.notes}` : ""}
+                              </div>
+                            )}
+                            {g.history.length === 0 && !g.isVoid && (
+                              <div className="text-muted-foreground">No correction history.</div>
+                            )}
+                            {g.history.map((step, i) => (
+                              <div key={step.previous.id} className="flex items-start gap-2">
+                                <span className="text-muted-foreground font-mono">{i + 1}.</span>
+                                <div>
+                                  <div>
+                                    <span className="line-through text-muted-foreground">Rs {fmt(step.previous.amount)}</span>
+                                    {" "}<span className="text-muted-foreground">({step.previous.description}, #{step.previous.id})</span>
+                                  </div>
+                                  {step.reversal?.notes && <div className="text-muted-foreground mt-0.5">Reason: {step.reversal.notes}</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                     );
                   })}
                 </tbody>
@@ -766,34 +805,28 @@ export default function CashbookPage() {
                 {expensesQ.isLoading && (
                   <tr><td colSpan={6} className="text-center text-muted-foreground py-8">Loading…</td></tr>
                 )}
-                {expenses?.length === 0 && (
+                {expenseGroups.length === 0 && (
                   <tr>
                     <td colSpan={6} className="text-center text-muted-foreground py-12">
                       No expenses recorded in this period
                     </td>
                   </tr>
                 )}
-                {expenses?.map((ex) => {
-                  const isLive = ex.status === "posted";
+                {expenseGroups.map((g) => {
+                  const ex = g.head;
+                  const expanded = expandedExpenseIds.has(ex.id);
                   return (
-                  <tr key={ex.id} className={cn("border-b border-border/50 hover:bg-muted/20", !isLive && "opacity-50")}>
+                  <Fragment key={ex.id}>
+                  <tr className={cn("border-b border-border/50 hover:bg-muted/20", g.isVoid && "opacity-50")}>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{ex.date}</td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className="text-xs">{ex.category}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <div className={cn("font-medium text-foreground", !isLive && "line-through decoration-1")}>{ex.description}</div>
+                      <div className={cn("font-medium text-foreground", g.isVoid && "line-through decoration-1")}>{ex.description}</div>
                       {ex.notes && <div className="text-muted-foreground text-xs">{ex.notes}</div>}
                       <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                        {ex.status === "reversed" && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
-                        )}
-                        {ex.status === "reversal" && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{ex.reversesId}</span>
-                        )}
-                        {ex.correctsId != null && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{ex.correctsId}</span>
-                        )}
+                        <CorrectionBadge isVoid={g.isVoid} historyCount={g.history.length} expanded={expanded} onToggle={() => toggleExpenseExpanded(ex.id)} />
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -805,7 +838,7 @@ export default function CashbookPage() {
                       Rs {fmt(ex.amount)}
                     </td>
                     <td className="px-4 py-3">
-                      {isLive && (
+                      {!g.isVoid && (
                         <button
                           onClick={() => openCorrectExpense(ex)}
                           className="text-muted-foreground hover:text-primary transition-colors p-1"
@@ -816,15 +849,44 @@ export default function CashbookPage() {
                       )}
                     </td>
                   </tr>
+                  {expanded && (
+                    <tr className="bg-muted/10 border-b border-border/50">
+                      <td colSpan={6} className="px-4 py-3">
+                        <div className="text-xs space-y-2 max-w-2xl">
+                          {g.isVoid && (
+                            <div className="text-muted-foreground">
+                              Voided{g.voidReversal?.notes ? ` — ${g.voidReversal.notes}` : ""}
+                            </div>
+                          )}
+                          {g.history.length === 0 && !g.isVoid && (
+                            <div className="text-muted-foreground">No correction history.</div>
+                          )}
+                          {g.history.map((step, i) => (
+                            <div key={step.previous.id} className="flex items-start gap-2">
+                              <span className="text-muted-foreground font-mono">{i + 1}.</span>
+                              <div>
+                                <div>
+                                  <span className="line-through text-muted-foreground">Rs {fmt(step.previous.amount)}</span>
+                                  {" "}<span className="text-muted-foreground">({step.previous.description}, #{step.previous.id})</span>
+                                </div>
+                                {step.reversal?.notes && <div className="text-muted-foreground mt-0.5">Reason: {step.reversal.notes}</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
-          {expenses && expenses.length > 0 && (
+          {expenseGroups.length > 0 && (
             <div className="px-4 py-3 border-t bg-muted/20 flex justify-end">
               <span className="text-sm font-semibold text-red-400">
-                Total: Rs {fmt(expenses.reduce((s, e) => s + e.amount, 0))}
+                Total: Rs {fmt(totalExpenses)}
               </span>
             </div>
           )}

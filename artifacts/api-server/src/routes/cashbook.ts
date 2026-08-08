@@ -207,10 +207,13 @@ router.post("/cashbook/:id/correct", requireRole("owner"), async (req, res) => {
   const userId = (req.session as any)?.userId ?? null;
 
   const result = await db.transaction(async (tx) => {
+    // Notes carry the submitted correction reason (falling back to the original's own
+    // notes if none given) — reversal rows are never shown directly, only surfaced as
+    // the "why" behind a correction/void in the history view.
     const [reversal] = await tx.insert(cashbookEntriesTable).values({
       date: original.date, type: original.type, source: original.source, referenceId: original.referenceId,
       description: original.description, paymentMode: original.paymentMode, amount: original.amount,
-      notes: original.notes, createdById: userId, status: "reversal", reversesId: original.id,
+      notes: d.reason ?? original.notes, createdById: userId, status: "reversal", reversesId: original.id,
     }).returning();
 
     await tx.update(cashbookEntriesTable).set({ status: "reversed" }).where(eq(cashbookEntriesTable.id, original.id));
@@ -367,9 +370,12 @@ router.post("/expenses/:id/correct", requireRole("owner"), async (req, res) => {
   const userId = (req.session as any)?.userId ?? null;
 
   const result = await db.transaction(async (tx) => {
+    // Notes carry the submitted correction reason (falling back to the original's own
+    // notes if none given) — reversal rows are never shown directly, only surfaced as
+    // the "why" behind a correction/void in the history view.
     const [reversal] = await tx.insert(expensesTable).values({
       date: original.date, category: original.category, description: original.description,
-      amount: original.amount, paymentMode: original.paymentMode, notes: original.notes,
+      amount: original.amount, paymentMode: original.paymentMode, notes: d.reason ?? original.notes,
       createdById: userId, status: "reversal", reversesId: original.id,
     }).returning();
 

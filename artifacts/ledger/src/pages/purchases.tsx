@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -14,7 +14,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { VoidToggle } from "@/components/correction-fields";
+import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -111,9 +112,9 @@ function PurchaseDetailDialog({ id, open, onClose }: { id: number; open: boolean
           <div className="py-8 text-center text-muted-foreground">Loading…</div>
         ) : data ? (
           <div className="space-y-4">
-            {data.status !== "posted" && (
-              <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                This invoice is {data.status} — not a live transaction.
+            {data.status === "reversed" && (
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                This invoice was voided — not a live transaction.
               </div>
             )}
             <div className="grid grid-cols-3 gap-3 text-sm">
@@ -171,12 +172,15 @@ export default function PurchasesPage() {
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState(firstOfMonth);
   const [toDate, setToDate] = useState(today);
-  const [showReversed, setShowReversed] = useState(false);
   const [viewId, setViewId] = useState<number | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
+  // Always pull the full chain (including reversed/reversal rows) — grouping needs them
+  // client-side to reconstruct each transaction's history, even though only one row per
+  // logical transaction ends up rendered.
   const { data: purchases = [], isLoading } = useQuery({
-    queryKey: ["purchases", fromDate, toDate, showReversed],
-    queryFn: () => fetchPurchases(fromDate, toDate, showReversed),
+    queryKey: ["purchases", fromDate, toDate],
+    queryFn: () => fetchPurchases(fromDate, toDate, true),
   });
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers"], queryFn: fetchSuppliers });
   const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
@@ -254,15 +258,21 @@ export default function PurchasesPage() {
     onError: (e) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const filtered = purchases.filter(p =>
-    p.supplierName.toLowerCase().includes(search.toLowerCase()) ||
-    (p.invoiceNo ?? "").toLowerCase().includes(search.toLowerCase())
+  // One row per logical transaction: `head` is its current effective state.
+  const groups = groupCorrections(purchases).filter(g =>
+    g.head.supplierName.toLowerCase().includes(search.toLowerCase()) ||
+    (g.head.invoiceNo ?? "").toLowerCase().includes(search.toLowerCase())
   );
+  const toggleExpanded = (id: number) => setExpandedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
-  const liveFiltered = filtered.filter(p => p.status === "posted");
-  const totalBilled = liveFiltered.reduce((s, p) => s + p.totalAmount, 0);
-  const totalPaid = liveFiltered.reduce((s, p) => s + p.paidAmount, 0);
-  const totalBalance = liveFiltered.reduce((s, p) => s + p.balance, 0);
+  const liveGroups = groups.filter(g => !g.isVoid);
+  const totalBilled = liveGroups.reduce((s, g) => s + g.head.totalAmount, 0);
+  const totalPaid = liveGroups.reduce((s, g) => s + g.head.paidAmount, 0);
+  const totalBalance = liveGroups.reduce((s, g) => s + g.head.balance, 0);
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-6xl mx-auto">
@@ -311,10 +321,6 @@ export default function PurchasesPage() {
           <Label className="text-xs text-muted-foreground mb-1 block">To</Label>
           <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-36 h-9 text-sm" />
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer h-9">
-          <Checkbox checked={showReversed} onCheckedChange={v => setShowReversed(v === true)} />
-          Show reversed/voided
-        </label>
       </div>
 
       {/* Table */}
@@ -337,7 +343,7 @@ export default function PurchasesPage() {
               {isLoading && (
                 <tr><td colSpan={8} className="text-center text-muted-foreground py-8">Loading…</td></tr>
               )}
-              {!isLoading && filtered.length === 0 && (
+              {!isLoading && groups.length === 0 && (
                 <tr>
                   <td colSpan={8} className="text-center py-12">
                     <ShoppingBag size={32} className="mx-auto mb-2 text-muted-foreground/30" />
@@ -348,25 +354,19 @@ export default function PurchasesPage() {
                   </td>
                 </tr>
               )}
-              {filtered.map((p) => {
-                const isLive = p.status === "posted";
+              {groups.map((g) => {
+                const p = g.head;
+                const expanded = expandedIds.has(p.id);
                 return (
-                <tr key={p.id} className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors", !isLive && "opacity-50")}>
+                <Fragment key={p.id}>
+                <tr className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors", g.isVoid && "opacity-50")}>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{p.date}</td>
                   <td className="px-4 py-3">
                     <Link href={`/suppliers/${p.supplierId}`}>
-                      <span className="font-medium hover:text-primary cursor-pointer">{p.supplierName}</span>
+                      <span className={cn("font-medium hover:text-primary cursor-pointer", g.isVoid && "line-through decoration-1")}>{p.supplierName}</span>
                     </Link>
                     <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                      {p.status === "reversed" && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
-                      )}
-                      {p.status === "reversal" && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{p.reversesId}</span>
-                      )}
-                      {p.correctsId != null && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{p.correctsId}</span>
-                      )}
+                      <CorrectionBadge isVoid={g.isVoid} historyCount={g.history.length} expanded={expanded} onToggle={() => toggleExpanded(p.id)} />
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
@@ -377,7 +377,7 @@ export default function PurchasesPage() {
                       {p.paymentMode}
                     </span>
                   </td>
-                  <td className={cn("px-4 py-3 text-right font-medium", !isLive && "line-through decoration-1")}>Rs {fmt(p.totalAmount)}</td>
+                  <td className={cn("px-4 py-3 text-right font-medium", g.isVoid && "line-through decoration-1")}>Rs {fmt(p.totalAmount)}</td>
                   <td className="px-4 py-3 text-right text-emerald-400">Rs {fmt(p.paidAmount)}</td>
                   <td className={cn("px-4 py-3 text-right font-semibold", p.balance > 0 ? "text-red-400" : "text-emerald-400")}>
                     Rs {fmt(p.balance)}
@@ -387,7 +387,7 @@ export default function PurchasesPage() {
                       <button onClick={() => setViewId(p.id)} className="p-1.5 text-muted-foreground hover:text-primary transition-colors" title="View details">
                         <Eye size={13} />
                       </button>
-                      {isLive && (
+                      {!g.isVoid && (
                         <button onClick={() => openCorrect(p)} className="p-1.5 text-muted-foreground hover:text-primary transition-colors" title="Correct this invoice">
                           <Pencil size={13} />
                         </button>
@@ -395,6 +395,35 @@ export default function PurchasesPage() {
                     </div>
                   </td>
                 </tr>
+                {expanded && (
+                  <tr className="bg-muted/10 border-b border-border/50">
+                    <td colSpan={8} className="px-4 py-3">
+                      <div className="text-xs space-y-2 max-w-2xl">
+                        {g.isVoid && (
+                          <div className="text-muted-foreground">
+                            Voided{g.voidReversal?.notes ? ` — ${g.voidReversal.notes}` : ""}
+                          </div>
+                        )}
+                        {g.history.length === 0 && !g.isVoid && (
+                          <div className="text-muted-foreground">No correction history.</div>
+                        )}
+                        {g.history.map((step, i) => (
+                          <div key={step.previous.id} className="flex items-start gap-2">
+                            <span className="text-muted-foreground font-mono">{i + 1}.</span>
+                            <div>
+                              <div>
+                                <span className="line-through text-muted-foreground">Rs {fmt(step.previous.totalAmount)}</span>
+                                {" "}<span className="text-muted-foreground">(#{step.previous.id}{step.previous.invoiceNo ? `, ${step.previous.invoiceNo}` : ""})</span>
+                              </div>
+                              {step.reversal?.notes && <div className="text-muted-foreground mt-0.5">Reason: {step.reversal.notes}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
                 );
               })}
             </tbody>

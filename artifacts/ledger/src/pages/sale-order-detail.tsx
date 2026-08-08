@@ -3,7 +3,7 @@ import { useParams, Link } from "wouter";
 import { useGetSaleOrder, getGetSaleOrderQueryKey } from "@workspace/api-client-react";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Printer, AlertTriangle, Undo2 } from "lucide-react";
+import { ArrowLeft, Printer, Undo2 } from "lucide-react";
 import { useCompany } from "@/lib/company";
 import { useAuth } from "@/lib/auth";
 
@@ -55,11 +55,13 @@ export default function SaleOrderDetailPage() {
       </div>
 
       {/* Correction workflow banner — a posted order is never edited/deleted in place;
-          this surfaces where an order sits in that trail. */}
+          this surfaces where an order sits in that trail. Deliberately neutral/low-key —
+          reserve red/alert styling for things that need the user's attention, not routine
+          corrections (see the same convention on the list pages' CorrectionBadge). */}
       {order.status === "reversed" && (
-        <div className="no-print mb-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
-          <AlertTriangle size={15} />
-          This order was reversed and is no longer active.
+        <div className="no-print mb-4 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
+          <Undo2 size={15} />
+          This order was voided — not a live transaction.
         </div>
       )}
       {order.status === "reversal" && (
@@ -71,10 +73,10 @@ export default function SaleOrderDetailPage() {
         </div>
       )}
       {order.correctsId != null && (
-        <div className="no-print mb-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm text-primary">
+        <div className="no-print mb-4 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
           <Undo2 size={15} />
           This order corrects
-          <Link href={`/sale-orders/${order.correctsId}`}><span className="font-medium cursor-pointer hover:underline">Order #{order.correctsId}</span></Link>
+          <Link href={`/sale-orders/${order.correctsId}`}><span className="font-medium text-primary cursor-pointer hover:underline">Order #{order.correctsId}</span></Link>
         </div>
       )}
 

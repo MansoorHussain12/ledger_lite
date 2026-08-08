@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link } from "wouter";
 import {
   useListSaleOrders, getListSaleOrdersQueryKey, useCorrectSaleOrder, useListCustomers, getListCustomersQueryKey,
@@ -10,9 +10,9 @@ import { formatAmount, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { VoidToggle } from "@/components/correction-fields";
+import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, ChevronRight, Filter, Undo2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,15 +29,18 @@ export default function SaleOrdersPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [customerId, setCustomerId] = useState<number | undefined>();
-  const [showReversed, setShowReversed] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Always pull the full chain (including reversed/reversal rows) — grouping needs them
+  // client-side to reconstruct each transaction's history, even though only one row per
+  // logical transaction ends up rendered.
   const params = {
     from: fromDate || undefined,
     to: toDate || undefined,
     customerId: customerId || undefined,
-    includeReversed: showReversed || undefined,
+    includeReversed: true,
   };
 
   const { data: orders = [], isLoading } = useListSaleOrders(params, {
@@ -50,7 +53,14 @@ export default function SaleOrdersPage() {
   const { data: unitLookups = [] } = useListLookups("unit", { query: { queryKey: getListLookupsQueryKey("unit") } });
   const correctMutation = useCorrectSaleOrder();
 
-  const totalAmount = orders.reduce((s, o) => s + o.totalAmount, 0);
+  // One row per logical transaction: `head` is its current effective state.
+  const groups = groupCorrections(orders);
+  const totalAmount = groups.reduce((s, g) => s + (g.isVoid ? 0 : g.head.totalAmount), 0);
+  const toggleExpanded = (id: number) => setExpandedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   // ── Correction (reverse + optionally replace) ──
   const [correcting, setCorrecting] = useState<SaleOrder | null>(null);
@@ -136,7 +146,7 @@ export default function SaleOrdersPage() {
         <div>
           <h1 className="text-2xl font-bold">Sale Orders</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {orders.length} orders · Rs. {formatAmount(totalAmount)}
+            {groups.length} orders · Rs. {formatAmount(totalAmount)}
           </p>
         </div>
         <Link href="/sale-orders/new">
@@ -169,10 +179,6 @@ export default function SaleOrdersPage() {
         <Button variant="outline" size="sm" onClick={() => { setFromDate(""); setToDate(""); setCustomerId(undefined); }}>
           Clear
         </Button>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer ml-auto mb-1.5">
-          <Checkbox checked={showReversed} onCheckedChange={v => setShowReversed(v === true)} />
-          Show reversed/voided
-        </label>
       </div>
 
       {/* Table */}
@@ -190,54 +196,73 @@ export default function SaleOrdersPage() {
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>}
-            {!isLoading && orders.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No sale orders found</td></tr>}
-            {orders.map(o => {
-              const isLive = o.status === "posted";
+            {!isLoading && groups.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No sale orders found</td></tr>}
+            {groups.map(g => {
+              const o = g.head;
+              const expanded = expandedIds.has(o.id);
               return (
-              <tr key={o.id} className={cn("hover:bg-muted/20 transition-colors", !isLive && "opacity-50")}>
-                <td className="px-4 py-3 text-muted-foreground text-xs font-mono">#{o.id}</td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDate(o.date)}</td>
-                <td className="px-4 py-3 font-medium">
-                  <Link href={`/customers/${o.customerId}`}>
-                    <span className="hover:text-primary cursor-pointer">{o.customerName}</span>
-                  </Link>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap mt-0.5">
-                    <span>{o.items.length} item{o.items.length !== 1 ? "s" : ""}</span>
-                    {o.status === "reversed" && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
-                    )}
-                    {o.status === "reversal" && (
-                      <Link href={`/sale-orders/${o.reversesId}`}>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium cursor-pointer hover:bg-muted/70">Reversal of #{o.reversesId}</span>
-                      </Link>
-                    )}
-                    {o.correctsId != null && (
-                      <Link href={`/sale-orders/${o.correctsId}`}>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium cursor-pointer hover:bg-primary/20">Corrects #{o.correctsId}</span>
-                      </Link>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell text-xs">
-                  {o.billtyNo && <div>Billty: {o.billtyNo}</div>}
-                  {o.vehicleNo && <div>Vehicle: {o.vehicleNo}</div>}
-                </td>
-                <td className={cn("px-4 py-3 text-right font-semibold", isLive ? "text-red-600" : "text-muted-foreground line-through decoration-1")}>Rs. {formatAmount(o.totalAmount)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    {isLive && (
-                      <button onClick={() => openCorrect(o)} title="Correct this sale order" className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors">
-                        <Pencil size={14} />
-                      </button>
-                    )}
-                    <Link href={`/sale-orders/${o.id}`}>
-                      <button className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors">
-                        <ChevronRight size={14} />
-                      </button>
+              <Fragment key={o.id}>
+                <tr className={cn("hover:bg-muted/20 transition-colors", g.isVoid && "opacity-50")}>
+                  <td className="px-4 py-3 text-muted-foreground text-xs font-mono">#{o.id}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatDate(o.date)}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <Link href={`/customers/${o.customerId}`}>
+                      <span className={cn("hover:text-primary cursor-pointer", g.isVoid && "line-through decoration-1")}>{o.customerName}</span>
                     </Link>
-                  </div>
-                </td>
-              </tr>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap mt-0.5">
+                      <span>{o.items.length} item{o.items.length !== 1 ? "s" : ""}</span>
+                      <CorrectionBadge isVoid={g.isVoid} historyCount={g.history.length} expanded={expanded} onToggle={() => toggleExpanded(o.id)} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell text-xs">
+                    {o.billtyNo && <div>Billty: {o.billtyNo}</div>}
+                    {o.vehicleNo && <div>Vehicle: {o.vehicleNo}</div>}
+                  </td>
+                  <td className={cn("px-4 py-3 text-right font-semibold", g.isVoid ? "text-muted-foreground line-through decoration-1" : "text-red-600")}>Rs. {formatAmount(o.totalAmount)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      {!g.isVoid && (
+                        <button onClick={() => openCorrect(o)} title="Correct this sale order" className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors">
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      <Link href={`/sale-orders/${o.id}`}>
+                        <button className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors">
+                          <ChevronRight size={14} />
+                        </button>
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+                {expanded && (
+                  <tr className="bg-muted/10">
+                    <td colSpan={6} className="px-4 py-3">
+                      <div className="text-xs space-y-2 max-w-2xl">
+                        {g.isVoid && (
+                          <div className="text-muted-foreground">
+                            Voided{g.voidReversal?.notes ? ` — ${g.voidReversal.notes}` : ""}
+                          </div>
+                        )}
+                        {g.history.length === 0 && !g.isVoid && (
+                          <div className="text-muted-foreground">No correction history.</div>
+                        )}
+                        {g.history.map((step, i) => (
+                          <div key={step.previous.id} className="flex items-start gap-2">
+                            <span className="text-muted-foreground font-mono">{i + 1}.</span>
+                            <div>
+                              <div>
+                                <span className="line-through text-muted-foreground">Rs. {formatAmount(step.previous.totalAmount)}</span>
+                                {" "}<span className="text-muted-foreground">({step.previous.items.length} item{step.previous.items.length !== 1 ? "s" : ""}, #{step.previous.id})</span>
+                              </div>
+                              {step.reversal?.notes && <div className="text-muted-foreground mt-0.5">Reason: {step.reversal.notes}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
               );
             })}
           </tbody>

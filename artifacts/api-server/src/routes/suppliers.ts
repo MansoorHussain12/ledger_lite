@@ -385,11 +385,14 @@ router.post("/purchases/:id/correct", requireRole("owner"), async (req, res) => 
   const userId = (req.session as any)?.userId ?? null;
 
   const result = await db.transaction(async (tx) => {
-    // 1. Insert the reversal — a literal mirror of the original, for the paper trail.
+    // 1. Insert the reversal — a literal mirror of the original, for the paper trail. Its
+    // notes carry the submitted correction reason (falling back to the original's own
+    // notes if none given) — reversal rows are never shown directly, only surfaced as the
+    // "why" behind a correction/void in the history view.
     const [reversal] = await tx.insert(purchaseInvoicesTable).values({
       supplierId: original.supplierId, date: original.date, invoiceNo: original.invoiceNo,
       totalAmount: original.totalAmount, paidAmount: original.paidAmount, paymentMode: original.paymentMode,
-      notes: original.notes, createdById: original.createdById,
+      notes: d.reason ?? original.notes, createdById: original.createdById,
       status: "reversal", reversesId: original.id,
     }).returning();
     for (const item of originalItems) {

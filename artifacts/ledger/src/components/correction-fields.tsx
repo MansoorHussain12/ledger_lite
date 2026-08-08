@@ -1,7 +1,8 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Shared by the Sale Orders and Payments "Correct" dialogs — the one truly common piece
 // across both: the reversal never edits/deletes a posted transaction in place, so a
@@ -40,5 +41,32 @@ export function VoidToggle({
         />
       </div>
     </div>
+  );
+}
+
+// Shared list-row indicator for a correction-workflow entity (see `groupCorrections` in
+// `@/lib/correction-chain`). Renders nothing for a transaction that's never been touched —
+// deliberately low-key (secondary badge, no red) since a correction is a routine edit, not
+// something that needs the user's attention. Click toggles the caller's expand-in-place
+// history row.
+export function CorrectionBadge({
+  isVoid, historyCount, expanded, onToggle,
+}: {
+  isVoid: boolean;
+  historyCount: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  if (!isVoid && historyCount === 0) return null;
+  const label = isVoid ? "Voided" : `Corrected${historyCount > 1 ? ` ×${historyCount}` : ""}`;
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onToggle(); }}
+      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground font-medium hover:bg-secondary/70 transition-colors"
+    >
+      {label}
+      <ChevronDown size={11} className={cn("transition-transform", expanded && "rotate-180")} />
+    </button>
   );
 }

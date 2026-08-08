@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock, AlertTriangle, CheckCircle2, Clock, Plus,
@@ -7,14 +7,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { VoidToggle } from "@/components/correction-fields";
+import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -429,7 +429,7 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
   const { toast } = useToast();
   const [payDialog, setPayDialog] = useState(false);
   const [payScheduleId, setPayScheduleId] = useState<number | undefined>();
-  const [showReversedPayments, setShowReversedPayments] = useState(false);
+  const [expandedPaymentIds, setExpandedPaymentIds] = useState<Set<number>>(new Set());
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ["installment", planId],
@@ -499,6 +499,16 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
   if (!plan) return <div className="p-6 text-muted-foreground">Plan not found</div>;
+
+  // One row per logical payment: `head` is its current effective state. `plan.payments`
+  // already includes the full chain (reversed originals + reversal rows), no separate
+  // fetch/toggle needed.
+  const paymentGroups = [...groupCorrections(plan.payments)].reverse();
+  const toggleExpandedPayment = (id: number) => setExpandedPaymentIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   const sc = STATUS_CFG[plan.status];
   const StatusIcon = sc.icon;
@@ -650,10 +660,6 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
         <div className="bg-card border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b bg-muted/20 flex items-center justify-between">
             <h2 className="font-semibold text-sm">Payment History</h2>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-              <Checkbox checked={showReversedPayments} onCheckedChange={v => setShowReversedPayments(v === true)} />
-              Show reversed/voided
-            </label>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -666,29 +672,23 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
               </tr>
             </thead>
             <tbody>
-              {[...plan.payments].reverse().filter(p => showReversedPayments || p.status === "posted").map(p => {
-                const isLive = p.status === "posted";
+              {paymentGroups.map(g => {
+                const p = g.head;
+                const expanded = expandedPaymentIds.has(p.id);
                 return (
-                <tr key={p.id} className={cn("border-b border-border/50 hover:bg-muted/10 transition-colors", !isLive && "opacity-50")}>
+                <Fragment key={p.id}>
+                <tr className={cn("border-b border-border/50 hover:bg-muted/10 transition-colors", g.isVoid && "opacity-50")}>
                   <td className="px-4 py-2.5">{p.date}</td>
                   <td className="px-4 py-2.5 text-muted-foreground text-xs">{MODE_LABELS[p.paymentMode] ?? p.paymentMode}</td>
                   <td className="px-4 py-2.5 text-muted-foreground text-xs">
                     {p.notes ?? "—"}
                     <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                      {p.status === "reversed" && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
-                      )}
-                      {p.status === "reversal" && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{p.reversesId}</span>
-                      )}
-                      {p.correctsId != null && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{p.correctsId}</span>
-                      )}
+                      <CorrectionBadge isVoid={g.isVoid} historyCount={g.history.length} expanded={expanded} onToggle={() => toggleExpandedPayment(p.id)} />
                     </div>
                   </td>
-                  <td className={cn("px-4 py-2.5 text-right font-medium", isLive ? "text-emerald-400" : "text-muted-foreground line-through decoration-1")}>Rs {fmtD(p.amount)}</td>
+                  <td className={cn("px-4 py-2.5 text-right font-medium", g.isVoid ? "text-muted-foreground line-through decoration-1" : "text-emerald-400")}>Rs {fmtD(p.amount)}</td>
                   <td className="px-2 py-2.5">
-                    {isLive && (
+                    {!g.isVoid && (
                       <button
                         onClick={() => openCorrectPayment(p)}
                         className="text-muted-foreground hover:text-primary transition-colors p-0.5"
@@ -699,6 +699,35 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
                     )}
                   </td>
                 </tr>
+                {expanded && (
+                  <tr className="bg-muted/10 border-b border-border/50">
+                    <td colSpan={5} className="px-4 py-3">
+                      <div className="text-xs space-y-2 max-w-2xl">
+                        {g.isVoid && (
+                          <div className="text-muted-foreground">
+                            Voided{g.voidReversal?.notes ? ` — ${g.voidReversal.notes}` : ""}
+                          </div>
+                        )}
+                        {g.history.length === 0 && !g.isVoid && (
+                          <div className="text-muted-foreground">No correction history.</div>
+                        )}
+                        {g.history.map((step, i) => (
+                          <div key={step.previous.id} className="flex items-start gap-2">
+                            <span className="text-muted-foreground font-mono">{i + 1}.</span>
+                            <div>
+                              <div>
+                                <span className="line-through text-muted-foreground">Rs {fmtD(step.previous.amount)}</span>
+                                {" "}<span className="text-muted-foreground">(#{step.previous.id})</span>
+                              </div>
+                              {step.reversal?.notes && <div className="text-muted-foreground mt-0.5">Reason: {step.reversal.notes}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
                 );
               })}
             </tbody>

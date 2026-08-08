@@ -121,10 +121,13 @@ router.post("/payments/:id/correct", requireRole("owner"), async (req, res): Pro
     : [customer];
 
   const result = await db.transaction(async (tx) => {
-    // 1. Insert the reversal payment — a literal mirror of the original.
+    // 1. Insert the reversal payment — a literal mirror of the original. Its notes carry
+    // the submitted correction reason (falling back to the original's own notes if none
+    // given) — reversal rows are never shown directly, only surfaced as the "why" behind
+    // a correction/void in the history view.
     const [reversal] = await tx.insert(paymentsTable).values({
       customerId: original.customerId, date: original.date, type: original.type, amount: original.amount,
-      bankAccount: original.bankAccount, chequeNo: original.chequeNo, notes: original.notes,
+      bankAccount: original.bankAccount, chequeNo: original.chequeNo, notes: parsed.data.reason ?? original.notes,
       status: "reversal", reversesId: original.id,
     }).returning();
 

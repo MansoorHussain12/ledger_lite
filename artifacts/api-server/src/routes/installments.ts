@@ -273,9 +273,12 @@ router.post("/installments/payments/:paymentId/correct", requireRole("owner"), a
   const userId = (req.session as any)?.userId ?? null;
 
   const result = await db.transaction(async (tx) => {
+    // Notes carry the submitted correction reason (falling back to the original's own
+    // notes if none given) — reversal rows are never shown directly, only surfaced as
+    // the "why" behind a correction/void in the history view.
     const [reversal] = await tx.insert(installmentPaymentsTable).values({
       planId: original.planId, scheduleId: original.scheduleId, date: original.date, amount: original.amount,
-      paymentMode: original.paymentMode, notes: original.notes, createdById: userId,
+      paymentMode: original.paymentMode, notes: d.reason ?? original.notes, createdById: userId,
       status: "reversal", reversesId: original.id,
     }).returning();
 
