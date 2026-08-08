@@ -41,6 +41,8 @@ import type {
   DashboardSummary,
   DebtorRow,
   Expense,
+  ExpenseCorrectionInput,
+  ExpenseCorrectionResult,
   ExpenseInput,
   GetCustomerLedgerParams,
   GetDailyCollectionReportParams,
@@ -48,6 +50,7 @@ import type {
   GetMonthlySalesReportParams,
   GetProfitBreakdownParams,
   HealthStatus,
+  InstallmentPaymentCorrectionInput,
   InstallmentPaymentInput,
   InstallmentPlanDetail,
   InventoryMovements,
@@ -3393,25 +3396,27 @@ export const useRecordInstallmentPayment = <TError = ErrorType<unknown>,
       return useMutation(getRecordInstallmentPaymentMutationOptions(options));
     }
 
-export const getDeleteInstallmentPaymentUrl = (paymentId: number,) => {
+export const getCorrectInstallmentPaymentUrl = (paymentId: number,) => {
 
 
 
 
-  return `/api/installments/payments/${paymentId}`
+  return `/api/installments/payments/${paymentId}/correct`
 }
 
 /**
- * @summary Delete a payment
+ * Standard correction workflow (see /sale-orders/{id}/correct for the full explanation). No cashbook cascade — installment payments never auto-post to cashbook. Returns the updated plan detail directly.
+ * @summary Correct (or void) a posted installment payment — never edits or deletes it in place
  */
-export const deleteInstallmentPayment = async (paymentId: number, options?: RequestInit): Promise<InstallmentPlanDetail> => {
+export const correctInstallmentPayment = async (paymentId: number,
+    installmentPaymentCorrectionInput: InstallmentPaymentCorrectionInput, options?: RequestInit): Promise<InstallmentPlanDetail> => {
 
-  return customFetch<InstallmentPlanDetail>(getDeleteInstallmentPaymentUrl(paymentId),
+  return customFetch<InstallmentPlanDetail>(getCorrectInstallmentPaymentUrl(paymentId),
   {
     ...options,
-    method: 'DELETE'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(installmentPaymentCorrectionInput)
   }
 );}
 
@@ -3419,11 +3424,11 @@ export const deleteInstallmentPayment = async (paymentId: number, options?: Requ
 
 
 
-export const getDeleteInstallmentPaymentMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPayment>>, TError,{paymentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPayment>>, TError,{paymentId: number}, TContext> => {
+export const getCorrectInstallmentPaymentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctInstallmentPayment>>, TError,{paymentId: number;data: BodyType<InstallmentPaymentCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctInstallmentPayment>>, TError,{paymentId: number;data: BodyType<InstallmentPaymentCorrectionInput>}, TContext> => {
 
-const mutationKey = ['deleteInstallmentPayment'];
+const mutationKey = ['correctInstallmentPayment'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -3433,10 +3438,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteInstallmentPayment>>, {paymentId: number}> = (props) => {
-          const {paymentId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctInstallmentPayment>>, {paymentId: number;data: BodyType<InstallmentPaymentCorrectionInput>}> = (props) => {
+          const {paymentId,data} = props ?? {};
 
-          return  deleteInstallmentPayment(paymentId,requestOptions)
+          return  correctInstallmentPayment(paymentId,data,requestOptions)
         }
 
 
@@ -3446,22 +3451,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type DeleteInstallmentPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteInstallmentPayment>>>
-
-    export type DeleteInstallmentPaymentMutationError = ErrorType<unknown>
+    export type CorrectInstallmentPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof correctInstallmentPayment>>>
+    export type CorrectInstallmentPaymentMutationBody = BodyType<InstallmentPaymentCorrectionInput>
+    export type CorrectInstallmentPaymentMutationError = ErrorType<void>
 
     /**
- * @summary Delete a payment
+ * @summary Correct (or void) a posted installment payment — never edits or deletes it in place
  */
-export const useDeleteInstallmentPayment = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInstallmentPayment>>, TError,{paymentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useCorrectInstallmentPayment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctInstallmentPayment>>, TError,{paymentId: number;data: BodyType<InstallmentPaymentCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof deleteInstallmentPayment>>,
+        Awaited<ReturnType<typeof correctInstallmentPayment>>,
         TError,
-        {paymentId: number},
+        {paymentId: number;data: BodyType<InstallmentPaymentCorrectionInput>},
         TContext
       > => {
-      return useMutation(getDeleteInstallmentPaymentMutationOptions(options));
+      return useMutation(getCorrectInstallmentPaymentMutationOptions(options));
     }
 
 export const getListInventoryUrl = () => {
@@ -4965,25 +4970,27 @@ export const useCreateExpense = <TError = ErrorType<unknown>,
       return useMutation(getCreateExpenseMutationOptions(options));
     }
 
-export const getDeleteExpenseUrl = (id: number,) => {
+export const getCorrectExpenseUrl = (id: number,) => {
 
 
 
 
-  return `/api/expenses/${id}`
+  return `/api/expenses/${id}/correct`
 }
 
 /**
- * @summary Delete an expense
+ * Standard correction workflow (see /sale-orders/{id}/correct for the full explanation). Also reverses and reposts the expense's auto-posted cashbook entry.
+ * @summary Correct (or void) a posted expense — never edits or deletes it in place
  */
-export const deleteExpense = async (id: number, options?: RequestInit): Promise<void> => {
+export const correctExpense = async (id: number,
+    expenseCorrectionInput: ExpenseCorrectionInput, options?: RequestInit): Promise<ExpenseCorrectionResult> => {
 
-  return customFetch<void>(getDeleteExpenseUrl(id),
+  return customFetch<ExpenseCorrectionResult>(getCorrectExpenseUrl(id),
   {
     ...options,
-    method: 'DELETE'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(expenseCorrectionInput)
   }
 );}
 
@@ -4991,11 +4998,11 @@ export const deleteExpense = async (id: number, options?: RequestInit): Promise<
 
 
 
-export const getDeleteExpenseMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteExpense>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteExpense>>, TError,{id: number}, TContext> => {
+export const getCorrectExpenseMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctExpense>>, TError,{id: number;data: BodyType<ExpenseCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctExpense>>, TError,{id: number;data: BodyType<ExpenseCorrectionInput>}, TContext> => {
 
-const mutationKey = ['deleteExpense'];
+const mutationKey = ['correctExpense'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -5005,10 +5012,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteExpense>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctExpense>>, {id: number;data: BodyType<ExpenseCorrectionInput>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  deleteExpense(id,requestOptions)
+          return  correctExpense(id,data,requestOptions)
         }
 
 
@@ -5018,22 +5025,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type DeleteExpenseMutationResult = NonNullable<Awaited<ReturnType<typeof deleteExpense>>>
-
-    export type DeleteExpenseMutationError = ErrorType<unknown>
+    export type CorrectExpenseMutationResult = NonNullable<Awaited<ReturnType<typeof correctExpense>>>
+    export type CorrectExpenseMutationBody = BodyType<ExpenseCorrectionInput>
+    export type CorrectExpenseMutationError = ErrorType<void>
 
     /**
- * @summary Delete an expense
+ * @summary Correct (or void) a posted expense — never edits or deletes it in place
  */
-export const useDeleteExpense = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteExpense>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useCorrectExpense = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctExpense>>, TError,{id: number;data: BodyType<ExpenseCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof deleteExpense>>,
+        Awaited<ReturnType<typeof correctExpense>>,
         TError,
-        {id: number},
+        {id: number;data: BodyType<ExpenseCorrectionInput>},
         TContext
       > => {
-      return useMutation(getDeleteExpenseMutationOptions(options));
+      return useMutation(getCorrectExpenseMutationOptions(options));
     }
 
 export const getListLookupsUrl = (type: 'category' | 'unit',) => {

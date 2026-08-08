@@ -9,7 +9,7 @@ import {
 } from "@workspace/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
 
 const router = Router();
 
@@ -50,7 +50,13 @@ async function buildPlanDetail(planId: number) {
     .where(eq(installmentPaymentsTable.planId, planId))
     .orderBy(installmentPaymentsTable.date);
 
-  const totalPaid = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
+  // Only "live" (posted) payments count toward totals/schedule allocation — a
+  // reversed/corrected payment and its reversal mirror are both excluded, so this
+  // reflects the correction, not the mistake (see the correction workflow). The full
+  // `payments` array below still returns every row (including reversed/reversal) for
+  // history/audit visibility.
+  const livePayments = payments.filter(p => p.status === "posted");
+  const totalPaid = livePayments.reduce((s, p) => s + parseFloat(p.amount), 0);
   const totalAmount = parseFloat(plan.totalAmount);
   const downPayment = parseFloat(plan.downPayment);
   const outstanding = Math.max(0, totalAmount - downPayment - totalPaid);
@@ -108,6 +114,7 @@ async function buildPlanDetail(planId: number) {
       id: p.id, planId: p.planId, scheduleId: p.scheduleId ?? null,
       date: p.date, amount: parseFloat(p.amount),
       paymentMode: p.paymentMode, notes: p.notes ?? null, createdAt: p.createdAt,
+      status: p.status, reversesId: p.reversesId ?? null, correctsId: p.correctsId ?? null,
     })),
   };
 }
@@ -226,16 +233,71 @@ router.post("/installments/:id/payments", requireAuth, async (req, res) => {
   res.status(201).json(detail);
 });
 
-// ── DELETE /installments/payments/:paymentId ──────────────────────────────────
+// ── POST /installments/payments/:paymentId/correct ─────────────────────────────
+// Correction workflow — see lib/db/src/schema/saleOrders.ts for the full design. A
+// posted installment payment is never edited or deleted in place. This either reverses
+// it with no replacement (void: true), or reverses it and posts a new corrected payment
+// in its place (default). No cashbook cascade — installment payments never auto-post to
+// cashbook (see POST /installments/:id/payments above).
 
-router.delete("/installments/payments/:paymentId", requireAuth, async (req, res) => {
+const paymentCorrectionSchema = z.object({
+  void: z.boolean().optional(),
+  reason: z.string().optional(),
+  scheduleId: z.number().int().positive().nullable().optional(),
+  date: z.string().min(1).optional(),
+  amount: z.number().positive().optional(),
+  paymentMode: z.enum(["cash", "bank_transfer", "cheque", "online"]).optional(),
+  notes: z.string().optional(),
+});
+
+router.post("/installments/payments/:paymentId/correct", requireRole("owner"), async (req, res) => {
   const paymentId = parseInt(String(req.params.paymentId), 10);
   if (isNaN(paymentId)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [p] = await db.select().from(installmentPaymentsTable).where(eq(installmentPaymentsTable.id, paymentId));
-  if (!p) { res.status(404).json({ error: "Payment not found" }); return; }
-  await db.delete(installmentPaymentsTable).where(eq(installmentPaymentsTable.id, paymentId));
-  const detail = await buildPlanDetail(p.planId);
-  res.status(200).json(detail);
+  const parsed = paymentCorrectionSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", details: parsed.error.issues }); return; }
+  const d = parsed.data;
+
+  const [original] = await db.select().from(installmentPaymentsTable).where(eq(installmentPaymentsTable.id, paymentId));
+  if (!original) { res.status(404).json({ error: "Payment not found" }); return; }
+  if (original.status !== "posted") {
+    res.status(409).json({ error: `This payment is already ${original.status} — correct its replacement instead, not this row.` });
+    return;
+  }
+
+  const isVoid = d.void === true;
+  if (!isVoid && (d.date == null || d.amount == null)) {
+    res.status(400).json({ error: "date and amount are required unless void=true" });
+    return;
+  }
+
+  const userId = (req.session as any)?.userId ?? null;
+
+  const result = await db.transaction(async (tx) => {
+    const [reversal] = await tx.insert(installmentPaymentsTable).values({
+      planId: original.planId, scheduleId: original.scheduleId, date: original.date, amount: original.amount,
+      paymentMode: original.paymentMode, notes: original.notes, createdById: userId,
+      status: "reversal", reversesId: original.id,
+    }).returning();
+
+    await tx.update(installmentPaymentsTable).set({ status: "reversed" }).where(eq(installmentPaymentsTable.id, original.id));
+
+    let correctionId: number | null = null;
+    if (!isVoid) {
+      const [correction] = await tx.insert(installmentPaymentsTable).values({
+        planId: original.planId, scheduleId: d.scheduleId ?? null, date: d.date!, amount: String(d.amount!),
+        paymentMode: d.paymentMode ?? original.paymentMode, notes: d.notes ?? null, createdById: userId,
+        status: "posted", correctsId: original.id,
+      }).returning();
+      correctionId = correction.id;
+    }
+
+    return { reversalId: reversal.id, correctionId };
+  });
+
+  // Return the updated plan detail directly (same shape as POST .../payments and the
+  // old DELETE), so the frontend can just swap it straight into the query cache.
+  const detail = await buildPlanDetail(original.planId);
+  res.json(detail);
 });
 
 export default router;

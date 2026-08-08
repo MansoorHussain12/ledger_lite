@@ -243,12 +243,23 @@ router.post("/cashbook/:id/correct", requireRole("owner"), async (req, res) => {
 
 // ── GET /expenses ─────────────────────────────────────────────────────────────
 
+function toExpenseResponse(r: typeof expensesTable.$inferSelect) {
+  return {
+    id: r.id, date: toDateStr(r.date), category: r.category, description: r.description,
+    amount: parseFloat(r.amount), paymentMode: r.paymentMode, notes: r.notes ?? null, createdAt: r.createdAt,
+    status: r.status, reversesId: r.reversesId ?? null, correctsId: r.correctsId ?? null,
+  };
+}
+
 router.get("/expenses", requireAuth, async (req, res) => {
   const from = req.query.from as string | undefined;
   const to = req.query.to as string | undefined;
   const category = req.query.category as string | undefined;
+  const includeReversed = req.query.includeReversed === "true";
 
-  const conditions = [];
+  // Default to only "live" (posted) rows — reversed originals and reversal paper-trail
+  // rows are excluded unless explicitly asked for (see the correction workflow).
+  const conditions = includeReversed ? [] : [eq(expensesTable.status, "posted")];
   if (from) conditions.push(gte(expensesTable.date, from));
   if (to) conditions.push(lte(expensesTable.date, to));
   if (category) conditions.push(eq(expensesTable.category, category));
@@ -259,13 +270,7 @@ router.get("/expenses", requireAuth, async (req, res) => {
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(expensesTable.date), desc(expensesTable.id));
 
-  res.json(
-    rows.map((r) => ({
-      ...r,
-      date: toDateStr(r.date),
-      amount: parseFloat(r.amount),
-    }))
-  );
+  res.json(rows.map(toExpenseResponse));
 });
 
 // ── POST /expenses ────────────────────────────────────────────────────────────
@@ -318,27 +323,99 @@ router.post("/expenses", requireAuth, async (req, res) => {
     return expense;
   });
 
-  res.status(201).json({
-    ...result,
-    date: toDateStr(result.date),
-    amount: parseFloat(result.amount),
-  });
+  res.status(201).json(toExpenseResponse(result));
 });
 
-// ── DELETE /expenses/:id ──────────────────────────────────────────────────────
+// ── POST /expenses/:id/correct ──────────────────────────────────────────────────
+// Correction workflow — see lib/db/src/schema/saleOrders.ts for the full design. A
+// posted expense is never edited or deleted in place. This either reverses it with no
+// replacement (void: true), or reverses it and posts a new corrected expense in its
+// place (default) — and in both cases, correctly reverses/reposts the expense's
+// auto-posted cashbook entry too, so cashbook balance reflects the correction.
 
-router.delete("/expenses/:id", requireAuth, async (req, res) => {
+const expenseCorrectionSchema = z.object({
+  void: z.boolean().optional(),
+  reason: z.string().optional(),
+  date: z.string().min(1).optional(),
+  category: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  amount: z.coerce.number().positive().optional(),
+  paymentMode: z.enum(paymentModes).optional(),
+  notes: z.string().optional(),
+});
+
+router.post("/expenses/:id/correct", requireRole("owner"), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const parsed = expenseCorrectionSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", details: parsed.error.issues }); return; }
+  const d = parsed.data;
 
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(cashbookEntriesTable)
-      .where(and(eq(cashbookEntriesTable.source, "expense"), eq(cashbookEntriesTable.referenceId, id)));
-    await tx.delete(expensesTable).where(eq(expensesTable.id, id));
+  const [original] = await db.select().from(expensesTable).where(eq(expensesTable.id, id));
+  if (!original) { res.status(404).json({ error: "Expense not found" }); return; }
+  if (original.status !== "posted") {
+    res.status(409).json({ error: `This expense is already ${original.status} — correct its replacement instead, not this row.` });
+    return;
+  }
+
+  const isVoid = d.void === true;
+  if (!isVoid && (d.date == null || d.category == null || d.description == null || d.amount == null || d.paymentMode == null)) {
+    res.status(400).json({ error: "date, category, description, amount, and paymentMode are required unless void=true" });
+    return;
+  }
+
+  const userId = (req.session as any)?.userId ?? null;
+
+  const result = await db.transaction(async (tx) => {
+    const [reversal] = await tx.insert(expensesTable).values({
+      date: original.date, category: original.category, description: original.description,
+      amount: original.amount, paymentMode: original.paymentMode, notes: original.notes,
+      createdById: userId, status: "reversal", reversesId: original.id,
+    }).returning();
+
+    const [linkedCashbookEntry] = await tx.select().from(cashbookEntriesTable)
+      .where(and(eq(cashbookEntriesTable.source, "expense"), eq(cashbookEntriesTable.referenceId, original.id), eq(cashbookEntriesTable.status, "posted")));
+    if (linkedCashbookEntry) {
+      await tx.insert(cashbookEntriesTable).values({
+        date: linkedCashbookEntry.date, type: linkedCashbookEntry.type, source: linkedCashbookEntry.source,
+        referenceId: linkedCashbookEntry.referenceId, description: `Reversal: ${linkedCashbookEntry.description}`,
+        paymentMode: linkedCashbookEntry.paymentMode, amount: linkedCashbookEntry.amount, notes: linkedCashbookEntry.notes,
+        createdById: userId, status: "reversal", reversesId: linkedCashbookEntry.id,
+      });
+      await tx.update(cashbookEntriesTable).set({ status: "reversed" }).where(eq(cashbookEntriesTable.id, linkedCashbookEntry.id));
+    }
+
+    await tx.update(expensesTable).set({ status: "reversed" }).where(eq(expensesTable.id, original.id));
+
+    let correctionId: number | null = null;
+    if (!isVoid) {
+      const [correction] = await tx.insert(expensesTable).values({
+        date: d.date!, category: d.category!, description: d.description!, amount: String(d.amount!),
+        paymentMode: d.paymentMode!, notes: d.notes ?? null, createdById: userId,
+        status: "posted", correctsId: original.id,
+      }).returning();
+      await tx.insert(cashbookEntriesTable).values({
+        date: d.date!, type: "cash_out", source: "expense", referenceId: correction.id,
+        description: `${d.category}: ${d.description}`, paymentMode: d.paymentMode!,
+        amount: String(d.amount!), notes: d.notes ?? null, createdById: userId,
+      });
+      correctionId = correction.id;
+    }
+
+    return { reversalId: reversal.id, correctionId };
   });
 
-  res.status(204).send();
+  const [origExpense] = await db.select().from(expensesTable).where(eq(expensesTable.id, original.id));
+  const [reversalExpense] = await db.select().from(expensesTable).where(eq(expensesTable.id, result.reversalId));
+  const correctionExpense = result.correctionId != null
+    ? (await db.select().from(expensesTable).where(eq(expensesTable.id, result.correctionId)))[0]
+    : null;
+
+  res.json({
+    original: toExpenseResponse(origExpense),
+    reversal: toExpenseResponse(reversalExpense),
+    ...(correctionExpense ? { correction: toExpenseResponse(correctionExpense) } : {}),
+  });
 });
 
 export default router;

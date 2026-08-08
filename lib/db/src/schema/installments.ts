@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, integer, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { customersTable } from "./customers";
 import { saleOrdersTable } from "./saleOrders";
 import { usersTable } from "./users";
@@ -36,6 +36,10 @@ export const installmentPaymentsTable = pgTable("installment_payments", {
   notes: text("notes"),
   createdById: integer("created_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Correction workflow — see saleOrdersTable.status for the full explanation.
+  status: text("status").$type<"posted" | "reversed" | "reversal">().notNull().default("posted"),
+  reversesId: integer("reverses_id").references((): AnyPgColumn => installmentPaymentsTable.id),
+  correctsId: integer("corrects_id").references((): AnyPgColumn => installmentPaymentsTable.id),
 });
 
 export type InstallmentPlan = typeof installmentPlansTable.$inferSelect;

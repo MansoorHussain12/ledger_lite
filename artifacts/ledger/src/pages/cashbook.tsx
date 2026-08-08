@@ -101,16 +101,20 @@ async function fetchLedger(params: { from?: string; to?: string; type?: string; 
   }>;
 }
 
-async function fetchExpenses(params: { from?: string; to?: string }) {
+type ExpenseRow = {
+  id: number; date: string; category: string; description: string;
+  amount: number; paymentMode: string; notes: string | null; createdAt: string;
+  status: "posted" | "reversed" | "reversal"; reversesId: number | null; correctsId: number | null;
+};
+
+async function fetchExpenses(params: { from?: string; to?: string; includeReversed?: boolean }) {
   const q = new URLSearchParams();
   if (params.from) q.set("from", params.from);
   if (params.to) q.set("to", params.to);
+  if (params.includeReversed) q.set("includeReversed", "true");
   const r = await fetch(`${BASE}/api/expenses?${q}`, { credentials: "include" });
   if (!r.ok) throw new Error("Failed to load expenses");
-  return r.json() as Promise<Array<{
-    id: number; date: string; category: string; description: string;
-    amount: number; paymentMode: string; notes: string | null; createdAt: string;
-  }>>;
+  return r.json() as Promise<ExpenseRow[]>;
 }
 
 // ── Summary cards ─────────────────────────────────────────────────────────────
@@ -430,8 +434,8 @@ export default function CashbookPage() {
   });
 
   const expensesQ = useQuery({
-    queryKey: ["expenses", fromDate, toDate],
-    queryFn: () => fetchExpenses({ from: fromDate, to: toDate }),
+    queryKey: ["expenses", fromDate, toDate, showReversed],
+    queryFn: () => fetchExpenses({ from: fromDate, to: toDate, includeReversed: showReversed }),
     enabled: tab === "expenses",
   });
 
@@ -481,17 +485,51 @@ export default function CashbookPage() {
     onError: (e) => toast({ title: "Cannot correct", description: e.message, variant: "destructive" }),
   });
 
-  const deleteExpense = useMutation({
-    mutationFn: async (id: number) => {
-      const r = await fetch(`${BASE}/api/expenses/${id}`, { method: "DELETE", credentials: "include" });
-      if (!r.ok) throw new Error("Failed");
+  // ── Expense correction (reverse + optionally replace) ──
+  const [correctingExpense, setCorrectingExpense] = useState<ExpenseRow | null>(null);
+  const [correctExpenseForm, setCorrectExpenseForm] = useState({
+    date: today(), category: "Miscellaneous", description: "", paymentMode: "cash", amount: "", notes: "",
+  });
+  const [correctExpenseVoid, setCorrectExpenseVoid] = useState(false);
+  const [correctExpenseReason, setCorrectExpenseReason] = useState("");
+
+  const openCorrectExpense = (ex: ExpenseRow) => {
+    setCorrectingExpense(ex);
+    setCorrectExpenseForm({
+      date: ex.date, category: ex.category, description: ex.description,
+      paymentMode: ex.paymentMode, amount: String(ex.amount), notes: ex.notes ?? "",
+    });
+    setCorrectExpenseVoid(false);
+    setCorrectExpenseReason("");
+  };
+
+  const correctExpense = useMutation({
+    mutationFn: async () => {
+      if (!correctingExpense) throw new Error("Nothing to correct");
+      const body = correctExpenseVoid
+        ? { void: true, reason: correctExpenseReason || undefined }
+        : {
+            reason: correctExpenseReason || undefined,
+            date: correctExpenseForm.date, category: correctExpenseForm.category,
+            description: correctExpenseForm.description, paymentMode: correctExpenseForm.paymentMode,
+            amount: parseFloat(correctExpenseForm.amount), notes: correctExpenseForm.notes || undefined,
+          };
+      const r = await fetch(`${BASE}/api/expenses/${correctingExpense.id}/correct`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
+      return r.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cashbook"] });
       qc.invalidateQueries({ queryKey: ["cashbook-summary"] });
       qc.invalidateQueries({ queryKey: ["expenses"] });
+      toast({ title: correctExpenseVoid ? "Expense voided" : "Expense corrected" });
+      setCorrectingExpense(null);
     },
-    onError: () => toast({ title: "Error deleting expense", variant: "destructive" }),
+    onError: (e) => toast({ title: "Cannot correct", description: e.message, variant: "destructive" }),
   });
 
   const summary = summaryQ.data;
@@ -595,12 +633,12 @@ export default function CashbookPage() {
                 </SelectContent>
               </Select>
             </div>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer h-8 ml-auto">
-              <Checkbox checked={showReversed} onCheckedChange={v => setShowReversed(v === true)} />
-              Show reversed/voided
-            </label>
           </>
         )}
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer h-8 ml-auto">
+          <Checkbox checked={showReversed} onCheckedChange={v => setShowReversed(v === true)} />
+          Show reversed/voided
+        </label>
       </div>
 
       {/* Ledger tab */}
@@ -735,15 +773,28 @@ export default function CashbookPage() {
                     </td>
                   </tr>
                 )}
-                {expenses?.map((ex) => (
-                  <tr key={ex.id} className="border-b border-border/50 hover:bg-muted/20">
+                {expenses?.map((ex) => {
+                  const isLive = ex.status === "posted";
+                  return (
+                  <tr key={ex.id} className={cn("border-b border-border/50 hover:bg-muted/20", !isLive && "opacity-50")}>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{ex.date}</td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className="text-xs">{ex.category}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{ex.description}</div>
+                      <div className={cn("font-medium text-foreground", !isLive && "line-through decoration-1")}>{ex.description}</div>
                       {ex.notes && <div className="text-muted-foreground text-xs">{ex.notes}</div>}
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        {ex.status === "reversed" && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
+                        )}
+                        {ex.status === "reversal" && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{ex.reversesId}</span>
+                        )}
+                        {ex.correctsId != null && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{ex.correctsId}</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", MODE_COLORS[ex.paymentMode] ?? "")}>
@@ -754,16 +805,19 @@ export default function CashbookPage() {
                       Rs {fmt(ex.amount)}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => deleteExpense.mutate(ex.id)}
-                        className="text-muted-foreground hover:text-red-400 transition-colors p-1"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {isLive && (
+                        <button
+                          onClick={() => openCorrectExpense(ex)}
+                          className="text-muted-foreground hover:text-primary transition-colors p-1"
+                          title="Correct this expense"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -854,6 +908,73 @@ export default function CashbookPage() {
               disabled={correctEntry.isPending || (!correctVoid && (!correctForm.description || !correctForm.amount))}
             >
               {correctEntry.isPending ? "Saving…" : correctVoid ? "Void Entry" : "Save Correction"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Correct Expense Dialog — reverses the original behind the scenes, never edits it */}
+      <Dialog open={!!correctingExpense} onOpenChange={(o) => { if (!o) setCorrectingExpense(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Undo2 size={16} /> Correct Expense #{correctingExpense?.id}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <VoidToggle isVoid={correctExpenseVoid} onVoidChange={setCorrectExpenseVoid} reason={correctExpenseReason} onReasonChange={setCorrectExpenseReason} />
+            {!correctExpenseVoid && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Date</Label>
+                    <Input type="date" value={correctExpenseForm.date} onChange={e => setCorrectExpenseForm(f => ({ ...f, date: e.target.value }))} className="mt-1" />
+                  </div>
+                  <div>
+                    <Label>Category</Label>
+                    <Select value={correctExpenseForm.category} onValueChange={v => setCorrectExpenseForm(f => ({ ...f, category: v }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {EXPENSE_CATEGORIES.map(c => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Input value={correctExpenseForm.description} onChange={e => setCorrectExpenseForm(f => ({ ...f, description: e.target.value }))} placeholder="Brief description of expense" className="mt-1" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Payment Mode</Label>
+                    <Select value={correctExpenseForm.paymentMode} onValueChange={v => setCorrectExpenseForm(f => ({ ...f, paymentMode: v }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_MODES.map(m => (
+                          <SelectItem key={m} value={m}>{MODE_LABELS[m]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Amount (Rs)</Label>
+                    <Input type="number" min="0.01" step="0.01" value={correctExpenseForm.amount} onChange={e => setCorrectExpenseForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <Label>Notes (optional)</Label>
+                  <Input value={correctExpenseForm.notes} onChange={e => setCorrectExpenseForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any notes" className="mt-1" />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCorrectingExpense(null)}>Cancel</Button>
+            <Button
+              onClick={() => correctExpense.mutate()}
+              disabled={correctExpense.isPending || (!correctExpenseVoid && (!correctExpenseForm.description || !correctExpenseForm.amount))}
+            >
+              {correctExpense.isPending ? "Saving…" : correctExpenseVoid ? "Void Expense" : "Save Correction"}
             </Button>
           </DialogFooter>
         </DialogContent>

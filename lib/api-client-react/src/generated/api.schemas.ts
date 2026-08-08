@@ -545,6 +545,15 @@ export interface InstallmentScheduleItem {
   status: InstallmentScheduleItemStatus;
 }
 
+export type InstallmentPaymentRecordStatus = typeof InstallmentPaymentRecordStatus[keyof typeof InstallmentPaymentRecordStatus];
+
+
+export const InstallmentPaymentRecordStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
 export interface InstallmentPaymentRecord {
   id: number;
   planId: number;
@@ -556,6 +565,35 @@ export interface InstallmentPaymentRecord {
   /** @nullable */
   notes?: string | null;
   createdAt?: unknown;
+  status: InstallmentPaymentRecordStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export type InstallmentPaymentCorrectionInputPaymentMode = typeof InstallmentPaymentCorrectionInputPaymentMode[keyof typeof InstallmentPaymentCorrectionInputPaymentMode];
+
+
+export const InstallmentPaymentCorrectionInputPaymentMode = {
+  cash: 'cash',
+  bank_transfer: 'bank_transfer',
+  cheque: 'cheque',
+  online: 'online',
+} as const;
+
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as InstallmentPaymentInput) to reverse-and-replace.
+ */
+export interface InstallmentPaymentCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  /** @nullable */
+  scheduleId?: number | null;
+  date?: string;
+  amount?: number;
+  paymentMode?: InstallmentPaymentCorrectionInputPaymentMode;
+  notes?: string;
 }
 
 export type InstallmentPlanDetailStatus = typeof InstallmentPlanDetailStatus[keyof typeof InstallmentPlanDetailStatus];
@@ -1148,6 +1186,15 @@ export const ExpensePaymentMode = {
   other: 'other',
 } as const;
 
+export type ExpenseStatus = typeof ExpenseStatus[keyof typeof ExpenseStatus];
+
+
+export const ExpenseStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
 export interface Expense {
   id: number;
   date: string;
@@ -1158,6 +1205,43 @@ export interface Expense {
   /** @nullable */
   notes?: string | null;
   createdAt: string;
+  status: ExpenseStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export type ExpenseCorrectionInputPaymentMode = typeof ExpenseCorrectionInputPaymentMode[keyof typeof ExpenseCorrectionInputPaymentMode];
+
+
+export const ExpenseCorrectionInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as ExpenseInput) to reverse-and-replace.
+ */
+export interface ExpenseCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  date?: string;
+  category?: string;
+  description?: string;
+  amount?: number;
+  paymentMode?: ExpenseCorrectionInputPaymentMode;
+  notes?: string;
+}
+
+export interface ExpenseCorrectionResult {
+  original: Expense;
+  reversal: Expense;
+  correction?: Expense;
 }
 
 export type ExpenseInputPaymentMode = typeof ExpenseInputPaymentMode[keyof typeof ExpenseInputPaymentMode];
@@ -1313,6 +1397,10 @@ export type ListExpensesParams = {
 from?: string;
 to?: string;
 category?: string;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
 };
 
 export type ListAuditLogsParams = {

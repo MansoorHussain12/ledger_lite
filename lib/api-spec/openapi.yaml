@@ -890,17 +890,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/InstallmentPlanDetail"
 
-  /installments/payments/{paymentId}:
-    delete:
-      operationId: deleteInstallmentPayment
+  /installments/payments/{paymentId}/correct:
+    post:
+      operationId: correctInstallmentPayment
       tags: [installments]
-      summary: Delete a payment
+      summary: Correct (or void) a posted installment payment — never edits or deletes it in place
+      description: >
+        Standard correction workflow (see /sale-orders/{id}/correct for the full
+        explanation). No cashbook cascade — installment payments never auto-post to
+        cashbook. Returns the updated plan detail directly.
       parameters:
         - name: paymentId
           in: path
           required: true
           schema:
             type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstallmentPaymentCorrectionInput"
       responses:
         "200":
           description: Updated plan
@@ -908,6 +918,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/InstallmentPlanDetail"
+        "409":
+          description: The target row is not currently posted
 
   # ── INVENTORY ─────────────────────────────────────────────────────────────
   /inventory:
@@ -1318,6 +1330,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
       responses:
         "200":
           description: Expense list
@@ -1345,20 +1362,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/Expense"
 
-  /expenses/{id}:
-    delete:
-      operationId: deleteExpense
+  /expenses/{id}/correct:
+    post:
+      operationId: correctExpense
       tags: [cashbook]
-      summary: Delete an expense
+      summary: Correct (or void) a posted expense — never edits or deletes it in place
+      description: >
+        Standard correction workflow (see /sale-orders/{id}/correct for the full
+        explanation). Also reverses and reposts the expense's auto-posted cashbook entry.
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseCorrectionInput"
       responses:
-        "204":
-          description: Deleted
+        "200":
+          description: Correction applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseCorrectionResult"
+        "409":
+          description: The target row is not currently posted
 
   # ── LOOKUPS ───────────────────────────────────────────────────────────────
   /lookups/{type}:
@@ -2277,7 +2309,7 @@ components:
 
     InstallmentPaymentRecord:
       type: object
-      required: [id, planId, date, amount, paymentMode]
+      required: [id, planId, date, amount, paymentMode, status]
       properties:
         id: { type: integer }
         planId: { type: integer }
@@ -2287,6 +2319,35 @@ components:
         paymentMode: { type: string }
         notes: { type: ["string", "null"] }
         createdAt: {}
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId: { type: ["integer", "null"] }
+        correctsId: { type: ["integer", "null"] }
+
+    InstallmentPaymentCorrectionInput:
+      type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (same shape as InstallmentPaymentInput) to
+        reverse-and-replace.
+      properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        scheduleId:
+          type: ["integer", "null"]
+        date:
+          type: string
+          format: date
+        amount:
+          type: number
+        paymentMode:
+          type: string
+          enum: [cash, bank_transfer, cheque, online]
+        notes:
+          type: string
 
     InstallmentPlanDetail:
       type: object
@@ -2952,7 +3013,7 @@ components:
 
     Expense:
       type: object
-      required: [id, date, category, description, amount, paymentMode, createdAt]
+      required: [id, date, category, description, amount, paymentMode, createdAt, status]
       properties:
         id:
           type: integer
@@ -2973,6 +3034,49 @@ components:
         createdAt:
           type: string
           format: date-time
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
+
+    ExpenseCorrectionInput:
+      type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (same shape as ExpenseInput) to reverse-and-replace.
+      properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        date:
+          type: string
+          format: date
+        category:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        notes:
+          type: string
+
+    ExpenseCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/Expense"
+        reversal:
+          $ref: "#/components/schemas/Expense"
+        correction:
+          $ref: "#/components/schemas/Expense"
 
     ExpenseInput:
       type: object

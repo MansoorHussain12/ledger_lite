@@ -2,17 +2,19 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock, AlertTriangle, CheckCircle2, Clock, Plus,
-  ChevronRight, Trash2, DollarSign, Calendar, ArrowLeft, User, FileText,
+  ChevronRight, Trash2, Pencil, Undo2, Calendar, ArrowLeft, User, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { VoidToggle } from "@/components/correction-fields";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +34,7 @@ type ScheduleItem = {
 type PaymentRecord = {
   id: number; planId: number; scheduleId: number | null;
   date: string; amount: number; paymentMode: string; notes: string | null;
+  status: "posted" | "reversed" | "reversal"; reversesId: number | null; correctsId: number | null;
 };
 
 type Plan = {
@@ -426,6 +429,7 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
   const { toast } = useToast();
   const [payDialog, setPayDialog] = useState(false);
   const [payScheduleId, setPayScheduleId] = useState<number | undefined>();
+  const [showReversedPayments, setShowReversedPayments] = useState(false);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ["installment", planId],
@@ -444,17 +448,53 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
     },
   });
 
-  const deletePaymentMut = useMutation({
-    mutationFn: async (paymentId: number) => {
-      const r = await fetch(`${BASE}/api/installments/payments/${paymentId}`, { method: "DELETE", credentials: "include" });
-      if (!r.ok) throw new Error("Failed");
+  // ── Payment correction (reverse + optionally replace) ──
+  const [correctingPayment, setCorrectingPayment] = useState<PaymentRecord | null>(null);
+  const [correctPayScheduleId, setCorrectPayScheduleId] = useState("__none__");
+  const [correctPayDate, setCorrectPayDate] = useState(todayStr());
+  const [correctPayAmount, setCorrectPayAmount] = useState("");
+  const [correctPayMode, setCorrectPayMode] = useState("cash");
+  const [correctPayNotes, setCorrectPayNotes] = useState("");
+  const [correctPayVoid, setCorrectPayVoid] = useState(false);
+  const [correctPayReason, setCorrectPayReason] = useState("");
+
+  const openCorrectPayment = (p: PaymentRecord) => {
+    setCorrectingPayment(p);
+    setCorrectPayScheduleId(p.scheduleId != null ? String(p.scheduleId) : "__none__");
+    setCorrectPayDate(p.date);
+    setCorrectPayAmount(String(p.amount));
+    setCorrectPayMode(p.paymentMode);
+    setCorrectPayNotes(p.notes ?? "");
+    setCorrectPayVoid(false);
+    setCorrectPayReason("");
+  };
+
+  const correctPaymentMut = useMutation({
+    mutationFn: async () => {
+      if (!correctingPayment) throw new Error("Nothing to correct");
+      const body = correctPayVoid
+        ? { void: true, reason: correctPayReason || undefined }
+        : {
+            reason: correctPayReason || undefined,
+            scheduleId: correctPayScheduleId !== "__none__" ? parseInt(correctPayScheduleId, 10) : undefined,
+            date: correctPayDate, amount: parseFloat(correctPayAmount),
+            paymentMode: correctPayMode, notes: correctPayNotes || undefined,
+          };
+      const r = await fetch(`${BASE}/api/installments/payments/${correctingPayment.id}/correct`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
       return r.json();
     },
     onSuccess: (updated) => {
       qc.setQueryData(["installment", planId], updated);
       qc.invalidateQueries({ queryKey: ["installments"] });
-      toast({ title: "Payment deleted" });
+      toast({ title: correctPayVoid ? "Payment voided" : "Payment corrected" });
+      setCorrectingPayment(null);
     },
+    onError: (e) => toast({ title: "Cannot correct", description: e.message, variant: "destructive" }),
   });
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
@@ -608,8 +648,12 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
       {/* Payments history */}
       {plan.payments.length > 0 && (
         <div className="bg-card border rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b bg-muted/20">
+          <div className="px-4 py-3 border-b bg-muted/20 flex items-center justify-between">
             <h2 className="font-semibold text-sm">Payment History</h2>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <Checkbox checked={showReversedPayments} onCheckedChange={v => setShowReversedPayments(v === true)} />
+              Show reversed/voided
+            </label>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -622,21 +666,41 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
               </tr>
             </thead>
             <tbody>
-              {[...plan.payments].reverse().map(p => (
-                <tr key={p.id} className="border-b border-border/50 hover:bg-muted/10 transition-colors">
+              {[...plan.payments].reverse().filter(p => showReversedPayments || p.status === "posted").map(p => {
+                const isLive = p.status === "posted";
+                return (
+                <tr key={p.id} className={cn("border-b border-border/50 hover:bg-muted/10 transition-colors", !isLive && "opacity-50")}>
                   <td className="px-4 py-2.5">{p.date}</td>
                   <td className="px-4 py-2.5 text-muted-foreground text-xs">{MODE_LABELS[p.paymentMode] ?? p.paymentMode}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">{p.notes ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-right font-medium text-emerald-400">Rs {fmtD(p.amount)}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                    {p.notes ?? "—"}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                      {p.status === "reversed" && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
+                      )}
+                      {p.status === "reversal" && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{p.reversesId}</span>
+                      )}
+                      {p.correctsId != null && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{p.correctsId}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className={cn("px-4 py-2.5 text-right font-medium", isLive ? "text-emerald-400" : "text-muted-foreground line-through decoration-1")}>Rs {fmtD(p.amount)}</td>
                   <td className="px-2 py-2.5">
-                    <button
-                      onClick={() => deletePaymentMut.mutate(p.id)}
-                      className="text-muted-foreground hover:text-red-400 transition-colors p-0.5"
-                      title="Delete payment"
-                    >×</button>
+                    {isLive && (
+                      <button
+                        onClick={() => openCorrectPayment(p)}
+                        className="text-muted-foreground hover:text-primary transition-colors p-0.5"
+                        title="Correct this payment"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -650,6 +714,70 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
           onClose={() => { setPayDialog(false); setPayScheduleId(undefined); }}
         />
       )}
+
+      {/* Correct Payment Dialog — reverses the original behind the scenes, never edits it */}
+      <Dialog open={!!correctingPayment} onOpenChange={(o) => { if (!o) setCorrectingPayment(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Undo2 size={16} /> Correct Payment #{correctingPayment?.id}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <VoidToggle isVoid={correctPayVoid} onVoidChange={setCorrectPayVoid} reason={correctPayReason} onReasonChange={setCorrectPayReason} />
+            {!correctPayVoid && (
+              <>
+                <div>
+                  <Label>Installment #</Label>
+                  <Select value={correctPayScheduleId} onValueChange={setCorrectPayScheduleId}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="General payment" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">General payment</SelectItem>
+                      {plan?.schedule.map(s => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          #{s.installmentNo} — {s.dueDate} — Rs {fmtD(s.balance)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Amount (Rs) *</Label>
+                    <Input type="number" min="1" step="0.01" value={correctPayAmount} onChange={e => setCorrectPayAmount(e.target.value)} className="mt-1" />
+                  </div>
+                  <div>
+                    <Label>Date *</Label>
+                    <Input type="date" value={correctPayDate} onChange={e => setCorrectPayDate(e.target.value)} className="mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <Label>Payment Mode</Label>
+                  <Select value={correctPayMode} onValueChange={setCorrectPayMode}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(MODE_LABELS).map(([v, l]) => (
+                        <SelectItem key={v} value={v}>{l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Notes (optional)</Label>
+                  <Input value={correctPayNotes} onChange={e => setCorrectPayNotes(e.target.value)} className="mt-1" placeholder="Cheque no., reference…" />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCorrectingPayment(null)}>Cancel</Button>
+            <Button
+              onClick={() => correctPaymentMut.mutate()}
+              disabled={correctPaymentMut.isPending || (!correctPayVoid && (!correctPayAmount || parseFloat(correctPayAmount) <= 0))}
+            >
+              {correctPaymentMut.isPending ? "Saving…" : correctPayVoid ? "Void Payment" : "Save Correction"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -817,7 +945,7 @@ export default function InstallmentsPage() {
                 <ProgressBar paid={plan.downPayment + plan.totalPaid} total={plan.totalAmount} />
                 <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
                   <span>{Math.round(paidPct)}% paid</span>
-                  <span>{plan.payments.length} payments</span>
+                  <span>{plan.payments.filter(p => p.status === "posted").length} payments</span>
                 </div>
               </div>
             </div>
