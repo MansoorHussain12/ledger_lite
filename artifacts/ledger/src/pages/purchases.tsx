@@ -2,23 +2,19 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
-  ShoppingBag, Plus, Search, Filter, Trash2, FileText, ChevronRight, Eye
+  ShoppingBag, Plus, Search, Pencil, Eye, Undo2, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { VoidToggle } from "@/components/correction-fields";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -37,14 +33,21 @@ type PurchaseRow = {
   id: number; supplierId: number; supplierName: string; date: string;
   invoiceNo: string | null; totalAmount: number; paidAmount: number;
   balance: number; paymentMode: string; notes: string | null; createdAt: string;
+  status: "posted" | "reversed" | "reversal"; reversesId: number | null; correctsId: number | null;
 };
 
 type PurchaseDetail = PurchaseRow & {
   items: Array<{ id: number; productId: number; productName: string; qty: number; rate: number; amount: number }>;
 };
 
-async function fetchPurchases(from: string, to: string): Promise<PurchaseRow[]> {
-  const q = new URLSearchParams({ from, to });
+type Supplier = { id: number; name: string; payableBalance: number };
+type Product = { id: number; name: string; costPrice: string | null; currentRate: string; unit: string; category: string | null };
+type LookupValue = { id: number; type: string; value: string };
+
+type CorrectLineItem = { productId: number | ""; productName: string; qty: string; rate: string; unit: string };
+
+async function fetchPurchases(from: string, to: string, includeReversed: boolean): Promise<PurchaseRow[]> {
+  const q = new URLSearchParams({ from, to, ...(includeReversed ? { includeReversed: "true" } : {}) });
   const r = await fetch(`${BASE}/api/purchases?${q}`, { credentials: "include" });
   if (!r.ok) throw new Error("Failed");
   return r.json();
@@ -52,6 +55,24 @@ async function fetchPurchases(from: string, to: string): Promise<PurchaseRow[]> 
 
 async function fetchPurchaseDetail(id: number): Promise<PurchaseDetail> {
   const r = await fetch(`${BASE}/api/purchases/${id}`, { credentials: "include" });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+
+async function fetchSuppliers(): Promise<Supplier[]> {
+  const r = await fetch(`${BASE}/api/suppliers`, { credentials: "include" });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+
+async function fetchProducts(): Promise<Product[]> {
+  const r = await fetch(`${BASE}/api/products`, { credentials: "include" });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+
+async function fetchUnits(): Promise<LookupValue[]> {
+  const r = await fetch(`${BASE}/api/lookups/unit`, { credentials: "include" });
   if (!r.ok) throw new Error("Failed");
   return r.json();
 }
@@ -64,6 +85,14 @@ const MODE_COLORS: Record<string, string> = {
   cheque: "bg-purple-500/15 text-purple-400",
   other: "bg-slate-500/15 text-slate-400",
 };
+
+const PAYMENT_MODES = ["cash", "bank", "easypaisa", "jazzcash", "cheque", "other"] as const;
+const MODE_LABELS: Record<string, string> = {
+  cash: "Cash", bank: "Bank Transfer", easypaisa: "Easypaisa",
+  jazzcash: "JazzCash", cheque: "Cheque", other: "Other",
+};
+
+function blankCorrectLine(): CorrectLineItem { return { productId: "", productName: "", qty: "", rate: "", unit: "" }; }
 
 function PurchaseDetailDialog({ id, open, onClose }: { id: number; open: boolean; onClose: () => void }) {
   const { data, isLoading } = useQuery({
@@ -82,6 +111,11 @@ function PurchaseDetailDialog({ id, open, onClose }: { id: number; open: boolean
           <div className="py-8 text-center text-muted-foreground">Loading…</div>
         ) : data ? (
           <div className="space-y-4">
+            {data.status !== "posted" && (
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                This invoice is {data.status} — not a live transaction.
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3 text-sm">
               <div><span className="text-muted-foreground">Supplier:</span> <span className="font-medium">{data.supplierName}</span></div>
               <div><span className="text-muted-foreground">Date:</span> <span className="font-medium">{data.date}</span></div>
@@ -137,27 +171,87 @@ export default function PurchasesPage() {
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState(firstOfMonth);
   const [toDate, setToDate] = useState(today);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [showReversed, setShowReversed] = useState(false);
   const [viewId, setViewId] = useState<number | null>(null);
 
   const { data: purchases = [], isLoading } = useQuery({
-    queryKey: ["purchases", fromDate, toDate],
-    queryFn: () => fetchPurchases(fromDate, toDate),
+    queryKey: ["purchases", fromDate, toDate, showReversed],
+    queryFn: () => fetchPurchases(fromDate, toDate, showReversed),
   });
+  const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers"], queryFn: fetchSuppliers });
+  const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
+  const { data: units = [] } = useQuery({ queryKey: ["lookups", "unit"], queryFn: fetchUnits });
 
-  const deleteMut = useMutation({
-    mutationFn: async (id: number) => {
-      const r = await fetch(`${BASE}/api/purchases/${id}`, { method: "DELETE", credentials: "include" });
-      if (!r.ok) throw new Error("Failed");
+  // ── Correction (reverse + optionally replace) ──
+  const [correcting, setCorrecting] = useState<PurchaseRow | null>(null);
+  const [correctSupplierId, setCorrectSupplierId] = useState<number | "">("");
+  const [correctDate, setCorrectDate] = useState("");
+  const [correctInvoiceNo, setCorrectInvoiceNo] = useState("");
+  const [correctLines, setCorrectLines] = useState<CorrectLineItem[]>([blankCorrectLine()]);
+  const [correctPaidAmount, setCorrectPaidAmount] = useState("");
+  const [correctPaymentMode, setCorrectPaymentMode] = useState<string>("cash");
+  const [correctNotes, setCorrectNotes] = useState("");
+  const [correctUpdateCostPrice, setCorrectUpdateCostPrice] = useState(true);
+  const [correctVoid, setCorrectVoid] = useState(false);
+  const [correctReason, setCorrectReason] = useState("");
+
+  const openCorrect = async (row: PurchaseRow) => {
+    const detail = await fetchPurchaseDetail(row.id);
+    setCorrecting(row);
+    setCorrectSupplierId(detail.supplierId);
+    setCorrectDate(detail.date);
+    setCorrectInvoiceNo(detail.invoiceNo ?? "");
+    setCorrectLines(detail.items.map(i => ({
+      productId: i.productId, productName: i.productName, qty: String(i.qty), rate: String(i.rate),
+      unit: products.find(p => p.id === i.productId)?.unit ?? "",
+    })));
+    setCorrectPaidAmount(String(detail.paidAmount));
+    setCorrectPaymentMode(detail.paymentMode);
+    setCorrectNotes(detail.notes ?? "");
+    setCorrectUpdateCostPrice(true);
+    setCorrectVoid(false);
+    setCorrectReason("");
+  };
+
+  const correctLineTotal = (l: CorrectLineItem) => (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0);
+  const correctTotal = correctLines.reduce((s, l) => s + correctLineTotal(l), 0);
+
+  const correctMut = useMutation({
+    mutationFn: async () => {
+      if (!correcting) throw new Error("Nothing to correct");
+      const body = correctVoid
+        ? { void: true, reason: correctReason || undefined }
+        : {
+            reason: correctReason || undefined,
+            supplierId: correctSupplierId,
+            date: correctDate,
+            invoiceNo: correctInvoiceNo || undefined,
+            items: correctLines
+              .filter(l => l.productId && parseFloat(l.qty) > 0 && parseFloat(l.rate) > 0)
+              .map(l => ({ productId: l.productId, qty: parseFloat(l.qty), rate: parseFloat(l.rate) })),
+            paidAmount: parseFloat(correctPaidAmount) || 0,
+            paymentMode: correctPaymentMode,
+            notes: correctNotes || undefined,
+            updateCostPrice: correctUpdateCostPrice,
+          };
+      const r = await fetch(`${BASE}/api/purchases/${correcting.id}/correct`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
+      return r.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["purchases"] });
+      qc.invalidateQueries({ queryKey: ["suppliers"] });
       qc.invalidateQueries({ queryKey: ["cashbook"] });
       qc.invalidateQueries({ queryKey: ["cashbook-summary"] });
-      toast({ title: "Purchase deleted" });
-      setDeleteId(null);
+      qc.invalidateQueries({ queryKey: ["products"] });
+      toast({ title: correctVoid ? "Purchase voided" : "Purchase corrected" });
+      setCorrecting(null);
     },
-    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+    onError: (e) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const filtered = purchases.filter(p =>
@@ -165,9 +259,10 @@ export default function PurchasesPage() {
     (p.invoiceNo ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalBilled = filtered.reduce((s, p) => s + p.totalAmount, 0);
-  const totalPaid = filtered.reduce((s, p) => s + p.paidAmount, 0);
-  const totalBalance = filtered.reduce((s, p) => s + p.balance, 0);
+  const liveFiltered = filtered.filter(p => p.status === "posted");
+  const totalBilled = liveFiltered.reduce((s, p) => s + p.totalAmount, 0);
+  const totalPaid = liveFiltered.reduce((s, p) => s + p.paidAmount, 0);
+  const totalBalance = liveFiltered.reduce((s, p) => s + p.balance, 0);
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-6xl mx-auto">
@@ -216,6 +311,10 @@ export default function PurchasesPage() {
           <Label className="text-xs text-muted-foreground mb-1 block">To</Label>
           <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-36 h-9 text-sm" />
         </div>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer h-9">
+          <Checkbox checked={showReversed} onCheckedChange={v => setShowReversed(v === true)} />
+          Show reversed/voided
+        </label>
       </div>
 
       {/* Table */}
@@ -249,13 +348,26 @@ export default function PurchasesPage() {
                   </td>
                 </tr>
               )}
-              {filtered.map((p) => (
-                <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+              {filtered.map((p) => {
+                const isLive = p.status === "posted";
+                return (
+                <tr key={p.id} className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors", !isLive && "opacity-50")}>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{p.date}</td>
                   <td className="px-4 py-3">
                     <Link href={`/suppliers/${p.supplierId}`}>
                       <span className="font-medium hover:text-primary cursor-pointer">{p.supplierName}</span>
                     </Link>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                      {p.status === "reversed" && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
+                      )}
+                      {p.status === "reversal" && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{p.reversesId}</span>
+                      )}
+                      {p.correctsId != null && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{p.correctsId}</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {p.invoiceNo ?? <span className="text-xs opacity-40">—</span>}
@@ -265,7 +377,7 @@ export default function PurchasesPage() {
                       {p.paymentMode}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right font-medium">Rs {fmt(p.totalAmount)}</td>
+                  <td className={cn("px-4 py-3 text-right font-medium", !isLive && "line-through decoration-1")}>Rs {fmt(p.totalAmount)}</td>
                   <td className="px-4 py-3 text-right text-emerald-400">Rs {fmt(p.paidAmount)}</td>
                   <td className={cn("px-4 py-3 text-right font-semibold", p.balance > 0 ? "text-red-400" : "text-emerald-400")}>
                     Rs {fmt(p.balance)}
@@ -275,13 +387,16 @@ export default function PurchasesPage() {
                       <button onClick={() => setViewId(p.id)} className="p-1.5 text-muted-foreground hover:text-primary transition-colors" title="View details">
                         <Eye size={13} />
                       </button>
-                      <button onClick={() => setDeleteId(p.id)} className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
-                        <Trash2 size={13} />
-                      </button>
+                      {isLive && (
+                        <button onClick={() => openCorrect(p)} className="p-1.5 text-muted-foreground hover:text-primary transition-colors" title="Correct this invoice">
+                          <Pencil size={13} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -291,18 +406,170 @@ export default function PurchasesPage() {
         <PurchaseDetailDialog id={viewId} open={viewId != null} onClose={() => setViewId(null)} />
       )}
 
-      <AlertDialog open={deleteId != null} onOpenChange={(o) => { if (!o) setDeleteId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete purchase invoice?</AlertDialogTitle>
-            <AlertDialogDescription>This will also remove the associated cashbook payment entry.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId != null && deleteMut.mutate(deleteId)} className="bg-red-500 hover:bg-red-600">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Correct Purchase Dialog — reverses the original behind the scenes, never edits it */}
+      <Dialog open={!!correcting} onOpenChange={(o) => { if (!o) setCorrecting(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Undo2 size={16} /> Correct Purchase Invoice #{correcting?.id}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <VoidToggle isVoid={correctVoid} onVoidChange={setCorrectVoid} reason={correctReason} onReasonChange={setCorrectReason} />
+            {!correctVoid && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <Label>Supplier *</Label>
+                    <Select value={correctSupplierId === "" ? "__none__" : String(correctSupplierId)} onValueChange={v => { if (v !== "__none__") setCorrectSupplierId(parseInt(v, 10)); }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select supplier" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {suppliers.map(s => (
+                          <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Date</Label>
+                    <Input type="date" value={correctDate} onChange={e => setCorrectDate(e.target.value)} className="mt-1" />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Supplier Invoice # (optional)</Label>
+                  <Input value={correctInvoiceNo} onChange={e => setCorrectInvoiceNo(e.target.value)} placeholder="Their invoice number" className="mt-1 max-w-xs" />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>Products</Label>
+                    <button type="button" onClick={() => setCorrectLines(prev => [...prev, blankCorrectLine()])} className="text-xs text-primary hover:text-primary/80 flex items-center gap-1">
+                      <Plus size={12} /> Add row
+                    </button>
+                  </div>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/30 border-b">
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Product</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground w-20">Qty</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground w-24">Unit</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground w-24">Rate</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground w-24">Amount</th>
+                          <th className="w-8" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {correctLines.map((line, idx) => (
+                          <tr key={idx} className="border-b border-border/50">
+                            <td className="px-2 py-2">
+                              <select
+                                className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background h-8"
+                                value={line.productId || ""}
+                                onChange={e => {
+                                  const productId = parseInt(e.target.value);
+                                  const product = products.find(p => p.id === productId);
+                                  setCorrectLines(prev => prev.map((l, i) => i === idx
+                                    ? { ...l, productId, productName: product?.name ?? "", rate: product?.costPrice ?? product?.currentRate ?? l.rate, unit: product?.unit ?? "" }
+                                    : l));
+                                }}
+                              >
+                                <option value="">Select product...</option>
+                                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <Input type="number" min="0.01" step="0.01" value={line.qty}
+                                onChange={e => setCorrectLines(prev => prev.map((l, i) => i === idx ? { ...l, qty: e.target.value } : l))}
+                                className="h-8 text-sm text-right" />
+                            </td>
+                            <td className="px-2 py-2">
+                              <select
+                                className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background h-8"
+                                value={line.unit}
+                                onChange={e => setCorrectLines(prev => prev.map((l, i) => i === idx ? { ...l, unit: e.target.value } : l))}
+                              >
+                                <option value="">— unit —</option>
+                                {units.map(u => <option key={u.id} value={u.value}>{u.value}</option>)}
+                                {line.unit && !units.some(u => u.value === line.unit) && <option value={line.unit}>{line.unit}</option>}
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <Input type="number" min="0" step="0.01" value={line.rate}
+                                onChange={e => setCorrectLines(prev => prev.map((l, i) => i === idx ? { ...l, rate: e.target.value } : l))}
+                                className="h-8 text-sm text-right" />
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-sm">
+                              {correctLineTotal(line) > 0 ? `Rs ${fmt(correctLineTotal(line))}` : "—"}
+                            </td>
+                            <td className="px-2 py-2">
+                              {correctLines.length > 1 && (
+                                <button type="button" onClick={() => setCorrectLines(prev => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-red-400 p-0.5">
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-muted/20 font-semibold">
+                          <td colSpan={4} className="px-3 py-2 text-right text-sm text-muted-foreground">Total</td>
+                          <td className="px-3 py-2 text-right text-sm">Rs {fmt(correctTotal)}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Amount Paid (Rs)</Label>
+                    <Input type="number" min="0" step="0.01" value={correctPaidAmount} onChange={e => setCorrectPaidAmount(e.target.value)} className="mt-1" />
+                  </div>
+                  <div>
+                    <Label>Payment Mode</Label>
+                    <Select value={correctPaymentMode} onValueChange={setCorrectPaymentMode}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_MODES.map(m => (
+                          <SelectItem key={m} value={m}>{MODE_LABELS[m]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Checkbox checked={correctUpdateCostPrice} onCheckedChange={v => setCorrectUpdateCostPrice(v === true)} />
+                  <label className="text-sm text-muted-foreground cursor-pointer" onClick={() => setCorrectUpdateCostPrice(v => !v)}>
+                    Update product cost price from corrected rate
+                  </label>
+                </div>
+
+                <div>
+                  <Label>Notes (optional)</Label>
+                  <Input value={correctNotes} onChange={e => setCorrectNotes(e.target.value)} placeholder="Any notes about this purchase" className="mt-1" />
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setCorrecting(null)} className="flex-1">Cancel</Button>
+            <Button
+              onClick={() => correctMut.mutate()}
+              disabled={correctMut.isPending || (!correctVoid && (!correctSupplierId || correctLines.every(l => !l.productId)))}
+              className="flex-1"
+            >
+              {correctMut.isPending ? "Saving…" : correctVoid ? "Void Invoice" : "Save Correction"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1444,7 +1444,10 @@ export const GetSupplierResponse = zod.object({
   "balance": zod.number(),
   "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 }))
 })
 
@@ -1495,7 +1498,8 @@ export const DeleteSupplierResponse = zod.void()
 export const ListPurchasesQueryParams = zod.object({
   "supplierId": zod.coerce.number().optional(),
   "from": zod.date().optional(),
-  "to": zod.date().optional()
+  "to": zod.date().optional(),
+  "includeReversed": zod.coerce.boolean().optional().describe('Include reversed originals and reversal rows (default excludes them — see the correction workflow).')
 })
 
 export const ListPurchasesResponseItem = zod.object({
@@ -1509,7 +1513,10 @@ export const ListPurchasesResponseItem = zod.object({
   "balance": zod.number(),
   "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 export const ListPurchasesResponse = zod.array(ListPurchasesResponseItem)
 
@@ -1547,7 +1554,10 @@ export const CreatePurchaseResponse = zod.object({
   "balance": zod.number(),
   "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 
 
@@ -1577,18 +1587,90 @@ export const GetPurchaseResponse = zod.object({
   "qty": zod.number(),
   "rate": zod.number(),
   "amount": zod.number()
-}))
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 
 
 /**
- * @summary Delete a purchase invoice
+ * Standard correction workflow (see /sale-orders/{id}/correct for the full explanation). Also reverses and reposts the invoice's auto-posted cashbook entry (if any) and re-applies updateCostPrice, so cashbook balance and product cost prices reflect the correction too.
+ * @summary Correct (or void) a posted purchase invoice — never edits or deletes it in place
  */
-export const DeletePurchaseParams = zod.object({
+export const CorrectPurchaseParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const DeletePurchaseResponse = zod.void()
+export const correctPurchaseBodyUpdateCostPriceDefault = true;
+
+export const CorrectPurchaseBody = zod.object({
+  "void": zod.boolean().optional(),
+  "reason": zod.string().optional(),
+  "supplierId": zod.number().optional(),
+  "date": zod.coerce.date().optional(),
+  "invoiceNo": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "qty": zod.number(),
+  "rate": zod.number()
+})).optional(),
+  "paidAmount": zod.number().optional(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional(),
+  "notes": zod.string().optional(),
+  "updateCostPrice": zod.boolean().default(correctPurchaseBodyUpdateCostPriceDefault)
+}).describe('Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as PurchaseInvoiceInput) to reverse-and-replace.\n')
+
+export const CorrectPurchaseResponse = zod.object({
+  "original": zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "invoiceNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "reversal": zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "invoiceNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "correction": zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "invoiceNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}).optional()
+})
 
 
 /**
@@ -1598,7 +1680,8 @@ export const ListCashbookEntriesQueryParams = zod.object({
   "from": zod.date().optional(),
   "to": zod.date().optional(),
   "type": zod.enum(['cash_in', 'cash_out']).optional(),
-  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional()
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional(),
+  "includeReversed": zod.coerce.boolean().optional().describe('Include reversed originals and reversal rows (default excludes them — see the correction workflow).')
 })
 
 export const ListCashbookEntriesResponse = zod.object({
@@ -1606,14 +1689,17 @@ export const ListCashbookEntriesResponse = zod.object({
   "id": zod.number(),
   "date": zod.coerce.date(),
   "type": zod.enum(['cash_in', 'cash_out']),
-  "source": zod.enum(['manual', 'payment', 'expense', 'opening_balance', 'adjustment', 'salary', 'transfer']),
+  "source": zod.enum(['manual', 'payment', 'expense', 'purchase', 'opening_balance', 'adjustment', 'salary', 'transfer']),
   "referenceId": zod.number().nullish(),
   "description": zod.string(),
   "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
   "amount": zod.number(),
   "runningBalance": zod.number(),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })),
   "totalIn": zod.number(),
   "totalOut": zod.number(),
@@ -1643,14 +1729,17 @@ export const CreateCashbookEntryResponse = zod.object({
   "id": zod.number(),
   "date": zod.coerce.date(),
   "type": zod.enum(['cash_in', 'cash_out']),
-  "source": zod.enum(['manual', 'payment', 'expense', 'opening_balance', 'adjustment', 'salary', 'transfer']),
+  "source": zod.enum(['manual', 'payment', 'expense', 'purchase', 'opening_balance', 'adjustment', 'salary', 'transfer']),
   "referenceId": zod.number().nullish(),
   "description": zod.string(),
   "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
   "amount": zod.number(),
   "runningBalance": zod.number(),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 
 
@@ -1669,13 +1758,79 @@ export const GetCashbookSummaryResponse = zod.object({
 
 
 /**
- * @summary Delete a manual cashbook entry
+ * Standard correction workflow (see /sale-orders/{id}/correct for the full explanation). Restricted to user-editable sources (manual, opening_balance, adjustment, salary, transfer) — auto-generated entries (payment/expense/purchase) must be corrected via their source transaction instead.
+ * @summary Correct (or void) a posted cashbook entry — never edits or deletes it in place
  */
-export const DeleteCashbookEntryParams = zod.object({
+export const CorrectCashbookEntryParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const DeleteCashbookEntryResponse = zod.void()
+export const correctCashbookEntryBodyAmountMin = 0.01;
+
+
+
+export const CorrectCashbookEntryBody = zod.object({
+  "void": zod.boolean().optional(),
+  "reason": zod.string().optional(),
+  "date": zod.coerce.date().optional(),
+  "type": zod.enum(['cash_in', 'cash_out']).optional(),
+  "source": zod.enum(['manual', 'opening_balance', 'adjustment', 'salary', 'transfer']).optional(),
+  "description": zod.string().optional(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional(),
+  "amount": zod.number().min(correctCashbookEntryBodyAmountMin).optional(),
+  "notes": zod.string().optional()
+}).describe('Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as CashbookEntryInput) to reverse-and-replace. Only valid for user-editable sources.\n')
+
+export const CorrectCashbookEntryResponse = zod.object({
+  "original": zod.object({
+  "id": zod.number(),
+  "date": zod.coerce.date(),
+  "type": zod.enum(['cash_in', 'cash_out']),
+  "source": zod.enum(['manual', 'payment', 'expense', 'purchase', 'opening_balance', 'adjustment', 'salary', 'transfer']),
+  "referenceId": zod.number().nullish(),
+  "description": zod.string(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "runningBalance": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "reversal": zod.object({
+  "id": zod.number(),
+  "date": zod.coerce.date(),
+  "type": zod.enum(['cash_in', 'cash_out']),
+  "source": zod.enum(['manual', 'payment', 'expense', 'purchase', 'opening_balance', 'adjustment', 'salary', 'transfer']),
+  "referenceId": zod.number().nullish(),
+  "description": zod.string(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "runningBalance": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "correction": zod.object({
+  "id": zod.number(),
+  "date": zod.coerce.date(),
+  "type": zod.enum(['cash_in', 'cash_out']),
+  "source": zod.enum(['manual', 'payment', 'expense', 'purchase', 'opening_balance', 'adjustment', 'salary', 'transfer']),
+  "referenceId": zod.number().nullish(),
+  "description": zod.string(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "runningBalance": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}).optional()
+})
 
 
 /**

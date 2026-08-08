@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen, TrendingUp, TrendingDown, Wallet, Building2,
-  Smartphone, Plus, Trash2, Filter, ChevronDown, RefreshCw
+  Smartphone, Plus, Pencil, Undo2, RefreshCw, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -14,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { VoidToggle } from "@/components/correction-fields";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -32,11 +34,16 @@ function today() {
 const PAYMENT_MODES = ["cash", "bank", "easypaisa", "jazzcash", "cheque", "other"] as const;
 const ENTRY_TYPES = ["cash_in", "cash_out"] as const;
 const SOURCES = ["manual", "opening_balance", "adjustment", "salary", "transfer"] as const;
+// The only sources a "Correct" action may ever touch directly — auto-generated entries
+// (payment/expense/purchase) must be corrected via their source transaction instead,
+// which cascades into cashbook_entries itself.
+const USER_EDITABLE_SOURCES = ["manual", "opening_balance", "adjustment", "salary", "transfer"];
 
 const SOURCE_LABELS: Record<string, string> = {
   manual: "Manual",
   payment: "Customer Receipt",
   expense: "Expense",
+  purchase: "Purchase Payment",
   opening_balance: "Opening Balance",
   adjustment: "Adjustment",
   salary: "Salary",
@@ -72,20 +79,24 @@ async function fetchSummary() {
   }>;
 }
 
-async function fetchLedger(params: { from?: string; to?: string; type?: string; paymentMode?: string }) {
+type CashbookEntryRow = {
+  id: number; date: string; type: string; source: string;
+  referenceId: number | null; description: string; paymentMode: string;
+  amount: number; runningBalance: number; notes: string | null; createdAt: string;
+  status: "posted" | "reversed" | "reversal"; reversesId: number | null; correctsId: number | null;
+};
+
+async function fetchLedger(params: { from?: string; to?: string; type?: string; paymentMode?: string; includeReversed?: boolean }) {
   const q = new URLSearchParams();
   if (params.from) q.set("from", params.from);
   if (params.to) q.set("to", params.to);
   if (params.type) q.set("type", params.type);
   if (params.paymentMode) q.set("paymentMode", params.paymentMode);
+  if (params.includeReversed) q.set("includeReversed", "true");
   const r = await fetch(`${BASE}/api/cashbook?${q}`, { credentials: "include" });
   if (!r.ok) throw new Error("Failed to load cashbook");
   return r.json() as Promise<{
-    entries: Array<{
-      id: number; date: string; type: string; source: string;
-      referenceId: number | null; description: string; paymentMode: string;
-      amount: number; runningBalance: number; notes: string | null; createdAt: string;
-    }>;
+    entries: CashbookEntryRow[];
     totalIn: number; totalOut: number; netBalance: number;
   }>;
 }
@@ -385,6 +396,11 @@ function NewExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
 
 type Tab = "ledger" | "expenses";
 
+type CorrectEntryForm = {
+  date: string; type: "cash_in" | "cash_out"; source: string;
+  description: string; paymentMode: string; amount: string; notes: string;
+};
+
 export default function CashbookPage() {
   const [tab, setTab] = useState<Tab>("ledger");
   const [showNewEntry, setShowNewEntry] = useState(false);
@@ -397,6 +413,7 @@ export default function CashbookPage() {
   const [toDate, setToDate] = useState(today);
   const [typeFilter, setTypeFilter] = useState("__all__");
   const [modeFilter, setModeFilter] = useState("__all__");
+  const [showReversed, setShowReversed] = useState(false);
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -407,8 +424,8 @@ export default function CashbookPage() {
   });
 
   const ledgerQ = useQuery({
-    queryKey: ["cashbook", fromDate, toDate, typeFilter, modeFilter],
-    queryFn: () => fetchLedger({ from: fromDate, to: toDate, type: typeFilter === "__all__" ? undefined : typeFilter, paymentMode: modeFilter === "__all__" ? undefined : modeFilter }),
+    queryKey: ["cashbook", fromDate, toDate, typeFilter, modeFilter, showReversed],
+    queryFn: () => fetchLedger({ from: fromDate, to: toDate, type: typeFilter === "__all__" ? undefined : typeFilter, paymentMode: modeFilter === "__all__" ? undefined : modeFilter, includeReversed: showReversed }),
     enabled: tab === "ledger",
   });
 
@@ -418,13 +435,50 @@ export default function CashbookPage() {
     enabled: tab === "expenses",
   });
 
-  const deleteEntry = useMutation({
-    mutationFn: async (id: number) => {
-      const r = await fetch(`${BASE}/api/cashbook/${id}`, { method: "DELETE", credentials: "include" });
+  // ── Correction (reverse + optionally replace) ──
+  const [correcting, setCorrecting] = useState<CashbookEntryRow | null>(null);
+  const [correctForm, setCorrectForm] = useState<CorrectEntryForm>({
+    date: today(), type: "cash_in", source: "manual", description: "", paymentMode: "cash", amount: "", notes: "",
+  });
+  const [correctVoid, setCorrectVoid] = useState(false);
+  const [correctReason, setCorrectReason] = useState("");
+
+  const openCorrect = (e: CashbookEntryRow) => {
+    setCorrecting(e);
+    setCorrectForm({
+      date: e.date, type: e.type as "cash_in" | "cash_out", source: e.source,
+      description: e.description, paymentMode: e.paymentMode, amount: String(e.amount), notes: e.notes ?? "",
+    });
+    setCorrectVoid(false);
+    setCorrectReason("");
+  };
+
+  const correctEntry = useMutation({
+    mutationFn: async () => {
+      if (!correcting) throw new Error("Nothing to correct");
+      const body = correctVoid
+        ? { void: true, reason: correctReason || undefined }
+        : {
+            reason: correctReason || undefined,
+            date: correctForm.date, type: correctForm.type, source: correctForm.source,
+            description: correctForm.description, paymentMode: correctForm.paymentMode,
+            amount: parseFloat(correctForm.amount), notes: correctForm.notes || undefined,
+          };
+      const r = await fetch(`${BASE}/api/cashbook/${correcting.id}/correct`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
+      return r.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["cashbook"] }); qc.invalidateQueries({ queryKey: ["cashbook-summary"] }); },
-    onError: (e) => toast({ title: "Cannot delete", description: e.message, variant: "destructive" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cashbook"] });
+      qc.invalidateQueries({ queryKey: ["cashbook-summary"] });
+      toast({ title: correctVoid ? "Entry voided" : "Entry corrected" });
+      setCorrecting(null);
+    },
+    onError: (e) => toast({ title: "Cannot correct", description: e.message, variant: "destructive" }),
   });
 
   const deleteExpense = useMutation({
@@ -541,6 +595,10 @@ export default function CashbookPage() {
                 </SelectContent>
               </Select>
             </div>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer h-8 ml-auto">
+              <Checkbox checked={showReversed} onCheckedChange={v => setShowReversed(v === true)} />
+              Show reversed/voided
+            </label>
           </>
         )}
       </div>
@@ -591,12 +649,25 @@ export default function CashbookPage() {
                       </td>
                     </tr>
                   )}
-                  {ledger?.entries.map((e) => (
-                    <tr key={e.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  {ledger?.entries.map((e) => {
+                    const isLive = e.status === "posted";
+                    return (
+                    <tr key={e.id} className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors", !isLive && "opacity-50")}>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{e.date}</td>
                       <td className="px-4 py-3 max-w-[200px]">
-                        <div className="font-medium text-foreground truncate">{e.description}</div>
+                        <div className={cn("font-medium text-foreground truncate", !isLive && "line-through decoration-1")}>{e.description}</div>
                         {e.notes && <div className="text-muted-foreground text-xs truncate">{e.notes}</div>}
+                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                          {e.status === "reversed" && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">Reversed</span>
+                          )}
+                          {e.status === "reversal" && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{e.reversesId}</span>
+                          )}
+                          {e.correctsId != null && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{e.correctsId}</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-xs font-normal">
@@ -618,18 +689,19 @@ export default function CashbookPage() {
                         Rs {fmt(e.runningBalance)}
                       </td>
                       <td className="px-4 py-3">
-                        {["manual", "opening_balance", "adjustment", "salary", "transfer"].includes(e.source) && (
+                        {isLive && USER_EDITABLE_SOURCES.includes(e.source) && (
                           <button
-                            onClick={() => deleteEntry.mutate(e.id)}
-                            className="text-muted-foreground hover:text-red-400 transition-colors p-1"
-                            title="Delete entry"
+                            onClick={() => openCorrect(e)}
+                            className="text-muted-foreground hover:text-primary transition-colors p-1"
+                            title="Correct this entry"
                           >
-                            <Trash2 size={14} />
+                            <Pencil size={14} />
                           </button>
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -707,6 +779,85 @@ export default function CashbookPage() {
 
       <NewEntryDialog open={showNewEntry} onClose={() => setShowNewEntry(false)} />
       <NewExpenseDialog open={showNewExpense} onClose={() => setShowNewExpense(false)} />
+
+      {/* Correct Entry Dialog — reverses the original behind the scenes, never edits it */}
+      <Dialog open={!!correcting} onOpenChange={(o) => { if (!o) setCorrecting(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Undo2 size={16} /> Correct Entry #{correcting?.id}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <VoidToggle isVoid={correctVoid} onVoidChange={setCorrectVoid} reason={correctReason} onReasonChange={setCorrectReason} />
+            {!correctVoid && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Date</Label>
+                    <Input type="date" value={correctForm.date} onChange={e => setCorrectForm(f => ({ ...f, date: e.target.value }))} className="mt-1" />
+                  </div>
+                  <div>
+                    <Label>Type</Label>
+                    <Select value={correctForm.type} onValueChange={v => setCorrectForm(f => ({ ...f, type: v as "cash_in" | "cash_out" }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash_in">Cash In ↑</SelectItem>
+                        <SelectItem value="cash_out">Cash Out ↓</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <Select value={correctForm.source} onValueChange={v => setCorrectForm(f => ({ ...f, source: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual Entry</SelectItem>
+                      <SelectItem value="opening_balance">Opening Balance</SelectItem>
+                      <SelectItem value="adjustment">Adjustment</SelectItem>
+                      <SelectItem value="salary">Salary Payment</SelectItem>
+                      <SelectItem value="transfer">Cash ↔ Bank Transfer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Input value={correctForm.description} onChange={e => setCorrectForm(f => ({ ...f, description: e.target.value }))} placeholder="What is this entry for?" className="mt-1" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Payment Mode</Label>
+                    <Select value={correctForm.paymentMode} onValueChange={v => setCorrectForm(f => ({ ...f, paymentMode: v }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_MODES.map(m => (
+                          <SelectItem key={m} value={m}>{MODE_LABELS[m]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Amount (Rs)</Label>
+                    <Input type="number" min="0.01" step="0.01" value={correctForm.amount} onChange={e => setCorrectForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <Label>Notes (optional)</Label>
+                  <Input value={correctForm.notes} onChange={e => setCorrectForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any additional notes" className="mt-1" />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCorrecting(null)}>Cancel</Button>
+            <Button
+              onClick={() => correctEntry.mutate()}
+              disabled={correctEntry.isPending || (!correctVoid && (!correctForm.description || !correctForm.amount))}
+            >
+              {correctEntry.isPending ? "Saving…" : correctVoid ? "Void Entry" : "Save Correction"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { cashbookEntriesTable, expensesTable } from "@workspace/db/schema";
 import { and, between, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
+import { requireAuth, requireRole } from "../middlewares/auth";
 
 const router = Router();
 
@@ -19,16 +20,17 @@ const sources = ["manual", "opening_balance", "adjustment", "salary", "transfer"
 
 // ── GET /cashbook ─────────────────────────────────────────────────────────────
 
-router.get("/cashbook", async (req, res) => {
+router.get("/cashbook", requireAuth, async (req, res) => {
   const from = req.query.from as string | undefined;
   const to = req.query.to as string | undefined;
   const typeFilter = req.query.type as string | undefined;
   const modeFilter = req.query.paymentMode as string | undefined;
+  const includeReversed = req.query.includeReversed === "true";
 
   // Only "live" (posted) entries — a reversed original and its reversal (e.g. from a
   // corrected payment) are both excluded, so this reflects the correction, not the
-  // mistake (see the correction workflow).
-  const conditions = [eq(cashbookEntriesTable.status, "posted")];
+  // mistake (see the correction workflow). includeReversed reveals the full trail.
+  const conditions = includeReversed ? [] : [eq(cashbookEntriesTable.status, "posted")];
   if (from) conditions.push(gte(cashbookEntriesTable.date, from));
   if (to) conditions.push(lte(cashbookEntriesTable.date, to));
   if (typeFilter) conditions.push(eq(cashbookEntriesTable.type, typeFilter));
@@ -37,14 +39,16 @@ router.get("/cashbook", async (req, res) => {
   const rows = await db
     .select()
     .from(cashbookEntriesTable)
-    .where(and(...conditions))
+    .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(cashbookEntriesTable.date, cashbookEntriesTable.id);
 
-  // compute running balance
+  // compute running balance — only "live" (posted) rows advance it; a reversed/reversal
+  // row shown via includeReversed is audit context, not a real balance movement, so it
+  // just carries the running total forward unchanged rather than double-counting.
   let running = 0;
   const entries = rows.map((r) => {
     const amt = parseFloat(r.amount);
-    running += r.type === "cash_in" ? amt : -amt;
+    if (r.status === "posted") running += r.type === "cash_in" ? amt : -amt;
     return {
       id: r.id,
       date: toDateStr(r.date),
@@ -57,18 +61,19 @@ router.get("/cashbook", async (req, res) => {
       runningBalance: Math.round(running * 100) / 100,
       notes: r.notes ?? null,
       createdAt: r.createdAt,
+      status: r.status, reversesId: r.reversesId ?? null, correctsId: r.correctsId ?? null,
     };
   });
 
-  const totalIn = entries.reduce((s, e) => (e.type === "cash_in" ? s + e.amount : s), 0);
-  const totalOut = entries.reduce((s, e) => (e.type === "cash_out" ? s + e.amount : s), 0);
+  const totalIn = entries.reduce((s, e) => (e.status === "posted" && e.type === "cash_in" ? s + e.amount : s), 0);
+  const totalOut = entries.reduce((s, e) => (e.status === "posted" && e.type === "cash_out" ? s + e.amount : s), 0);
 
   res.json({ entries, totalIn, totalOut, netBalance: totalIn - totalOut });
 });
 
 // ── GET /cashbook/summary ─────────────────────────────────────────────────────
 
-router.get("/cashbook/summary", async (_req, res) => {
+router.get("/cashbook/summary", requireAuth, async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
 
   const rows = await db.select().from(cashbookEntriesTable).where(eq(cashbookEntriesTable.status, "posted"));
@@ -112,7 +117,7 @@ const entryInputSchema = z.object({
   notes: z.string().optional(),
 });
 
-router.post("/cashbook", async (req, res) => {
+router.post("/cashbook", requireAuth, async (req, res) => {
   const parsed = entryInputSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
@@ -143,30 +148,102 @@ router.post("/cashbook", async (req, res) => {
   });
 });
 
-// ── DELETE /cashbook/:id ──────────────────────────────────────────────────────
+// User-editable sources — the only ones a "Correct" (or, previously, "Delete") action
+// may ever touch directly. Auto-generated entries (payment/expense/purchase) must be
+// corrected via their source transaction, which cascades into cashbook_entries itself.
+const USER_EDITABLE_SOURCES = ["manual", "opening_balance", "adjustment", "salary", "transfer"] as const;
 
-router.delete("/cashbook/:id", async (req, res) => {
+function toCashbookResponse(r: typeof cashbookEntriesTable.$inferSelect) {
+  return {
+    id: r.id, date: toDateStr(r.date), type: r.type, source: r.source,
+    referenceId: r.referenceId ?? null, description: r.description, paymentMode: r.paymentMode,
+    amount: parseFloat(r.amount), notes: r.notes ?? null, createdAt: r.createdAt,
+    status: r.status, reversesId: r.reversesId ?? null, correctsId: r.correctsId ?? null,
+  };
+}
+
+// ── POST /cashbook/:id/correct ──────────────────────────────────────────────────
+// Correction workflow — see lib/db/src/schema/saleOrders.ts for the full design. A
+// posted entry is never edited or deleted in place. Restricted to the same
+// user-editable sources the old DELETE guard used — auto-generated entries are
+// corrected via their source transaction (Payments/Purchases), not here.
+
+const cashbookCorrectionSchema = z.object({
+  void: z.boolean().optional(),
+  reason: z.string().optional(),
+  date: z.string().min(1).optional(),
+  type: z.enum(entryTypes).optional(),
+  source: z.enum(sources).optional(),
+  description: z.string().min(1).optional(),
+  paymentMode: z.enum(paymentModes).optional(),
+  amount: z.coerce.number().positive().optional(),
+  notes: z.string().optional(),
+});
+
+router.post("/cashbook/:id/correct", requireRole("owner"), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const parsed = cashbookCorrectionSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", details: parsed.error.issues }); return; }
+  const d = parsed.data;
 
-  const [existing] = await db
-    .select()
-    .from(cashbookEntriesTable)
-    .where(eq(cashbookEntriesTable.id, id));
-
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-  if (existing.source !== "manual" && existing.source !== "opening_balance" && existing.source !== "adjustment" && existing.source !== "salary" && existing.source !== "transfer") {
-    res.status(400).json({ error: "Cannot delete auto-generated entries. Delete from the source module." });
+  const [original] = await db.select().from(cashbookEntriesTable).where(eq(cashbookEntriesTable.id, id));
+  if (!original) { res.status(404).json({ error: "Not found" }); return; }
+  if (!(USER_EDITABLE_SOURCES as readonly string[]).includes(original.source)) {
+    res.status(400).json({ error: "Cannot correct auto-generated entries here. Correct the source transaction instead (Payment/Purchase)." });
+    return;
+  }
+  if (original.status !== "posted") {
+    res.status(409).json({ error: `This entry is already ${original.status} — correct its replacement instead, not this row.` });
     return;
   }
 
-  await db.delete(cashbookEntriesTable).where(eq(cashbookEntriesTable.id, id));
-  res.status(204).send();
+  const isVoid = d.void === true;
+  if (!isVoid && (d.date == null || d.type == null || d.description == null || d.paymentMode == null || d.amount == null)) {
+    res.status(400).json({ error: "date, type, description, paymentMode, and amount are required unless void=true" });
+    return;
+  }
+
+  const userId = (req.session as any)?.userId ?? null;
+
+  const result = await db.transaction(async (tx) => {
+    const [reversal] = await tx.insert(cashbookEntriesTable).values({
+      date: original.date, type: original.type, source: original.source, referenceId: original.referenceId,
+      description: original.description, paymentMode: original.paymentMode, amount: original.amount,
+      notes: original.notes, createdById: userId, status: "reversal", reversesId: original.id,
+    }).returning();
+
+    await tx.update(cashbookEntriesTable).set({ status: "reversed" }).where(eq(cashbookEntriesTable.id, original.id));
+
+    let correctionId: number | null = null;
+    if (!isVoid) {
+      const [correction] = await tx.insert(cashbookEntriesTable).values({
+        date: d.date!, type: d.type!, source: d.source ?? original.source, description: d.description!,
+        paymentMode: d.paymentMode!, amount: String(d.amount!), notes: d.notes ?? null, createdById: userId,
+        status: "posted", correctsId: original.id,
+      }).returning();
+      correctionId = correction.id;
+    }
+
+    return { reversalId: reversal.id, correctionId };
+  });
+
+  const [origEntry] = await db.select().from(cashbookEntriesTable).where(eq(cashbookEntriesTable.id, original.id));
+  const [reversalEntry] = await db.select().from(cashbookEntriesTable).where(eq(cashbookEntriesTable.id, result.reversalId));
+  const correctionEntry = result.correctionId != null
+    ? (await db.select().from(cashbookEntriesTable).where(eq(cashbookEntriesTable.id, result.correctionId)))[0]
+    : null;
+
+  res.json({
+    original: toCashbookResponse(origEntry),
+    reversal: toCashbookResponse(reversalEntry),
+    ...(correctionEntry ? { correction: toCashbookResponse(correctionEntry) } : {}),
+  });
 });
 
 // ── GET /expenses ─────────────────────────────────────────────────────────────
 
-router.get("/expenses", async (req, res) => {
+router.get("/expenses", requireAuth, async (req, res) => {
   const from = req.query.from as string | undefined;
   const to = req.query.to as string | undefined;
   const category = req.query.category as string | undefined;
@@ -202,7 +279,7 @@ const expenseInputSchema = z.object({
   notes: z.string().optional(),
 });
 
-router.post("/expenses", async (req, res) => {
+router.post("/expenses", requireAuth, async (req, res) => {
   const parsed = expenseInputSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
@@ -250,7 +327,7 @@ router.post("/expenses", async (req, res) => {
 
 // ── DELETE /expenses/:id ──────────────────────────────────────────────────────
 
-router.delete("/expenses/:id", async (req, res) => {
+router.delete("/expenses/:id", requireAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 

@@ -25,15 +25,21 @@ async function calcStock(productId: number) {
   const [p] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!p) return null;
 
+  // Join to the parent invoice/order and filter to "live" (posted) rows — a reversed
+  // purchase/sale and its reversal mirror both have their own item rows with the same
+  // qty, so without this filter a correction would double-count instead of netting out
+  // (see the correction workflow).
   const [purchAgg] = await db
     .select({ total: sql<string>`coalesce(sum(${purchaseInvoiceItemsTable.qty}),0)` })
     .from(purchaseInvoiceItemsTable)
-    .where(eq(purchaseInvoiceItemsTable.productId, productId));
+    .innerJoin(purchaseInvoicesTable, eq(purchaseInvoiceItemsTable.purchaseInvoiceId, purchaseInvoicesTable.id))
+    .where(and(eq(purchaseInvoiceItemsTable.productId, productId), eq(purchaseInvoicesTable.status, "posted")));
 
   const [saleAgg] = await db
     .select({ total: sql<string>`coalesce(sum(${saleOrderItemsTable.qty}),0)` })
     .from(saleOrderItemsTable)
-    .where(eq(saleOrderItemsTable.productId, productId));
+    .innerJoin(saleOrdersTable, eq(saleOrderItemsTable.saleOrderId, saleOrdersTable.id))
+    .where(and(eq(saleOrderItemsTable.productId, productId), eq(saleOrdersTable.status, "posted")));
 
   const [adjAgg] = await db
     .select({ total: sql<string>`coalesce(sum(${stockAdjustmentsTable.qty}),0)` })
@@ -93,39 +99,43 @@ router.get("/inventory/:productId/movements", requireAuth, async (req, res) => {
   const [p] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!p) { res.status(404).json({ error: "Product not found" }); return; }
 
-  // Purchases
+  // Purchases — only from "live" (posted) invoices; a reversed/corrected purchase and
+  // its reversal mirror are both excluded, so movement history reflects the correction,
+  // not the mistake (see the correction workflow).
   const purchItems = await db
     .select()
     .from(purchaseInvoiceItemsTable)
     .where(eq(purchaseInvoiceItemsTable.productId, productId));
 
-  const purchMovements = await Promise.all(purchItems.map(async (item) => {
+  const purchMovements = (await Promise.all(purchItems.map(async (item) => {
     const [inv] = await db.select().from(purchaseInvoicesTable).where(eq(purchaseInvoicesTable.id, item.purchaseInvoiceId));
+    if (!inv || inv.status !== "posted") return null;
     return {
       id: `p-${item.id}`, type: "in" as const,
-      date: inv ? toDateStr(inv.date) : "",
+      date: toDateStr(inv.date),
       qty: parseFloat(item.qty),
-      ref: inv?.invoiceNo ? `Purch #${inv.invoiceNo}` : `Purchase #${item.purchaseInvoiceId}`,
+      ref: inv.invoiceNo ? `Purch #${inv.invoiceNo}` : `Purchase #${item.purchaseInvoiceId}`,
       notes: null,
     };
-  }));
+  }))).filter((m): m is NonNullable<typeof m> => m != null);
 
-  // Sales
+  // Sales — same "live" (posted) filter.
   const saleItems = await db
     .select()
     .from(saleOrderItemsTable)
     .where(eq(saleOrderItemsTable.productId, productId));
 
-  const saleMovements = await Promise.all(saleItems.map(async (item) => {
+  const saleMovements = (await Promise.all(saleItems.map(async (item) => {
     const [order] = await db.select().from(saleOrdersTable).where(eq(saleOrdersTable.id, item.saleOrderId));
+    if (!order || order.status !== "posted") return null;
     return {
       id: `s-${item.id}`, type: "out" as const,
-      date: order ? toDateStr(order.date) : "",
+      date: toDateStr(order.date),
       qty: parseFloat(item.qty),
       ref: `Sale Order #${item.saleOrderId}`,
       notes: null,
     };
-  }));
+  }))).filter((m): m is NonNullable<typeof m> => m != null);
 
   // Adjustments
   const adjs = await db

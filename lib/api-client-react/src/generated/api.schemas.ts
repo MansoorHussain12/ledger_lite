@@ -800,6 +800,15 @@ export const PurchaseInvoiceRowPaymentMode = {
   other: 'other',
 } as const;
 
+export type PurchaseInvoiceRowStatus = typeof PurchaseInvoiceRowStatus[keyof typeof PurchaseInvoiceRowStatus];
+
+
+export const PurchaseInvoiceRowStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
 export interface PurchaseInvoiceRow {
   id: number;
   supplierId: number;
@@ -814,6 +823,11 @@ export interface PurchaseInvoiceRow {
   /** @nullable */
   notes?: string | null;
   createdAt: string;
+  status: PurchaseInvoiceRowStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
 }
 
 export interface SupplierDetail {
@@ -881,6 +895,15 @@ export const PurchaseInvoiceDetailPaymentMode = {
   other: 'other',
 } as const;
 
+export type PurchaseInvoiceDetailStatus = typeof PurchaseInvoiceDetailStatus[keyof typeof PurchaseInvoiceDetailStatus];
+
+
+export const PurchaseInvoiceDetailStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
 export interface PurchaseInvoiceDetail {
   id: number;
   supplierId: number;
@@ -896,6 +919,45 @@ export interface PurchaseInvoiceDetail {
   notes?: string | null;
   createdAt: string;
   items: PurchaseInvoiceItemRow[];
+  status: PurchaseInvoiceDetailStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export type PurchaseCorrectionInputPaymentMode = typeof PurchaseCorrectionInputPaymentMode[keyof typeof PurchaseCorrectionInputPaymentMode];
+
+
+export const PurchaseCorrectionInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as PurchaseInvoiceInput) to reverse-and-replace.
+ */
+export interface PurchaseCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  supplierId?: number;
+  date?: string;
+  invoiceNo?: string;
+  items?: PurchaseInvoiceItemInput[];
+  paidAmount?: number;
+  paymentMode?: PurchaseCorrectionInputPaymentMode;
+  notes?: string;
+  updateCostPrice?: boolean;
+}
+
+export interface PurchaseCorrectionResult {
+  original: PurchaseInvoiceRow;
+  reversal: PurchaseInvoiceRow;
+  correction?: PurchaseInvoiceRow;
 }
 
 export type CashbookEntryType = typeof CashbookEntryType[keyof typeof CashbookEntryType];
@@ -913,6 +975,7 @@ export const CashbookEntrySource = {
   manual: 'manual',
   payment: 'payment',
   expense: 'expense',
+  purchase: 'purchase',
   opening_balance: 'opening_balance',
   adjustment: 'adjustment',
   salary: 'salary',
@@ -931,6 +994,15 @@ export const CashbookEntryPaymentMode = {
   other: 'other',
 } as const;
 
+export type CashbookEntryStatus = typeof CashbookEntryStatus[keyof typeof CashbookEntryStatus];
+
+
+export const CashbookEntryStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
 export interface CashbookEntry {
   id: number;
   date: string;
@@ -945,6 +1017,11 @@ export interface CashbookEntry {
   /** @nullable */
   notes?: string | null;
   createdAt: string;
+  status: CashbookEntryStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
 }
 
 export type CashbookEntryInputType = typeof CashbookEntryInputType[keyof typeof CashbookEntryInputType];
@@ -987,6 +1064,59 @@ export interface CashbookEntryInput {
   /** @minimum 0.01 */
   amount: number;
   notes?: string;
+}
+
+export type CashbookCorrectionInputType = typeof CashbookCorrectionInputType[keyof typeof CashbookCorrectionInputType];
+
+
+export const CashbookCorrectionInputType = {
+  cash_in: 'cash_in',
+  cash_out: 'cash_out',
+} as const;
+
+export type CashbookCorrectionInputSource = typeof CashbookCorrectionInputSource[keyof typeof CashbookCorrectionInputSource];
+
+
+export const CashbookCorrectionInputSource = {
+  manual: 'manual',
+  opening_balance: 'opening_balance',
+  adjustment: 'adjustment',
+  salary: 'salary',
+  transfer: 'transfer',
+} as const;
+
+export type CashbookCorrectionInputPaymentMode = typeof CashbookCorrectionInputPaymentMode[keyof typeof CashbookCorrectionInputPaymentMode];
+
+
+export const CashbookCorrectionInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as CashbookEntryInput) to reverse-and-replace. Only valid for user-editable sources.
+ */
+export interface CashbookCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  date?: string;
+  type?: CashbookCorrectionInputType;
+  source?: CashbookCorrectionInputSource;
+  description?: string;
+  paymentMode?: CashbookCorrectionInputPaymentMode;
+  /** @minimum 0.01 */
+  amount?: number;
+  notes?: string;
+}
+
+export interface CashbookCorrectionResult {
+  original: CashbookEntry;
+  reversal: CashbookEntry;
+  correction?: CashbookEntry;
 }
 
 export interface CashbookLedger {
@@ -1142,6 +1272,10 @@ export type ListPurchasesParams = {
 supplierId?: number;
 from?: string;
 to?: string;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
 };
 
 export type ListCashbookEntriesParams = {
@@ -1149,6 +1283,10 @@ from?: string;
 to?: string;
 type?: ListCashbookEntriesType;
 paymentMode?: ListCashbookEntriesPaymentMode;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
 };
 
 export type ListCashbookEntriesType = typeof ListCashbookEntriesType[keyof typeof ListCashbookEntriesType];

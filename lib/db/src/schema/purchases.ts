@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, integer, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { productsTable } from "./products";
 
@@ -27,6 +27,12 @@ export const purchaseInvoicesTable = pgTable("purchase_invoices", {
   notes: text("notes"),
   createdById: integer("created_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Correction workflow — see saleOrdersTable.status for the full explanation. Same
+  // three-column pattern: 'posted' | 'reversed' | 'reversal', with reversesId/correctsId
+  // linking a reversal/correction row back to the original it relates to.
+  status: text("status").$type<"posted" | "reversed" | "reversal">().notNull().default("posted"),
+  reversesId: integer("reverses_id").references((): AnyPgColumn => purchaseInvoicesTable.id),
+  correctsId: integer("corrects_id").references((): AnyPgColumn => purchaseInvoicesTable.id),
 });
 
 export const purchaseInvoiceItemsTable = pgTable("purchase_invoice_items", {

@@ -1112,6 +1112,11 @@ paths:
           schema:
             type: string
             format: date
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
       responses:
         "200":
           description: Purchase list
@@ -1157,19 +1162,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PurchaseInvoiceDetail"
-    delete:
-      operationId: deletePurchase
+
+  /purchases/{id}/correct:
+    post:
+      operationId: correctPurchase
       tags: [suppliers]
-      summary: Delete a purchase invoice
+      summary: Correct (or void) a posted purchase invoice — never edits or deletes it in place
+      description: >
+        Standard correction workflow (see /sale-orders/{id}/correct for the full
+        explanation). Also reverses and reposts the invoice's auto-posted cashbook entry
+        (if any) and re-applies updateCostPrice, so cashbook balance and product cost
+        prices reflect the correction too.
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseCorrectionInput"
       responses:
-        "204":
-          description: Deleted
+        "200":
+          description: Correction applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseCorrectionResult"
+        "409":
+          description: The target row is not currently posted
 
   # ── CASHBOOK ──────────────────────────────────────────────────────────────
   /cashbook:
@@ -1198,6 +1222,11 @@ paths:
           schema:
             type: string
             enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
       responses:
         "200":
           description: Cashbook entries with running balance
@@ -1236,20 +1265,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/CashbookSummary"
 
-  /cashbook/{id}:
-    delete:
-      operationId: deleteCashbookEntry
+  /cashbook/{id}/correct:
+    post:
+      operationId: correctCashbookEntry
       tags: [cashbook]
-      summary: Delete a manual cashbook entry
+      summary: Correct (or void) a posted cashbook entry — never edits or deletes it in place
+      description: >
+        Standard correction workflow (see /sale-orders/{id}/correct for the full
+        explanation). Restricted to user-editable sources (manual, opening_balance,
+        adjustment, salary, transfer) — auto-generated entries (payment/expense/purchase)
+        must be corrected via their source transaction instead.
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CashbookCorrectionInput"
       responses:
-        "204":
-          description: Deleted
+        "200":
+          description: Correction applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashbookCorrectionResult"
+        "409":
+          description: The target row is not currently posted
 
   # ── EXPENSES ──────────────────────────────────────────────────────────────
   /expenses:
@@ -2626,7 +2672,7 @@ components:
 
     PurchaseInvoiceRow:
       type: object
-      required: [id, supplierId, supplierName, date, totalAmount, paidAmount, balance, paymentMode, createdAt]
+      required: [id, supplierId, supplierName, date, totalAmount, paidAmount, balance, paymentMode, createdAt, status]
       properties:
         id:
           type: integer
@@ -2653,6 +2699,13 @@ components:
         createdAt:
           type: string
           format: date-time
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
 
     PurchaseInvoiceItemRow:
       type: object
@@ -2673,7 +2726,7 @@ components:
 
     PurchaseInvoiceDetail:
       type: object
-      required: [id, supplierId, supplierName, date, totalAmount, paidAmount, balance, paymentMode, createdAt, items]
+      required: [id, supplierId, supplierName, date, totalAmount, paidAmount, balance, paymentMode, createdAt, items, status]
       properties:
         id:
           type: integer
@@ -2704,11 +2757,62 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PurchaseInvoiceItemRow"
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
+
+    PurchaseCorrectionInput:
+      type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (same shape as PurchaseInvoiceInput) to
+        reverse-and-replace.
+      properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        supplierId:
+          type: integer
+        date:
+          type: string
+          format: date
+        invoiceNo:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseInvoiceItemInput"
+        paidAmount:
+          type: number
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        notes:
+          type: string
+        updateCostPrice:
+          type: boolean
+          default: true
+
+    PurchaseCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/PurchaseInvoiceRow"
+        reversal:
+          $ref: "#/components/schemas/PurchaseInvoiceRow"
+        correction:
+          $ref: "#/components/schemas/PurchaseInvoiceRow"
 
     # ── CASHBOOK SCHEMAS ──────────────────────────────────────────────────
     CashbookEntry:
       type: object
-      required: [id, date, type, source, description, paymentMode, amount, runningBalance, createdAt]
+      required: [id, date, type, source, description, paymentMode, amount, runningBalance, createdAt, status]
       properties:
         id:
           type: integer
@@ -2720,7 +2824,7 @@ components:
           enum: [cash_in, cash_out]
         source:
           type: string
-          enum: [manual, payment, expense, opening_balance, adjustment, salary, transfer]
+          enum: [manual, payment, expense, purchase, opening_balance, adjustment, salary, transfer]
         referenceId:
           type: ["integer", "null"]
         description:
@@ -2737,6 +2841,13 @@ components:
         createdAt:
           type: string
           format: date-time
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
 
     CashbookEntryInput:
       type: object
@@ -2762,6 +2873,48 @@ components:
           minimum: 0.01
         notes:
           type: string
+
+    CashbookCorrectionInput:
+      type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (same shape as CashbookEntryInput) to
+        reverse-and-replace. Only valid for user-editable sources.
+      properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        date:
+          type: string
+          format: date
+        type:
+          type: string
+          enum: [cash_in, cash_out]
+        source:
+          type: string
+          enum: [manual, opening_balance, adjustment, salary, transfer]
+        description:
+          type: string
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+          minimum: 0.01
+        notes:
+          type: string
+
+    CashbookCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/CashbookEntry"
+        reversal:
+          $ref: "#/components/schemas/CashbookEntry"
+        correction:
+          $ref: "#/components/schemas/CashbookEntry"
 
     CashbookLedger:
       type: object

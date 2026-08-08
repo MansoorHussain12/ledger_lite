@@ -5,8 +5,12 @@ export const cashbookEntriesTable = pgTable("cashbook_entries", {
   id: serial("id").primaryKey(),
   date: date("date").notNull(),
   type: text("type").$type<"cash_in" | "cash_out">().notNull(),
+  // "purchase" was previously mislabeled "manual" — widened here so the Purchases
+  // correction workflow can find/cascade its own auto-posted entry unambiguously,
+  // the same way "payment" already lets Payments do so. TS-level hint only (plain
+  // text column, no DB enum), so no migration needed to add a value.
   source: text("source")
-    .$type<"manual" | "payment" | "expense" | "opening_balance" | "adjustment" | "salary" | "transfer">()
+    .$type<"manual" | "payment" | "expense" | "purchase" | "opening_balance" | "adjustment" | "salary" | "transfer">()
     .notNull()
     .default("manual"),
   referenceId: integer("reference_id"),
