@@ -11,8 +11,8 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
   const now = new Date();
 
   const result = await Promise.all(customers.map(async (c) => {
-    const orders = await db.select().from(saleOrdersTable).where(eq(saleOrdersTable.customerId, c.id));
-    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(eq(paymentsTable.customerId, c.id));
+    const orders = await db.select().from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
+    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
 
     const openingBal = parseFloat(c.openingBalance ?? "0");
     const totalPaid = parseFloat(String(pmts[0]?.total ?? 0));
@@ -47,7 +47,7 @@ router.get("/reports/daily-collection", requireAuth, async (req, res): Promise<v
   const query = GetDailyCollectionReportQueryParams.safeParse(req.query);
   const date = (query.success && query.data.date) ? query.data.date : new Date().toISOString().split("T")[0];
 
-  const pmts = await db.select().from(paymentsTable).where(eq(paymentsTable.date, String(date))).orderBy(paymentsTable.createdAt);
+  const pmts = await db.select().from(paymentsTable).where(and(eq(paymentsTable.date, String(date)), eq(paymentsTable.status, "posted"))).orderBy(paymentsTable.createdAt);
   const result = await Promise.all(pmts.map(async (p) => {
     const [c] = await db.select().from(customersTable).where(eq(customersTable.id, p.customerId));
     return { id: p.id, customerId: p.customerId, customerName: c?.name ?? "", date: p.date, type: p.type, amount: parseFloat(p.amount), bankAccount: p.bankAccount ?? null, chequeNo: p.chequeNo ?? null, notes: p.notes ?? null, createdAt: p.createdAt };
@@ -68,7 +68,7 @@ router.get("/reports/monthly-sales", requireAuth, async (req, res): Promise<void
   const toDate = new Date(year, month, 0);
   const to = `${year}-${String(month).padStart(2, "0")}-${String(toDate.getDate()).padStart(2, "0")}`;
 
-  const orders = await db.select().from(saleOrdersTable).where(and(gte(saleOrdersTable.date, from), lte(saleOrdersTable.date, to)));
+  const orders = await db.select().from(saleOrdersTable).where(and(gte(saleOrdersTable.date, from), lte(saleOrdersTable.date, to), eq(saleOrdersTable.status, "posted")));
   const products = await db.select().from(productsTable);
 
   const byProduct: Record<number, { productId: number; productName: string; totalQty: number; totalAmount: number }> = {};
@@ -97,11 +97,12 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
   const to = (req.query.to as string) || todayStr;
   const categoryFilter = req.query.category ? String(req.query.category) : null;
 
-  // Fetch all sale orders in range with their items
+  // Fetch all sale orders in range with their items — only "live" (posted) orders, so
+  // this reflects corrections, not mistakes (see the correction workflow).
   const orders = await db
     .select()
     .from(saleOrdersTable)
-    .where(and(gte(saleOrdersTable.date, from), lte(saleOrdersTable.date, to)));
+    .where(and(gte(saleOrdersTable.date, from), lte(saleOrdersTable.date, to), eq(saleOrdersTable.status, "posted")));
 
   const allProducts = await db.select().from(productsTable);
   // Build a set of product IDs matching the category filter
@@ -250,12 +251,12 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
 router.get("/reports/outstanding", requireAuth, async (_req, res): Promise<void> => {
   const customers = await db.select().from(customersTable).orderBy(customersTable.name);
   const result = await Promise.all(customers.map(async (c) => {
-    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(eq(saleOrdersTable.customerId, c.id));
-    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(eq(paymentsTable.customerId, c.id));
+    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
+    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
     const balance = parseFloat(c.openingBalance ?? "0") + parseFloat(String(sales[0]?.total ?? 0)) - parseFloat(String(pmts[0]?.total ?? 0));
 
-    const lastSale = await db.select({ date: saleOrdersTable.date }).from(saleOrdersTable).where(eq(saleOrdersTable.customerId, c.id)).orderBy(sql`${saleOrdersTable.date} desc`).limit(1);
-    const lastPmt = await db.select({ date: paymentsTable.date }).from(paymentsTable).where(eq(paymentsTable.customerId, c.id)).orderBy(sql`${paymentsTable.date} desc`).limit(1);
+    const lastSale = await db.select({ date: saleOrdersTable.date }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted"))).orderBy(sql`${saleOrdersTable.date} desc`).limit(1);
+    const lastPmt = await db.select({ date: paymentsTable.date }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted"))).orderBy(sql`${paymentsTable.date} desc`).limit(1);
     const creditLimit = c.creditLimit ? parseFloat(c.creditLimit) : null;
     const isOverLimit = creditLimit != null && balance > creditLimit;
 

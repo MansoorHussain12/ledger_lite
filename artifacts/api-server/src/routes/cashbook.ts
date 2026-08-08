@@ -25,7 +25,10 @@ router.get("/cashbook", async (req, res) => {
   const typeFilter = req.query.type as string | undefined;
   const modeFilter = req.query.paymentMode as string | undefined;
 
-  const conditions = [];
+  // Only "live" (posted) entries — a reversed original and its reversal (e.g. from a
+  // corrected payment) are both excluded, so this reflects the correction, not the
+  // mistake (see the correction workflow).
+  const conditions = [eq(cashbookEntriesTable.status, "posted")];
   if (from) conditions.push(gte(cashbookEntriesTable.date, from));
   if (to) conditions.push(lte(cashbookEntriesTable.date, to));
   if (typeFilter) conditions.push(eq(cashbookEntriesTable.type, typeFilter));
@@ -34,7 +37,7 @@ router.get("/cashbook", async (req, res) => {
   const rows = await db
     .select()
     .from(cashbookEntriesTable)
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(cashbookEntriesTable.date, cashbookEntriesTable.id);
 
   // compute running balance
@@ -68,7 +71,7 @@ router.get("/cashbook", async (req, res) => {
 router.get("/cashbook/summary", async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
 
-  const rows = await db.select().from(cashbookEntriesTable);
+  const rows = await db.select().from(cashbookEntriesTable).where(eq(cashbookEntriesTable.status, "posted"));
 
   const balanceByMode: Record<string, number> = {};
   let todayIn = 0;

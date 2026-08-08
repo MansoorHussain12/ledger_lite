@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import {
   useListPayments, getListPaymentsQueryKey, useCreatePayment,
-  useDeletePayment, useListCustomers, getListCustomersQueryKey,
+  useCorrectPayment, useListCustomers, getListCustomersQueryKey,
+  type Payment,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { VoidToggle } from "@/components/correction-fields";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Filter, Banknote, Building2 } from "lucide-react";
+import { Plus, Pencil, Filter, Banknote, Building2, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PaymentForm {
@@ -39,6 +42,7 @@ export default function PaymentsPage() {
   const [toDate, setToDate] = useState("");
   const [filterCustomerId, setFilterCustomerId] = useState<number | undefined>();
   const [filterType, setFilterType] = useState<"cash" | "bank" | undefined>();
+  const [showReversed, setShowReversed] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<PaymentForm>(defaultForm());
   const { toast } = useToast();
@@ -49,12 +53,13 @@ export default function PaymentsPage() {
     to: toDate || undefined,
     customerId: filterCustomerId || undefined,
     type: filterType,
+    includeReversed: showReversed || undefined,
   };
 
   const { data: payments = [], isLoading } = useListPayments(params, { query: { queryKey: getListPaymentsQueryKey(params) } });
   const { data: customers = [] } = useListCustomers(undefined, { query: { queryKey: getListCustomersQueryKey() } });
   const createMutation = useCreatePayment();
-  const deleteMutation = useDeletePayment();
+  const correctMutation = useCorrectPayment();
 
   // Pre-select customer from URL
   const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
@@ -89,19 +94,51 @@ export default function PaymentsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Delete this payment?")) return;
+  // ── Correction (reverse + optionally replace) ──
+  const [correcting, setCorrecting] = useState<Payment | null>(null);
+  const [correctForm, setCorrectForm] = useState<PaymentForm>(defaultForm());
+  const [correctVoid, setCorrectVoid] = useState(false);
+  const [correctReason, setCorrectReason] = useState("");
+
+  const openCorrect = (p: Payment) => {
+    setCorrecting(p);
+    setCorrectForm({
+      customerId: p.customerId, date: p.date, type: p.type, amount: String(p.amount),
+      bankAccount: p.bankAccount ?? "", chequeNo: p.chequeNo ?? "", notes: p.notes ?? "",
+    });
+    setCorrectVoid(false);
+    setCorrectReason("");
+  };
+
+  const handleCorrect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!correcting) return;
     try {
-      await deleteMutation.mutateAsync({ id });
+      await correctMutation.mutateAsync({
+        id: correcting.id,
+        data: correctVoid
+          ? { void: true, reason: correctReason || undefined }
+          : {
+              reason: correctReason || undefined,
+              customerId: correctForm.customerId as number,
+              date: correctForm.date,
+              type: correctForm.type,
+              amount: parseFloat(correctForm.amount),
+              bankAccount: correctForm.bankAccount || undefined,
+              chequeNo: correctForm.chequeNo || undefined,
+              notes: correctForm.notes || undefined,
+            },
+      });
       queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
-      toast({ title: "Payment deleted" });
+      setCorrecting(null);
+      toast({ title: correctVoid ? "Payment voided" : "Payment corrected" });
     } catch {
-      toast({ title: "Failed to delete", variant: "destructive" });
+      toast({ title: "Failed to correct payment", variant: "destructive" });
     }
   };
 
-  const totalCash = payments.filter(p => p.type === "cash").reduce((s, p) => s + p.amount, 0);
-  const totalBank = payments.filter(p => p.type === "bank").reduce((s, p) => s + p.amount, 0);
+  const totalCash = payments.filter(p => p.type === "cash" && p.status === "posted").reduce((s, p) => s + p.amount, 0);
+  const totalBank = payments.filter(p => p.type === "bank" && p.status === "posted").reduce((s, p) => s + p.amount, 0);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -142,6 +179,10 @@ export default function PaymentsPage() {
           <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="text-sm h-8 w-36" />
         </div>
         <Button variant="outline" size="sm" onClick={() => { setFromDate(""); setToDate(""); setFilterCustomerId(undefined); setFilterType(undefined); }}>Clear</Button>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer ml-auto mb-1.5">
+          <Checkbox checked={showReversed} onCheckedChange={v => setShowReversed(v === true)} />
+          Show reversed/voided
+        </label>
       </div>
 
       {/* Table */}
@@ -160,8 +201,10 @@ export default function PaymentsPage() {
           <tbody className="divide-y divide-border">
             {isLoading && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>}
             {!isLoading && payments.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No payments found</td></tr>}
-            {payments.map(p => (
-              <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+            {payments.map(p => {
+              const isLive = p.status === "posted";
+              return (
+              <tr key={p.id} className={cn("hover:bg-muted/20 transition-colors", !isLive && "opacity-50")}>
                 <td className="px-4 py-3 text-muted-foreground">{formatDate(p.date)}</td>
                 <td className="px-4 py-3 font-medium">
                   <Link href={`/customers/${p.customerId}`}>
@@ -169,26 +212,40 @@ export default function PaymentsPage() {
                   </Link>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full font-medium",
-                    p.type === "cash" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
-                  )}>
-                    {p.type === "cash" ? <Banknote size={11} /> : <Building2 size={11} />}
-                    {p.type === "cash" ? "Cash" : "Bank"}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full font-medium",
+                      p.type === "cash" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
+                    )}>
+                      {p.type === "cash" ? <Banknote size={11} /> : <Building2 size={11} />}
+                      {p.type === "cash" ? "Cash" : "Bank"}
+                    </span>
+                    {p.status === "reversed" && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium line-through decoration-1">Reversed</span>
+                    )}
+                    {p.status === "reversal" && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Reversal of #{p.reversesId}</span>
+                    )}
+                    {p.correctsId != null && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Corrects #{p.correctsId}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground hidden md:table-cell">
                   {p.bankAccount && <div>{p.bankAccount}</div>}
                   {p.chequeNo && <div>Chq: {p.chequeNo}</div>}
                   {p.notes && <div>{p.notes}</div>}
                 </td>
-                <td className="px-4 py-3 text-right font-semibold text-emerald-600">Rs. {formatAmount(p.amount)}</td>
+                <td className={cn("px-4 py-3 text-right font-semibold", isLive ? "text-emerald-600" : "text-muted-foreground line-through decoration-1")}>Rs. {formatAmount(p.amount)}</td>
                 <td className="px-4 py-3">
-                  <button onClick={() => handleDelete(p.id)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors">
-                    <Trash2 size={14} />
-                  </button>
+                  {isLive && (
+                    <button onClick={() => openCorrect(p)} title="Correct this payment" className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors">
+                      <Pencil size={14} />
+                    </button>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -250,6 +307,76 @@ export default function PaymentsPage() {
               <Button type="button" variant="outline" onClick={() => setShowForm(false)} className="flex-1">Cancel</Button>
               <Button type="submit" className="flex-1" disabled={createMutation.isPending}>
                 {createMutation.isPending ? "Recording..." : "Record Payment"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Correct Payment Dialog — reverses the original behind the scenes, never edits it */}
+      <Dialog open={!!correcting} onOpenChange={(o) => { if (!o) setCorrecting(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Undo2 size={16} /> Correct Payment #{correcting?.id}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCorrect} className="space-y-4">
+            <VoidToggle isVoid={correctVoid} onVoidChange={setCorrectVoid} reason={correctReason} onReasonChange={setCorrectReason} />
+            {!correctVoid && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Customer *</Label>
+                  <select className="w-full text-sm border border-border rounded-md px-3 py-2 bg-background" value={correctForm.customerId} onChange={e => setCorrectForm(f => ({ ...f, customerId: e.target.value ? parseInt(e.target.value) : "" }))} required>
+                    <option value="">Select customer...</option>
+                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Date *</Label>
+                    <Input type="date" value={correctForm.date} onChange={e => setCorrectForm(f => ({ ...f, date: e.target.value }))} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Amount (Rs.) *</Label>
+                    <Input type="number" value={correctForm.amount} onChange={e => setCorrectForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required min="1" step="0.01" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Payment Type *</Label>
+                  <div className="flex gap-2">
+                    {(["cash", "bank"] as const).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setCorrectForm(f => ({ ...f, type: t }))}
+                        className={cn("flex-1 py-2 text-sm rounded-md border transition-colors capitalize", correctForm.type === t ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+                      >
+                        {t === "cash" ? "Cash" : "Bank Transfer"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {correctForm.type === "bank" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Bank Account</Label>
+                      <Input value={correctForm.bankAccount} onChange={e => setCorrectForm(f => ({ ...f, bankAccount: e.target.value }))} placeholder="Account name/no." />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Cheque Number</Label>
+                      <Input value={correctForm.chequeNo} onChange={e => setCorrectForm(f => ({ ...f, chequeNo: e.target.value }))} placeholder="Chq number" />
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label>Notes</Label>
+                  <Input value={correctForm.notes} onChange={e => setCorrectForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
+                </div>
+              </>
+            )}
+            <div className="flex gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setCorrecting(null)} className="flex-1">Cancel</Button>
+              <Button type="submit" className="flex-1" disabled={correctMutation.isPending}>
+                {correctMutation.isPending ? "Saving..." : correctVoid ? "Void Payment" : "Save Correction"}
               </Button>
             </div>
           </form>

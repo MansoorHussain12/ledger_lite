@@ -11,7 +11,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // Shared by /dashboard/summary (todayProfit) and /dashboard/profit-breakdown, so the
 // KPI card total and the drill-down dialog's grand total can never disagree.
 async function getProfitBreakdownForDate(date: string) {
-  const orders = await db.select().from(saleOrdersTable).where(eq(saleOrdersTable.date, date));
+  // Only "live" (posted) orders — a reversed/corrected mistake is excluded, so this
+  // reflects the correction, not the mistake (see the correction workflow).
+  const orders = await db.select().from(saleOrdersTable).where(and(eq(saleOrdersTable.date, date), eq(saleOrdersTable.status, "posted")));
 
   const orderIds = orders.map(o => o.id);
   const items = orderIds.length
@@ -97,13 +99,13 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
   const customers = await db.select().from(customersTable);
   let totalOutstanding = 0;
   for (const c of customers) {
-    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(eq(saleOrdersTable.customerId, c.id));
-    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(eq(paymentsTable.customerId, c.id));
+    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
+    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
     totalOutstanding += parseFloat(c.openingBalance ?? "0") + parseFloat(String(sales[0]?.total ?? 0)) - parseFloat(String(pmts[0]?.total ?? 0));
   }
 
-  const todayCollections = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(eq(paymentsTable.date, today));
-  const todaySales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(eq(saleOrdersTable.date, today));
+  const todayCollections = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.date, today), eq(paymentsTable.status, "posted")));
+  const todaySales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.date, today), eq(saleOrdersTable.status, "posted")));
   const todayProfit = (await getProfitBreakdownForDate(today)).totalProfit;
 
   const activeProducts = await db.select({ count: sql<number>`count(*)` }).from(productsTable);
@@ -130,8 +132,8 @@ router.get("/dashboard/profit-breakdown", requireAuth, async (req, res): Promise
 router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<void> => {
   const customers = await db.select().from(customersTable);
   const withBalance = await Promise.all(customers.map(async (c) => {
-    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(eq(saleOrdersTable.customerId, c.id));
-    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(eq(paymentsTable.customerId, c.id));
+    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
+    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
     const balance = parseFloat(c.openingBalance ?? "0") + parseFloat(String(sales[0]?.total ?? 0)) - parseFloat(String(pmts[0]?.total ?? 0));
     return { customerId: c.id, customerName: c.name, area: c.area ?? null, balance };
   }));
@@ -139,8 +141,8 @@ router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<voi
 });
 
 router.get("/dashboard/recent-activity", requireAuth, async (_req, res): Promise<void> => {
-  const recentOrders = await db.select().from(saleOrdersTable).orderBy(desc(saleOrdersTable.createdAt)).limit(10);
-  const recentPayments = await db.select().from(paymentsTable).orderBy(desc(paymentsTable.createdAt)).limit(10);
+  const recentOrders = await db.select().from(saleOrdersTable).where(eq(saleOrdersTable.status, "posted")).orderBy(desc(saleOrdersTable.createdAt)).limit(10);
+  const recentPayments = await db.select().from(paymentsTable).where(eq(paymentsTable.status, "posted")).orderBy(desc(paymentsTable.createdAt)).limit(10);
 
   const activity: Array<{ id: number; type: string; date: string; customerId: number; customerName: string; amount: number; description: string }> = [];
 

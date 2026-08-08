@@ -20,10 +20,13 @@ function toDateStr(d: Date | string): string {
 }
 
 async function computeCustomerBalance(customerId: number, openingBalance: string) {
+  // Only "live" (posted) rows count — a reversed original and its reversal both net to
+  // zero here by being excluded entirely, and a correction is itself just a normal
+  // posted row. See the correction workflow (lib/db/src/schema/saleOrders.ts).
   const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` })
-    .from(saleOrdersTable).where(eq(saleOrdersTable.customerId, customerId));
+    .from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, customerId), eq(saleOrdersTable.status, "posted")));
   const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` })
-    .from(paymentsTable).where(eq(paymentsTable.customerId, customerId));
+    .from(paymentsTable).where(and(eq(paymentsTable.customerId, customerId), eq(paymentsTable.status, "posted")));
   return parseFloat(openingBalance) + parseFloat(String(sales[0]?.total ?? 0)) - parseFloat(String(pmts[0]?.total ?? 0));
 }
 
@@ -128,9 +131,11 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
   const fromDate = req.query.from ? String(req.query.from) : null;
   const toDate = req.query.to ? String(req.query.to) : null;
 
-  // Build conditions for date range
-  const orderConditions = [eq(saleOrdersTable.customerId, params.data.id)];
-  const paymentConditions = [eq(paymentsTable.customerId, params.data.id)];
+  // Build conditions for date range — only "live" (posted) rows show in the ledger; a
+  // reversed/corrected mistake and its reversal are excluded entirely, so the ledger
+  // reflects the correction, not the mistake (see the correction workflow).
+  const orderConditions = [eq(saleOrdersTable.customerId, params.data.id), eq(saleOrdersTable.status, "posted")];
+  const paymentConditions = [eq(paymentsTable.customerId, params.data.id), eq(paymentsTable.status, "posted")];
   if (fromDate) {
     orderConditions.push(gte(saleOrdersTable.date, fromDate));
     paymentConditions.push(gte(paymentsTable.date, fromDate));
@@ -195,10 +200,10 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     // Simple approach: get everything before fromDate (exclusive)
     const beforeOrders = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` })
       .from(saleOrdersTable)
-      .where(and(eq(saleOrdersTable.customerId, params.data.id), sql`${saleOrdersTable.date} < ${fromDate}`));
+      .where(and(eq(saleOrdersTable.customerId, params.data.id), eq(saleOrdersTable.status, "posted"), sql`${saleOrdersTable.date} < ${fromDate}`));
     const beforePmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` })
       .from(paymentsTable)
-      .where(and(eq(paymentsTable.customerId, params.data.id), sql`${paymentsTable.date} < ${fromDate}`));
+      .where(and(eq(paymentsTable.customerId, params.data.id), eq(paymentsTable.status, "posted"), sql`${paymentsTable.date} < ${fromDate}`));
     openingBalance = parseFloat(c.openingBalance ?? "0")
       + parseFloat(String(beforeOrders[0]?.total ?? 0))
       - parseFloat(String(beforePmts[0]?.total ?? 0));

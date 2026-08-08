@@ -416,7 +416,8 @@ export const GetProductRatesResponse = zod.array(GetProductRatesResponseItem)
 export const ListSaleOrdersQueryParams = zod.object({
   "customerId": zod.coerce.number().optional(),
   "from": zod.date().optional(),
-  "to": zod.date().optional()
+  "to": zod.date().optional(),
+  "includeReversed": zod.coerce.boolean().optional().describe('Include reversed originals and reversal rows (default excludes them — see the correction workflow).')
 })
 
 export const ListSaleOrdersResponseItem = zod.object({
@@ -439,7 +440,10 @@ export const ListSaleOrdersResponseItem = zod.object({
   "amount": zod.number(),
   "notes": zod.string().nullish(),
   "costPrice": zod.number().nullish()
-}))
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 export const ListSaleOrdersResponse = zod.array(ListSaleOrdersResponseItem)
 
@@ -482,7 +486,10 @@ export const CreateSaleOrderResponse = zod.object({
   "amount": zod.number(),
   "notes": zod.string().nullish(),
   "costPrice": zod.number().nullish()
-}))
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 
 
@@ -513,32 +520,40 @@ export const GetSaleOrderResponse = zod.object({
   "amount": zod.number(),
   "notes": zod.string().nullish(),
   "costPrice": zod.number().nullish()
-}))
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 
 
 /**
- * @summary Update a sale order
+ * Standard correction workflow: the original row is never mutated (only its status flips to 'reversed') or deleted. This posts a 'reversal' row that cancels it, and — unless `void` is set — a new 'posted' row with the corrected data. Fails with 409 if the target row isn't currently 'posted' (already reversed/corrected).
+ * @summary Correct (or void) a posted sale order — never edits or deletes it in place
  */
-export const UpdateSaleOrderParams = zod.object({
+export const CorrectSaleOrderParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const UpdateSaleOrderBody = zod.object({
+export const CorrectSaleOrderBody = zod.object({
+  "void": zod.boolean().optional(),
+  "reason": zod.string().optional(),
+  "customerId": zod.number().optional(),
   "date": zod.coerce.date().optional(),
-  "vehicleNo": zod.string().nullish(),
-  "driverName": zod.string().nullish(),
-  "billtyNo": zod.string().nullish(),
-  "notes": zod.string().nullish(),
+  "vehicleNo": zod.string().optional(),
+  "driverName": zod.string().optional(),
+  "billtyNo": zod.string().optional(),
+  "notes": zod.string().optional(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
   "qty": zod.number(),
   "rate": zod.number().optional(),
   "notes": zod.string().optional()
 })).optional()
-})
+}).describe('Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as SaleOrderInput) to reverse-and-replace.\n')
 
-export const UpdateSaleOrderResponse = zod.object({
+export const CorrectSaleOrderResponse = zod.object({
+  "original": zod.object({
   "id": zod.number(),
   "customerId": zod.number(),
   "customerName": zod.string(),
@@ -558,18 +573,62 @@ export const UpdateSaleOrderResponse = zod.object({
   "amount": zod.number(),
   "notes": zod.string().nullish(),
   "costPrice": zod.number().nullish()
-}))
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "reversal": zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "vehicleNo": zod.string().nullish(),
+  "driverName": zod.string().nullish(),
+  "billtyNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "rate": zod.number(),
+  "amount": zod.number(),
+  "notes": zod.string().nullish(),
+  "costPrice": zod.number().nullish()
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "correction": zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "vehicleNo": zod.string().nullish(),
+  "driverName": zod.string().nullish(),
+  "billtyNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "rate": zod.number(),
+  "amount": zod.number(),
+  "notes": zod.string().nullish(),
+  "costPrice": zod.number().nullish()
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}).optional()
 })
-
-
-/**
- * @summary Delete a sale order
- */
-export const DeleteSaleOrderParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const DeleteSaleOrderResponse = zod.void()
 
 
 /**
@@ -579,7 +638,8 @@ export const ListPaymentsQueryParams = zod.object({
   "customerId": zod.coerce.number().optional(),
   "from": zod.date().optional(),
   "to": zod.date().optional(),
-  "type": zod.enum(['cash', 'bank']).optional()
+  "type": zod.enum(['cash', 'bank']).optional(),
+  "includeReversed": zod.coerce.boolean().optional().describe('Include reversed originals and reversal rows (default excludes them — see the correction workflow).')
 })
 
 export const ListPaymentsResponseItem = zod.object({
@@ -592,7 +652,10 @@ export const ListPaymentsResponseItem = zod.object({
   "bankAccount": zod.string().nullish(),
   "chequeNo": zod.string().nullish(),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem)
 
@@ -620,7 +683,10 @@ export const CreatePaymentResponse = zod.object({
   "bankAccount": zod.string().nullish(),
   "chequeNo": zod.string().nullish(),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 
 
@@ -641,27 +707,35 @@ export const GetPaymentResponse = zod.object({
   "bankAccount": zod.string().nullish(),
   "chequeNo": zod.string().nullish(),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 })
 
 
 /**
- * @summary Update a payment
+ * Same correction workflow as sale orders (see there for details). Also reverses and reposts the payment's auto-posted cashbook entry, so cashbook balance reflects the correction too.
+ * @summary Correct (or void) a posted payment — never edits or deletes it in place
  */
-export const UpdatePaymentParams = zod.object({
+export const CorrectPaymentParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const UpdatePaymentBody = zod.object({
+export const CorrectPaymentBody = zod.object({
+  "void": zod.boolean().optional(),
+  "reason": zod.string().optional(),
+  "customerId": zod.number().optional(),
   "date": zod.coerce.date().optional(),
   "type": zod.enum(['cash', 'bank']).optional(),
   "amount": zod.number().optional(),
-  "bankAccount": zod.string().nullish(),
-  "chequeNo": zod.string().nullish(),
-  "notes": zod.string().nullish()
-})
+  "bankAccount": zod.string().optional(),
+  "chequeNo": zod.string().optional(),
+  "notes": zod.string().optional()
+}).describe('Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as PaymentInput) to reverse-and-replace.\n')
 
-export const UpdatePaymentResponse = zod.object({
+export const CorrectPaymentResponse = zod.object({
+  "original": zod.object({
   "id": zod.number(),
   "customerId": zod.number(),
   "customerName": zod.string(),
@@ -671,18 +745,42 @@ export const UpdatePaymentResponse = zod.object({
   "bankAccount": zod.string().nullish(),
   "chequeNo": zod.string().nullish(),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "reversal": zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "type": zod.enum(['cash', 'bank']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().nullish(),
+  "chequeNo": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "correction": zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "type": zod.enum(['cash', 'bank']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().nullish(),
+  "chequeNo": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}).optional()
 })
-
-
-/**
- * @summary Delete a payment
- */
-export const DeletePaymentParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const DeletePaymentResponse = zod.void()
 
 
 /**
@@ -724,7 +822,10 @@ export const GetDailyCollectionReportResponse = zod.object({
   "bankAccount": zod.string().nullish(),
   "chequeNo": zod.string().nullish(),
   "notes": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
 }))
 })
 

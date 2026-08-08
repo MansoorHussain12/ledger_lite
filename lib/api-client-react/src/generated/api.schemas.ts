@@ -253,6 +253,15 @@ export interface SaleOrderItem {
   costPrice?: number | null;
 }
 
+export type SaleOrderStatus = typeof SaleOrderStatus[keyof typeof SaleOrderStatus];
+
+
+export const SaleOrderStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
 export interface SaleOrder {
   id: number;
   customerId: number;
@@ -269,6 +278,11 @@ export interface SaleOrder {
   notes?: string | null;
   createdAt: string;
   items: SaleOrderItem[];
+  status: SaleOrderStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
 }
 
 export interface SaleOrderItemInput {
@@ -288,17 +302,25 @@ export interface SaleOrderInput {
   items: SaleOrderItemInput[];
 }
 
-export interface SaleOrderUpdate {
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as SaleOrderInput) to reverse-and-replace.
+ */
+export interface SaleOrderCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  customerId?: number;
   date?: string;
-  /** @nullable */
-  vehicleNo?: string | null;
-  /** @nullable */
-  driverName?: string | null;
-  /** @nullable */
-  billtyNo?: string | null;
-  /** @nullable */
-  notes?: string | null;
+  vehicleNo?: string;
+  driverName?: string;
+  billtyNo?: string;
+  notes?: string;
   items?: SaleOrderItemInput[];
+}
+
+export interface SaleOrderCorrectionResult {
+  original: SaleOrder;
+  reversal: SaleOrder;
+  correction?: SaleOrder;
 }
 
 export type PaymentType = typeof PaymentType[keyof typeof PaymentType];
@@ -307,6 +329,15 @@ export type PaymentType = typeof PaymentType[keyof typeof PaymentType];
 export const PaymentType = {
   cash: 'cash',
   bank: 'bank',
+} as const;
+
+export type PaymentStatus = typeof PaymentStatus[keyof typeof PaymentStatus];
+
+
+export const PaymentStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
 } as const;
 
 export interface Payment {
@@ -323,6 +354,11 @@ export interface Payment {
   /** @nullable */
   notes?: string | null;
   createdAt: string;
+  status: PaymentStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
 }
 
 export type PaymentInputType = typeof PaymentInputType[keyof typeof PaymentInputType];
@@ -343,24 +379,33 @@ export interface PaymentInput {
   notes?: string;
 }
 
-export type PaymentUpdateType = typeof PaymentUpdateType[keyof typeof PaymentUpdateType];
+export type PaymentCorrectionInputType = typeof PaymentCorrectionInputType[keyof typeof PaymentCorrectionInputType];
 
 
-export const PaymentUpdateType = {
+export const PaymentCorrectionInputType = {
   cash: 'cash',
   bank: 'bank',
 } as const;
 
-export interface PaymentUpdate {
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as PaymentInput) to reverse-and-replace.
+ */
+export interface PaymentCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  customerId?: number;
   date?: string;
-  type?: PaymentUpdateType;
+  type?: PaymentCorrectionInputType;
   amount?: number;
-  /** @nullable */
-  bankAccount?: string | null;
-  /** @nullable */
-  chequeNo?: string | null;
-  /** @nullable */
-  notes?: string | null;
+  bankAccount?: string;
+  chequeNo?: string;
+  notes?: string;
+}
+
+export interface PaymentCorrectionResult {
+  original: Payment;
+  reversal: Payment;
+  correction?: Payment;
 }
 
 export interface AgingRow {
@@ -1046,6 +1091,10 @@ export type ListSaleOrdersParams = {
 customerId?: number;
 from?: string;
 to?: string;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
 };
 
 export type ListPaymentsParams = {
@@ -1053,6 +1102,10 @@ customerId?: number;
 from?: string;
 to?: string;
 type?: ListPaymentsType;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
 };
 
 export type ListPaymentsType = typeof ListPaymentsType[keyof typeof ListPaymentsType];

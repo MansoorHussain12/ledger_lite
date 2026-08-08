@@ -441,6 +441,11 @@ paths:
           schema:
             type: string
             format: date
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
       responses:
         "200":
           description: Sale order list
@@ -486,10 +491,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SaleOrder"
-    patch:
-      operationId: updateSaleOrder
+
+  /sale-orders/{id}/correct:
+    post:
+      operationId: correctSaleOrder
       tags: [saleOrders]
-      summary: Update a sale order
+      summary: Correct (or void) a posted sale order — never edits or deletes it in place
+      description: >
+        Standard correction workflow: the original row is never mutated (only its status
+        flips to 'reversed') or deleted. This posts a 'reversal' row that cancels it, and
+        — unless `void` is set — a new 'posted' row with the corrected data. Fails with
+        409 if the target row isn't currently 'posted' (already reversed/corrected).
       parameters:
         - name: id
           in: path
@@ -501,27 +513,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SaleOrderUpdate"
+              $ref: "#/components/schemas/SaleOrderCorrectionInput"
       responses:
         "200":
-          description: Updated
+          description: Correction applied
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SaleOrder"
-    delete:
-      operationId: deleteSaleOrder
-      tags: [saleOrders]
-      summary: Delete a sale order
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Deleted
+                $ref: "#/components/schemas/SaleOrderCorrectionResult"
+        "409":
+          description: The target row is not currently posted
 
   # ── PAYMENTS ──────────────────────────────────────────────────────────────
   /payments:
@@ -549,6 +550,11 @@ paths:
           schema:
             type: string
             enum: [cash, bank]
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
       responses:
         "200":
           description: Payment list
@@ -594,10 +600,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Payment"
-    patch:
-      operationId: updatePayment
+
+  /payments/{id}/correct:
+    post:
+      operationId: correctPayment
       tags: [payments]
-      summary: Update a payment
+      summary: Correct (or void) a posted payment — never edits or deletes it in place
+      description: >
+        Same correction workflow as sale orders (see there for details). Also reverses
+        and reposts the payment's auto-posted cashbook entry, so cashbook balance reflects
+        the correction too.
       parameters:
         - name: id
           in: path
@@ -609,27 +621,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PaymentUpdate"
+              $ref: "#/components/schemas/PaymentCorrectionInput"
       responses:
         "200":
-          description: Updated
+          description: Correction applied
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Payment"
-    delete:
-      operationId: deletePayment
-      tags: [payments]
-      summary: Delete a payment
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Deleted
+                $ref: "#/components/schemas/PaymentCorrectionResult"
+        "409":
+          description: The target row is not currently posted
 
   # ── REPORTS ───────────────────────────────────────────────────────────────
   /reports/aging:
@@ -1806,7 +1807,7 @@ components:
 
     SaleOrder:
       type: object
-      required: [id, customerId, customerName, date, totalAmount, createdAt, items]
+      required: [id, customerId, customerName, date, totalAmount, createdAt, items, status]
       properties:
         id:
           type: integer
@@ -1834,6 +1835,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SaleOrderItem"
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
 
     SaleOrderItemInput:
       type: object
@@ -1870,29 +1878,49 @@ components:
           items:
             $ref: "#/components/schemas/SaleOrderItemInput"
 
-    SaleOrderUpdate:
+    SaleOrderCorrectionInput:
       type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (same shape as SaleOrderInput) to reverse-and-replace.
       properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        customerId:
+          type: integer
         date:
           type: string
           format: date
         vehicleNo:
-          type: ["string", "null"]
+          type: string
         driverName:
-          type: ["string", "null"]
+          type: string
         billtyNo:
-          type: ["string", "null"]
+          type: string
         notes:
-          type: ["string", "null"]
+          type: string
         items:
           type: array
           items:
             $ref: "#/components/schemas/SaleOrderItemInput"
 
+    SaleOrderCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/SaleOrder"
+        reversal:
+          $ref: "#/components/schemas/SaleOrder"
+        correction:
+          $ref: "#/components/schemas/SaleOrder"
+
     # ── PAYMENTS ──────────────────────────────────────────────────────────
     Payment:
       type: object
-      required: [id, customerId, customerName, date, type, amount, createdAt]
+      required: [id, customerId, customerName, date, type, amount, createdAt, status]
       properties:
         id:
           type: integer
@@ -1917,6 +1945,13 @@ components:
         createdAt:
           type: string
           format: date-time
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
 
     PaymentInput:
       type: object
@@ -1939,9 +1974,18 @@ components:
         notes:
           type: string
 
-    PaymentUpdate:
+    PaymentCorrectionInput:
       type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (same shape as PaymentInput) to reverse-and-replace.
       properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        customerId:
+          type: integer
         date:
           type: string
           format: date
@@ -1951,11 +1995,22 @@ components:
         amount:
           type: number
         bankAccount:
-          type: ["string", "null"]
+          type: string
         chequeNo:
-          type: ["string", "null"]
+          type: string
         notes:
-          type: ["string", "null"]
+          type: string
+
+    PaymentCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/Payment"
+        reversal:
+          $ref: "#/components/schemas/Payment"
+        correction:
+          $ref: "#/components/schemas/Payment"
 
     # ── REPORTS ───────────────────────────────────────────────────────────
     AgingRow:
