@@ -44,6 +44,7 @@ const SOURCE_LABELS: Record<string, string> = {
   payment: "Customer Receipt",
   expense: "Expense",
   purchase: "Purchase Payment",
+  supplier_payment: "Supplier Payment",
   opening_balance: "Opening Balance",
   adjustment: "Adjustment",
   salary: "Salary",

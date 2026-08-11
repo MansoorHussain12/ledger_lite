@@ -398,6 +398,16 @@ export default function GuidePage() {
                 <li className="flex gap-2"><ChevronRight size={12} className="text-purple-400 mt-0.5 flex-shrink-0" /><span>All payments made to the supplier</span></li>
               </ul>
             </Card>
+
+            <Card title="Clearing a Balance: Recording a Supplier Payment">
+              <p className="text-xs text-muted-foreground mb-2">
+                When you buy on credit (or pay only part of an invoice), the difference sits as a payable balance. To pay it off later — on its own, not tied to any one invoice — use <strong>Supplier Payments</strong>, not the "correct invoice" action.
+              </p>
+              <Step n={1}>From a supplier's detail page, click <strong>Record Payment</strong> — or go to <strong>Supplier Payments</strong> in the sidebar → <strong>+ Record Payment</strong>.</Step>
+              <Step n={2}>Select the <strong>Supplier</strong>, enter the <strong>Date</strong> and <strong>Amount</strong>.</Step>
+              <Step n={3}>Choose the <strong>Payment Mode</strong>: Cash, Bank, Easypaisa, JazzCash, Cheque, or Other.</Step>
+              <Step n={4}>Click <strong>Save</strong>. The supplier's payable balance drops immediately, and a Cash Out entry is posted to the cashbook automatically (if paid in cash).</Step>
+            </Card>
           </Section>
 
           {/* ── PURCHASES ────────────────────────────────────────────── */}

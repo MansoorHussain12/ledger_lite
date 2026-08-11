@@ -784,6 +784,158 @@ export const CorrectPaymentResponse = zod.object({
 
 
 /**
+ * @summary List all supplier payments
+ */
+export const ListSupplierPaymentsQueryParams = zod.object({
+  "supplierId": zod.coerce.number().optional(),
+  "from": zod.date().optional(),
+  "to": zod.date().optional(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional(),
+  "includeReversed": zod.coerce.boolean().optional().describe('Include reversed originals and reversal rows (default excludes them — see the correction workflow).')
+})
+
+export const ListSupplierPaymentsResponseItem = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().nullish(),
+  "chequeNo": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+export const ListSupplierPaymentsResponse = zod.array(ListSupplierPaymentsResponseItem)
+
+
+/**
+ * @summary Record a new payment to a supplier
+ */
+export const CreateSupplierPaymentBody = zod.object({
+  "supplierId": zod.number(),
+  "date": zod.coerce.date(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().optional(),
+  "chequeNo": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreateSupplierPaymentResponse = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().nullish(),
+  "chequeNo": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+
+
+/**
+ * @summary Get a supplier payment by ID
+ */
+export const GetSupplierPaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSupplierPaymentResponse = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().nullish(),
+  "chequeNo": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+
+
+/**
+ * Same correction workflow as sale orders/payments (see there for details). Also reverses and reposts the payment's auto-posted cashbook entry, so cashbook balance (and supplier payable balance) reflect the correction too.
+ * @summary Correct (or void) a posted supplier payment — never edits or deletes it in place
+ */
+export const CorrectSupplierPaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CorrectSupplierPaymentBody = zod.object({
+  "void": zod.boolean().optional(),
+  "reason": zod.string().optional(),
+  "supplierId": zod.number().optional(),
+  "date": zod.coerce.date().optional(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional(),
+  "amount": zod.number().optional(),
+  "bankAccount": zod.string().optional(),
+  "chequeNo": zod.string().optional(),
+  "notes": zod.string().optional()
+}).describe('Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as SupplierPaymentInput) to reverse-and-replace.\n')
+
+export const CorrectSupplierPaymentResponse = zod.object({
+  "original": zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().nullish(),
+  "chequeNo": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "reversal": zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().nullish(),
+  "chequeNo": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "correction": zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "amount": zod.number(),
+  "bankAccount": zod.string().nullish(),
+  "chequeNo": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}).optional()
+})
+
+
+/**
  * @summary Aging report — who owes how much for how long
  */
 export const GetAgingReportResponseItem = zod.object({

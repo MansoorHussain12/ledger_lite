@@ -89,6 +89,9 @@ export default function SupplierDetailPage() {
             {supplier.ntn && <span>NTN: {supplier.ntn}</span>}
           </div>
         </div>
+        <Link href={`/supplier-payments?supplierId=${supplier.id}`}>
+          <Button variant="outline" size="sm">Record Payment</Button>
+        </Link>
         <Link href="/purchases/new">
           <Button size="sm">
             <FileText size={14} className="mr-1" /> New Purchase

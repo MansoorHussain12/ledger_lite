@@ -408,6 +408,103 @@ export interface PaymentCorrectionResult {
   correction?: Payment;
 }
 
+export type SupplierPaymentPaymentMode = typeof SupplierPaymentPaymentMode[keyof typeof SupplierPaymentPaymentMode];
+
+
+export const SupplierPaymentPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export type SupplierPaymentStatus = typeof SupplierPaymentStatus[keyof typeof SupplierPaymentStatus];
+
+
+export const SupplierPaymentStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
+export interface SupplierPayment {
+  id: number;
+  supplierId: number;
+  supplierName: string;
+  date: string;
+  paymentMode: SupplierPaymentPaymentMode;
+  amount: number;
+  /** @nullable */
+  bankAccount?: string | null;
+  /** @nullable */
+  chequeNo?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  status: SupplierPaymentStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export type SupplierPaymentInputPaymentMode = typeof SupplierPaymentInputPaymentMode[keyof typeof SupplierPaymentInputPaymentMode];
+
+
+export const SupplierPaymentInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface SupplierPaymentInput {
+  supplierId: number;
+  date: string;
+  paymentMode: SupplierPaymentInputPaymentMode;
+  amount: number;
+  bankAccount?: string;
+  chequeNo?: string;
+  notes?: string;
+}
+
+export type SupplierPaymentCorrectionInputPaymentMode = typeof SupplierPaymentCorrectionInputPaymentMode[keyof typeof SupplierPaymentCorrectionInputPaymentMode];
+
+
+export const SupplierPaymentCorrectionInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as SupplierPaymentInput) to reverse-and-replace.
+ */
+export interface SupplierPaymentCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  supplierId?: number;
+  date?: string;
+  paymentMode?: SupplierPaymentCorrectionInputPaymentMode;
+  amount?: number;
+  bankAccount?: string;
+  chequeNo?: string;
+  notes?: string;
+}
+
+export interface SupplierPaymentCorrectionResult {
+  original: SupplierPayment;
+  reversal: SupplierPayment;
+  correction?: SupplierPayment;
+}
+
 export interface AgingRow {
   customerId: number;
   customerName: string;
@@ -1328,6 +1425,29 @@ export type ListPaymentsType = typeof ListPaymentsType[keyof typeof ListPayments
 export const ListPaymentsType = {
   cash: 'cash',
   bank: 'bank',
+} as const;
+
+export type ListSupplierPaymentsParams = {
+supplierId?: number;
+from?: string;
+to?: string;
+paymentMode?: ListSupplierPaymentsPaymentMode;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
+};
+
+export type ListSupplierPaymentsPaymentMode = typeof ListSupplierPaymentsPaymentMode[keyof typeof ListSupplierPaymentsPaymentMode];
+
+
+export const ListSupplierPaymentsPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
 } as const;
 
 export type GetDailyCollectionReportParams = {

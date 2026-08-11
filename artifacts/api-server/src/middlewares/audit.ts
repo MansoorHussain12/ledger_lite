@@ -24,6 +24,7 @@ const ENTITY_TYPE_RULES: Array<[RegExp, string]> = [
   [/^\/inventory\/adjustments(\/|$)/, "stock adjustment"],
   [/^\/inventory(\/|$)/, "inventory"],
   [/^\/purchases(\/|$)/, "purchase invoice"],
+  [/^\/supplier-payments(\/|$)/, "supplier payment"],
   [/^\/suppliers(\/|$)/, "supplier"],
   [/^\/customers(\/|$)/, "customer"],
   [/^\/products(\/|$)/, "product"],

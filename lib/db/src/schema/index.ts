@@ -5,6 +5,7 @@ export * from "./saleOrders";
 export * from "./payments";
 export * from "./cashbook";
 export * from "./purchases";
+export * from "./supplierPayments";
 export * from "./inventory";
 export * from "./installments";
 export * from "./lookups";

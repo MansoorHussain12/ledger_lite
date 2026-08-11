@@ -29,6 +29,8 @@ tags:
     description: Inventory management & stock movements
   - name: suppliers
     description: Suppliers & purchase invoices
+  - name: supplierPayments
+    description: Payments made to suppliers, independent of any single purchase invoice
   - name: cashbook
     description: Cashbook & expenses
   - name: lookups
@@ -629,6 +631,114 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PaymentCorrectionResult"
+        "409":
+          description: The target row is not currently posted
+
+  # ── SUPPLIER PAYMENTS ────────────────────────────────────────────────────
+  /supplier-payments:
+    get:
+      operationId: listSupplierPayments
+      tags: [supplierPayments]
+      summary: List all supplier payments
+      parameters:
+        - name: supplierId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: paymentMode
+          in: query
+          schema:
+            type: string
+            enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Supplier payment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierPayment"
+    post:
+      operationId: createSupplierPayment
+      tags: [supplierPayments]
+      summary: Record a new payment to a supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierPaymentInput"
+      responses:
+        "201":
+          description: Supplier payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPayment"
+
+  /supplier-payments/{id}:
+    get:
+      operationId: getSupplierPayment
+      tags: [supplierPayments]
+      summary: Get a supplier payment by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPayment"
+
+  /supplier-payments/{id}/correct:
+    post:
+      operationId: correctSupplierPayment
+      tags: [supplierPayments]
+      summary: Correct (or void) a posted supplier payment — never edits or deletes it in place
+      description: >
+        Same correction workflow as sale orders/payments (see there for details). Also
+        reverses and reposts the payment's auto-posted cashbook entry, so cashbook balance
+        (and supplier payable balance) reflect the correction too.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierPaymentCorrectionInput"
+      responses:
+        "200":
+          description: Correction applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPaymentCorrectionResult"
         "409":
           description: The target row is not currently posted
 
@@ -2089,6 +2199,101 @@ components:
           $ref: "#/components/schemas/Payment"
         correction:
           $ref: "#/components/schemas/Payment"
+
+    # ── SUPPLIER PAYMENTS ────────────────────────────────────────────────
+    SupplierPayment:
+      type: object
+      required: [id, supplierId, supplierName, date, paymentMode, amount, createdAt, status]
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        date:
+          type: string
+          format: date
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+        bankAccount:
+          type: ["string", "null"]
+        chequeNo:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
+
+    SupplierPaymentInput:
+      type: object
+      required: [supplierId, date, paymentMode, amount]
+      properties:
+        supplierId:
+          type: integer
+        date:
+          type: string
+          format: date
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+        bankAccount:
+          type: string
+        chequeNo:
+          type: string
+        notes:
+          type: string
+
+    SupplierPaymentCorrectionInput:
+      type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (same shape as SupplierPaymentInput) to reverse-and-replace.
+      properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        supplierId:
+          type: integer
+        date:
+          type: string
+          format: date
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+        bankAccount:
+          type: string
+        chequeNo:
+          type: string
+        notes:
+          type: string
+
+    SupplierPaymentCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/SupplierPayment"
+        reversal:
+          $ref: "#/components/schemas/SupplierPayment"
+        correction:
+          $ref: "#/components/schemas/SupplierPayment"
 
     # ── REPORTS ───────────────────────────────────────────────────────────
     AgingRow:

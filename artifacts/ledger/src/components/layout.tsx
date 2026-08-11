@@ -15,6 +15,7 @@ const navItems = [
   { href: "/payments", label: "Payments", icon: CreditCard, roles: ["owner", "cashier"] },
   { href: "/cashbook", label: "Cashbook", icon: BookOpen, roles: ["owner", "cashier"] },
   { href: "/suppliers", label: "Suppliers", icon: Truck, roles: ["owner"] },
+  { href: "/supplier-payments", label: "Supplier Payments", icon: CreditCard, roles: ["owner"] },
   { href: "/purchases", label: "Purchases", icon: ShoppingBag, roles: ["owner"] },
   { href: "/pos", label: "POS", icon: Monitor, roles: ["owner", "cashier", "salesman"] },
   { href: "/installments", label: "Installments", icon: CalendarClock, roles: ["owner", "cashier"] },

@@ -63,6 +63,7 @@ import type {
   ListPaymentsParams,
   ListPurchasesParams,
   ListSaleOrdersParams,
+  ListSupplierPaymentsParams,
   LoginInput,
   LookupInput,
   LookupValue,
@@ -90,6 +91,10 @@ import type {
   StockAdjustmentInput,
   SupplierDetail,
   SupplierInput,
+  SupplierPayment,
+  SupplierPaymentCorrectionInput,
+  SupplierPaymentCorrectionResult,
+  SupplierPaymentInput,
   SupplierRow,
   UpdateInventorySettingsResponse,
   User,
@@ -2305,6 +2310,311 @@ export const useCorrectPayment = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCorrectPaymentMutationOptions(options));
+    }
+
+export const getListSupplierPaymentsUrl = (params?: ListSupplierPaymentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/supplier-payments?${stringifiedParams}` : `/api/supplier-payments`
+}
+
+/**
+ * @summary List all supplier payments
+ */
+export const listSupplierPayments = async (params?: ListSupplierPaymentsParams, options?: RequestInit): Promise<SupplierPayment[]> => {
+
+  return customFetch<SupplierPayment[]>(getListSupplierPaymentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSupplierPaymentsQueryKey = (params?: ListSupplierPaymentsParams,) => {
+    return [
+    `/api/supplier-payments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSupplierPaymentsQueryOptions = <TData = Awaited<ReturnType<typeof listSupplierPayments>>, TError = ErrorType<unknown>>(params?: ListSupplierPaymentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSupplierPaymentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupplierPayments>>> = ({ signal }) => listSupplierPayments(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSupplierPayments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSupplierPaymentsQueryResult = NonNullable<Awaited<ReturnType<typeof listSupplierPayments>>>
+export type ListSupplierPaymentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all supplier payments
+ */
+
+export function useListSupplierPayments<TData = Awaited<ReturnType<typeof listSupplierPayments>>, TError = ErrorType<unknown>>(
+ params?: ListSupplierPaymentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSupplierPaymentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateSupplierPaymentUrl = () => {
+
+
+
+
+  return `/api/supplier-payments`
+}
+
+/**
+ * @summary Record a new payment to a supplier
+ */
+export const createSupplierPayment = async (supplierPaymentInput: SupplierPaymentInput, options?: RequestInit): Promise<SupplierPayment> => {
+
+  return customFetch<SupplierPayment>(getCreateSupplierPaymentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(supplierPaymentInput)
+  }
+);}
+
+
+
+
+
+export const getCreateSupplierPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError,{data: BodyType<SupplierPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError,{data: BodyType<SupplierPaymentInput>}, TContext> => {
+
+const mutationKey = ['createSupplierPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSupplierPayment>>, {data: BodyType<SupplierPaymentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSupplierPayment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSupplierPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof createSupplierPayment>>>
+    export type CreateSupplierPaymentMutationBody = BodyType<SupplierPaymentInput>
+    export type CreateSupplierPaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record a new payment to a supplier
+ */
+export const useCreateSupplierPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError,{data: BodyType<SupplierPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSupplierPayment>>,
+        TError,
+        {data: BodyType<SupplierPaymentInput>},
+        TContext
+      > => {
+      return useMutation(getCreateSupplierPaymentMutationOptions(options));
+    }
+
+export const getGetSupplierPaymentUrl = (id: number,) => {
+
+
+
+
+  return `/api/supplier-payments/${id}`
+}
+
+/**
+ * @summary Get a supplier payment by ID
+ */
+export const getSupplierPayment = async (id: number, options?: RequestInit): Promise<SupplierPayment> => {
+
+  return customFetch<SupplierPayment>(getGetSupplierPaymentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierPaymentQueryKey = (id: number,) => {
+    return [
+    `/api/supplier-payments/${id}`
+    ] as const;
+    }
+
+
+export const getGetSupplierPaymentQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierPayment>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierPayment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierPaymentQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierPayment>>> = ({ signal }) => getSupplierPayment(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierPayment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierPaymentQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierPayment>>>
+export type GetSupplierPaymentQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a supplier payment by ID
+ */
+
+export function useGetSupplierPayment<TData = Awaited<ReturnType<typeof getSupplierPayment>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierPayment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierPaymentQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCorrectSupplierPaymentUrl = (id: number,) => {
+
+
+
+
+  return `/api/supplier-payments/${id}/correct`
+}
+
+/**
+ * Same correction workflow as sale orders/payments (see there for details). Also reverses and reposts the payment's auto-posted cashbook entry, so cashbook balance (and supplier payable balance) reflect the correction too.
+ * @summary Correct (or void) a posted supplier payment — never edits or deletes it in place
+ */
+export const correctSupplierPayment = async (id: number,
+    supplierPaymentCorrectionInput: SupplierPaymentCorrectionInput, options?: RequestInit): Promise<SupplierPaymentCorrectionResult> => {
+
+  return customFetch<SupplierPaymentCorrectionResult>(getCorrectSupplierPaymentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(supplierPaymentCorrectionInput)
+  }
+);}
+
+
+
+
+
+export const getCorrectSupplierPaymentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctSupplierPayment>>, TError,{id: number;data: BodyType<SupplierPaymentCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctSupplierPayment>>, TError,{id: number;data: BodyType<SupplierPaymentCorrectionInput>}, TContext> => {
+
+const mutationKey = ['correctSupplierPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctSupplierPayment>>, {id: number;data: BodyType<SupplierPaymentCorrectionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  correctSupplierPayment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CorrectSupplierPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof correctSupplierPayment>>>
+    export type CorrectSupplierPaymentMutationBody = BodyType<SupplierPaymentCorrectionInput>
+    export type CorrectSupplierPaymentMutationError = ErrorType<void>
+
+    /**
+ * @summary Correct (or void) a posted supplier payment — never edits or deletes it in place
+ */
+export const useCorrectSupplierPayment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctSupplierPayment>>, TError,{id: number;data: BodyType<SupplierPaymentCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof correctSupplierPayment>>,
+        TError,
+        {id: number;data: BodyType<SupplierPaymentCorrectionInput>},
+        TContext
+      > => {
+      return useMutation(getCorrectSupplierPaymentMutationOptions(options));
     }
 
 export const getGetAgingReportUrl = () => {

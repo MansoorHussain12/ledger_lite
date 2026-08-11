@@ -6,6 +6,7 @@ import {
   purchaseInvoiceItemsTable,
   productsTable,
   cashbookEntriesTable,
+  supplierPaymentsTable,
 } from "@workspace/db/schema";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -19,7 +20,11 @@ function toDateStr(d: unknown): string {
 }
 
 // ── helpers: supplier payable balance ────────────────────────────────────────
-// balance = opening_balance + sum(total_amount) - sum(paid_amount)
+// balance = opening_balance + sum(purchase.total_amount) - sum(purchase.paid_amount)
+//           - sum(supplier_payments.amount)
+// The last term is money paid against the running balance separately from any one
+// invoice (see supplierPayments.ts) — same relationship customer payments have to
+// sale orders.
 
 async function supplierBalance(supplierId: number): Promise<number> {
   const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
@@ -34,10 +39,16 @@ async function supplierBalance(supplierId: number): Promise<number> {
     .from(purchaseInvoicesTable)
     .where(and(eq(purchaseInvoicesTable.supplierId, supplierId), eq(purchaseInvoicesTable.status, "posted")));
 
+  const [paymentsAgg] = await db
+    .select({ total: sql<string>`coalesce(sum(amount),0)` })
+    .from(supplierPaymentsTable)
+    .where(and(eq(supplierPaymentsTable.supplierId, supplierId), eq(supplierPaymentsTable.status, "posted")));
+
   const opening = parseFloat(s.openingBalance ?? "0");
   const billed = parseFloat(agg?.totalBilled ?? "0");
   const paid = parseFloat(agg?.totalPaid ?? "0");
-  return Math.round((opening + billed - paid) * 100) / 100;
+  const directPayments = parseFloat(paymentsAgg?.total ?? "0");
+  return Math.round((opening + billed - paid - directPayments) * 100) / 100;
 }
 
 // ── GET /suppliers ────────────────────────────────────────────────────────────
