@@ -202,7 +202,7 @@ export default function SaleOrderNewPage() {
                       value={item.qty}
                       onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: e.target.value } : it))}
                       min="0"
-                      step="0.5"
+                      step="0.01"
                     />
                   </div>
                   <div className="col-span-2">

@@ -338,7 +338,7 @@ export default function SaleOrdersPage() {
                           </select>
                         </div>
                         <div className="col-span-2">
-                          <Input type="number" value={item.qty} min="0" step="0.5"
+                          <Input type="number" value={item.qty} min="0" step="0.01"
                             onChange={e => setCorrectItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: e.target.value } : it))} />
                         </div>
                         <div className="col-span-2">
