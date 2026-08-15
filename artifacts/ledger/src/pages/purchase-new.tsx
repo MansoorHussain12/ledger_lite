@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getListProductsQueryKey } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import {
-  ArrowLeft, Plus, Trash2, ShoppingBag, Package
+  ArrowLeft, Plus, Trash2, ShoppingBag, Package, ChevronsUpDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,10 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -73,7 +77,7 @@ export default function PurchaseNewPage() {
   const [paymentMode, setPaymentMode] = useState<string>("cash");
   const [notes, setNotes] = useState("");
   const [updateCostPrice, setUpdateCostPrice] = useState(true);
-  const [productSearch, setProductSearch] = useState<Record<number, string>>({});
+  const [openRow, setOpenRow] = useState<number | null>(null);
 
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers"], queryFn: fetchSuppliers });
   const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
@@ -141,7 +145,6 @@ export default function PurchaseNewPage() {
       ? { ...l, productId: product.id, productName: product.name, rate: product.costPrice ?? product.currentRate, unit: product.unit }
       : l
     ));
-    setProductSearch(prev => ({ ...prev, [idx]: "" }));
   }
 
   function addLine() {
@@ -152,19 +155,23 @@ export default function PurchaseNewPage() {
     setLines(prev => prev.filter((_, i) => i !== idx));
   }
 
-  const categorisedProducts = (search: string) => {
-    const filtered = products.filter(p =>
-      p.name.toLowerCase().includes(search.toLowerCase())
-    ).slice(0, 20);
-
+  // Grouped once from the full product list — cmdk's CommandInput does the search
+  // filtering itself, so this doesn't need to be recomputed per keystroke.
+  const productsByCategory = useMemo(() => {
     const groups: Record<string, Product[]> = {};
-    for (const p of filtered) {
+    for (const p of products) {
       const key = p.category ?? "Uncategorised";
       if (!groups[key]) groups[key] = [];
       groups[key].push(p);
     }
     return groups;
-  };
+  }, [products]);
+
+  const categoryNames = useMemo(() =>
+    Object.keys(productsByCategory).sort((a, b) =>
+      a === "Uncategorised" ? 1 : b === "Uncategorised" ? -1 : a.localeCompare(b)
+    ),
+  [productsByCategory]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-3xl mx-auto">
@@ -249,12 +256,7 @@ export default function PurchaseNewPage() {
               </thead>
               <tbody>
                 {lines.map((line, idx) => {
-                  const search = productSearch[idx] ?? "";
                   const isSelected = line.productId !== "";
-                  const grouped = categorisedProducts(search);
-                  const categoryNames = Object.keys(grouped).sort((a, b) =>
-                    a === "Uncategorised" ? 1 : b === "Uncategorised" ? -1 : a.localeCompare(b)
-                  );
 
                   return (
                     <tr key={idx} className="border-b border-border/50">
@@ -269,37 +271,41 @@ export default function PurchaseNewPage() {
                             >×</button>
                           </div>
                         ) : (
-                          <div className="relative">
-                            <Input
-                              value={search}
-                              onChange={e => setProductSearch(prev => ({ ...prev, [idx]: e.target.value }))}
-                              placeholder="Search product…"
-                              className="h-8 text-sm"
-                            />
-                            {search && categoryNames.length > 0 && (
-                              <div className="absolute top-full left-0 right-0 z-10 bg-popover border rounded-md shadow-lg max-h-52 overflow-y-auto mt-0.5">
-                                {categoryNames.map(cat => (
-                                  <div key={cat}>
-                                    <div className="px-3 py-1 text-xs font-semibold text-muted-foreground bg-muted/40 uppercase tracking-wide sticky top-0">
-                                      {cat}
-                                    </div>
-                                    {grouped[cat].map(p => (
-                                      <button
-                                        key={p.id}
-                                        onClick={() => selectProduct(idx, p)}
-                                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center justify-between"
-                                      >
-                                        <span>{p.name}</span>
-                                        <span className="text-xs text-muted-foreground ml-2 shrink-0">
-                                          {p.unit}{p.costPrice ? ` · Rs ${fmt(parseFloat(p.costPrice))}` : ""}
-                                        </span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                          <Popover open={openRow === idx} onOpenChange={o => setOpenRow(o ? idx : null)}>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="w-full h-8 text-sm text-left px-3 rounded-md border border-input bg-background flex items-center justify-between text-muted-foreground hover:border-ring transition-colors"
+                              >
+                                Search product…
+                                <ChevronsUpDown size={13} className="shrink-0 opacity-50" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Search product…" />
+                                <CommandList>
+                                  <CommandEmpty>No products found.</CommandEmpty>
+                                  {categoryNames.map(cat => (
+                                    <CommandGroup key={cat} heading={cat}>
+                                      {productsByCategory[cat].map(p => (
+                                        <CommandItem
+                                          key={p.id}
+                                          value={p.name}
+                                          onSelect={() => { selectProduct(idx, p); setOpenRow(null); }}
+                                        >
+                                          <span className="flex-1 truncate">{p.name}</span>
+                                          <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                                            {p.unit}{p.costPrice ? ` · Rs ${fmt(parseFloat(p.costPrice))}` : ""}
+                                          </span>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  ))}
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                         )}
                       </td>
                       <td className="px-2 py-2">
