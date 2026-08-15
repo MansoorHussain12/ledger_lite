@@ -8,7 +8,7 @@ import {
   cashbookEntriesTable,
   supplierPaymentsTable,
 } from "@workspace/db/schema";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
 
@@ -63,6 +63,7 @@ router.get("/suppliers", requireAuth, async (_req, res) => {
       address: s.address ?? null,
       ntn: s.ntn ?? null,
       openingBalance: parseFloat(s.openingBalance ?? "0"),
+      openingBalanceDate: s.openingBalanceDate ?? null,
       createdAt: s.createdAt,
       payableBalance: await supplierBalance(s.id),
     }))
@@ -123,6 +124,7 @@ router.get("/suppliers/:id", requireAuth, async (req, res) => {
     address: s.address ?? null,
     ntn: s.ntn ?? null,
     openingBalance: parseFloat(s.openingBalance ?? "0"),
+    openingBalanceDate: s.openingBalanceDate ?? null,
     createdAt: s.createdAt,
     payableBalance: balance,
     invoices: invoices.map((inv) => ({
@@ -167,6 +169,242 @@ router.delete("/suppliers/:id", requireAuth, async (req, res) => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(suppliersTable).where(eq(suppliersTable.id, id));
   res.status(204).send();
+});
+
+function toSupplierRowResponse(s: typeof suppliersTable.$inferSelect, balance: number) {
+  return {
+    id: s.id,
+    name: s.name,
+    contact: s.contact ?? null,
+    address: s.address ?? null,
+    ntn: s.ntn ?? null,
+    openingBalance: parseFloat(s.openingBalance ?? "0"),
+    openingBalanceDate: s.openingBalanceDate ?? null,
+    payableBalance: balance,
+    createdAt: s.createdAt,
+  };
+}
+
+// ── GET /suppliers/:id/ledger ─────────────────────────────────────────────────
+// Mirrors customers.ts's /:id/ledger, with the balance sign flipped: purchases
+// increase what we owe the supplier, payments (whether the invoice's own inline
+// paidAmount or a standalone supplier_payments row) decrease it. Only "live"
+// (posted) rows are summed — see the correction workflow.
+
+router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, id));
+  if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+
+  const fromDate = req.query.from ? String(req.query.from) : null;
+  const toDate = req.query.to ? String(req.query.to) : null;
+
+  const invoiceConditions = [eq(purchaseInvoicesTable.supplierId, id), eq(purchaseInvoicesTable.status, "posted")];
+  const paymentConditions = [eq(supplierPaymentsTable.supplierId, id), eq(supplierPaymentsTable.status, "posted")];
+  if (fromDate) {
+    invoiceConditions.push(gte(purchaseInvoicesTable.date, fromDate));
+    paymentConditions.push(gte(supplierPaymentsTable.date, fromDate));
+  }
+  if (toDate) {
+    invoiceConditions.push(lte(purchaseInvoicesTable.date, toDate));
+    paymentConditions.push(lte(supplierPaymentsTable.date, toDate));
+  }
+
+  const invoices = await db.select().from(purchaseInvoicesTable)
+    .where(and(...invoiceConditions))
+    .orderBy(asc(purchaseInvoicesTable.date), asc(purchaseInvoicesTable.id));
+
+  const pmts = await db.select().from(supplierPaymentsTable)
+    .where(and(...paymentConditions))
+    .orderBy(asc(supplierPaymentsTable.date), asc(supplierPaymentsTable.id));
+
+  // Opening balance as-of fromDate: everything posted strictly before it.
+  let openingBalance = parseFloat(s.openingBalance ?? "0");
+  if (fromDate) {
+    const beforeInvoices = await db.select({
+      totalAmount: sql<number>`coalesce(sum(${purchaseInvoicesTable.totalAmount}),0)`,
+      paidAmount: sql<number>`coalesce(sum(${purchaseInvoicesTable.paidAmount}),0)`,
+    }).from(purchaseInvoicesTable)
+      .where(and(eq(purchaseInvoicesTable.supplierId, id), eq(purchaseInvoicesTable.status, "posted"), sql`${purchaseInvoicesTable.date} < ${fromDate}`));
+    const beforePmts = await db.select({ total: sql<number>`coalesce(sum(${supplierPaymentsTable.amount}),0)` })
+      .from(supplierPaymentsTable)
+      .where(and(eq(supplierPaymentsTable.supplierId, id), eq(supplierPaymentsTable.status, "posted"), sql`${supplierPaymentsTable.date} < ${fromDate}`));
+    openingBalance = parseFloat(s.openingBalance ?? "0")
+      + parseFloat(String(beforeInvoices[0]?.totalAmount ?? 0))
+      - parseFloat(String(beforeInvoices[0]?.paidAmount ?? 0))
+      - parseFloat(String(beforePmts[0]?.total ?? 0));
+  }
+
+  type TimelineRow = {
+    date: string;
+    sortKey: string;
+    transactionType: string;
+    remarks: string | null;
+    documentNo: string | null;
+    item: string | null;
+    unit: string | null;
+    qtyBags: number | null;
+    rateBag: number | null;
+    purchaseValue: number;
+    paidAmount: number;
+  };
+
+  const rows: TimelineRow[] = [];
+
+  // Category totals accumulator (purchase item values), independent of row granularity.
+  const categoryTotals = new Map<string, number>();
+  const categoryQtys = new Map<string, number>();
+  const categoryUnits = new Map<string, string>();
+
+  // Purchase invoice rows — one row per invoice (an invoice's own inline paidAmount, e.g.
+  // from a cash purchase, is folded into the same row rather than a separate payment row).
+  for (const inv of invoices) {
+    const items = await db.select({
+      productName: productsTable.name,
+      category: productsTable.category,
+      unit: productsTable.unit,
+      qty: purchaseInvoiceItemsTable.qty,
+      rate: purchaseInvoiceItemsTable.rate,
+      amount: purchaseInvoiceItemsTable.amount,
+    }).from(purchaseInvoiceItemsTable)
+      .leftJoin(productsTable, eq(purchaseInvoiceItemsTable.productId, productsTable.id))
+      .where(eq(purchaseInvoiceItemsTable.purchaseInvoiceId, inv.id));
+
+    for (const item of items) {
+      const cat = item.category?.trim() || "Uncategorised";
+      const amount = parseFloat(item.amount);
+      const qty = parseFloat(item.qty);
+      categoryTotals.set(cat, (categoryTotals.get(cat) ?? 0) + amount);
+      categoryQtys.set(cat, (categoryQtys.get(cat) ?? 0) + qty);
+      if (item.unit) categoryUnits.set(cat, item.unit);
+    }
+
+    rows.push({
+      date: inv.date,
+      sortKey: `${inv.date}_1_${String(inv.id).padStart(8, "0")}`,
+      transactionType: "Purchase",
+      remarks: inv.notes ?? null,
+      documentNo: inv.invoiceNo ?? `PUR-${inv.id}`,
+      item: items.map(i => i.productName).filter(Boolean).join(", ") || null,
+      unit: items.length === 1 ? (items[0].unit ?? null) : null,
+      qtyBags: items.length === 1 ? parseFloat(items[0].qty) : null,
+      rateBag: items.length === 1 ? parseFloat(items[0].rate) : null,
+      purchaseValue: parseFloat(inv.totalAmount),
+      paidAmount: parseFloat(inv.paidAmount),
+    });
+  }
+
+  // Standalone supplier payment rows
+  const paymentModeLabels: Record<string, string> = {
+    cash: "Cash Paid", bank: "Bank Paid", easypaisa: "Easypaisa Paid",
+    jazzcash: "JazzCash Paid", cheque: "Cheque Paid", other: "Payment",
+  };
+  for (const p of pmts) {
+    rows.push({
+      date: p.date,
+      sortKey: `${p.date}_0_${String(p.id).padStart(8, "0")}`,
+      transactionType: paymentModeLabels[p.paymentMode] ?? "Payment",
+      remarks: p.notes ?? null,
+      documentNo: p.chequeNo ?? p.bankAccount ?? null,
+      item: null,
+      unit: null,
+      qtyBags: null,
+      rateBag: null,
+      purchaseValue: 0,
+      paidAmount: parseFloat(p.amount),
+    });
+  }
+
+  // Sort by date then by type (payments before purchases same day, per the customer convention)
+  rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  let running = openingBalance;
+  let totalPurchased = 0, totalPaid = 0;
+
+  const entries = rows.map((row, i) => {
+    running = running + row.purchaseValue - row.paidAmount;
+    totalPurchased += row.purchaseValue;
+    totalPaid += row.paidAmount;
+    return {
+      srNo: i + 1,
+      date: row.date,
+      transactionType: row.transactionType,
+      remarks: row.remarks,
+      documentNo: row.documentNo,
+      item: row.item,
+      unit: row.unit,
+      qtyBags: row.qtyBags,
+      rateBag: row.rateBag,
+      purchaseValue: row.purchaseValue,
+      paidAmount: row.paidAmount,
+      balance: Math.round(running * 100) / 100,
+    };
+  });
+
+  const catTotal = Array.from(categoryTotals.values()).reduce((a, b) => a + b, 0);
+  const categoryBreakdown = Array.from(categoryTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([category, amount]) => ({
+      category,
+      unit: categoryUnits.get(category) ?? null,
+      qty: Math.round((categoryQtys.get(category) ?? 0) * 100) / 100,
+      amount: Math.round(amount * 100) / 100,
+      share: catTotal > 0 ? Math.round((amount / catTotal) * 1000) / 10 : 0,
+    }));
+
+  res.json({
+    supplier: toSupplierRowResponse(s, running),
+    openingBalance: Math.round(openingBalance * 100) / 100,
+    openingBalanceDate: fromDate ?? s.openingBalanceDate ?? null,
+    closingBalance: Math.round(running * 100) / 100,
+    totalPurchased: Math.round(totalPurchased * 100) / 100,
+    totalPaid: Math.round(totalPaid * 100) / 100,
+    from: fromDate,
+    to: toDate,
+    entries,
+    categoryBreakdown,
+  });
+});
+
+// ── GET /suppliers/:id/statement ──────────────────────────────────────────────
+
+router.get("/suppliers/:id/statement", requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, id));
+  if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+
+  const invoices = await db.select().from(purchaseInvoicesTable)
+    .where(and(eq(purchaseInvoicesTable.supplierId, id), eq(purchaseInvoicesTable.status, "posted")))
+    .orderBy(purchaseInvoicesTable.date);
+  const pmts = await db.select().from(supplierPaymentsTable)
+    .where(and(eq(supplierPaymentsTable.supplierId, id), eq(supplierPaymentsTable.status, "posted")))
+    .orderBy(supplierPaymentsTable.date);
+
+  const entries: Array<{ date: string; desc: string; debit: number; credit: number }> = [];
+  for (const inv of invoices) {
+    entries.push({ date: inv.date, desc: `Purchase ${inv.invoiceNo ?? `#${inv.id}`}`, debit: parseFloat(inv.totalAmount), credit: 0 });
+    if (parseFloat(inv.paidAmount) > 0) {
+      entries.push({ date: inv.date, desc: `Payment (Inv ${inv.invoiceNo ?? `#${inv.id}`})`, debit: 0, credit: parseFloat(inv.paidAmount) });
+    }
+  }
+  for (const p of pmts) entries.push({ date: p.date, desc: "Payment", debit: 0, credit: parseFloat(p.amount) });
+  entries.sort((a, b) => a.date.localeCompare(b.date));
+
+  const openingBalance = parseFloat(s.openingBalance ?? "0");
+  let running = openingBalance;
+  const lines = [`*${s.name} - Account Statement*`, `Opening Balance: Rs. ${openingBalance.toLocaleString()}`, "─".repeat(40)];
+  for (const e of entries) {
+    running += e.debit - e.credit;
+    const col = e.debit > 0 ? `Dr ${e.debit.toLocaleString()}` : `Cr ${e.credit.toLocaleString()}`;
+    lines.push(`${e.date}  ${e.desc.padEnd(18)} ${col.padStart(12)}  Bal: ${running.toLocaleString()}`);
+  }
+  lines.push("─".repeat(40));
+  lines.push(`*Payable Balance: Rs. ${running.toLocaleString()}*`);
+  if (s.contact) lines.push(`Contact: ${s.contact}`);
+
+  res.json({ supplierId: s.id, supplierName: s.name, text: lines.join("\n") });
 });
 
 // ── GET /purchases ────────────────────────────────────────────────────────────

@@ -919,6 +919,8 @@ export interface SupplierRow {
   /** @nullable */
   ntn?: string | null;
   openingBalance: number;
+  /** @nullable */
+  openingBalanceDate?: string | null;
   payableBalance: number;
   createdAt: string;
 }
@@ -975,6 +977,8 @@ export interface SupplierDetail {
   /** @nullable */
   ntn?: string | null;
   openingBalance: number;
+  /** @nullable */
+  openingBalanceDate?: string | null;
   payableBalance: number;
   createdAt: string;
   invoices: PurchaseInvoiceRow[];
@@ -1093,6 +1097,49 @@ export interface PurchaseCorrectionResult {
   original: PurchaseInvoiceRow;
   reversal: PurchaseInvoiceRow;
   correction?: PurchaseInvoiceRow;
+}
+
+export interface SupplierLedgerEntry {
+  srNo: number;
+  date: string;
+  transactionType: string;
+  /** @nullable */
+  remarks?: string | null;
+  /** @nullable */
+  documentNo: string | null;
+  /** @nullable */
+  item?: string | null;
+  /** @nullable */
+  unit?: string | null;
+  /** @nullable */
+  qtyBags?: number | null;
+  /** @nullable */
+  rateBag?: number | null;
+  purchaseValue: number;
+  paidAmount: number;
+  balance: number;
+}
+
+export interface SupplierLedger {
+  supplier: SupplierRow;
+  openingBalance: number;
+  /** @nullable */
+  openingBalanceDate: string | null;
+  closingBalance: number;
+  totalPurchased: number;
+  totalPaid: number;
+  /** @nullable */
+  from: string | null;
+  /** @nullable */
+  to: string | null;
+  entries: SupplierLedgerEntry[];
+  categoryBreakdown: CategoryBreakdownItem[];
+}
+
+export interface SupplierStatement {
+  supplierId: number;
+  supplierName: string;
+  text: string;
 }
 
 export type CashbookEntryType = typeof CashbookEntryType[keyof typeof CashbookEntryType];
@@ -1470,6 +1517,11 @@ category?: string;
 
 export type GetProfitBreakdownParams = {
 date?: string;
+};
+
+export type GetSupplierLedgerParams = {
+from?: string;
+to?: string;
 };
 
 export type ListPurchasesParams = {

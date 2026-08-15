@@ -1213,6 +1213,54 @@ paths:
         "204":
           description: Deleted
 
+  /suppliers/{id}/ledger:
+    get:
+      operationId: getSupplierLedger
+      tags: [suppliers]
+      summary: Get a supplier's detailed ledger with running balance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierLedger"
+
+  /suppliers/{id}/statement:
+    get:
+      operationId: getSupplierStatement
+      tags: [suppliers]
+      summary: Get WhatsApp-ready plain text statement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Plain text statement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierStatement"
+
   # ── PURCHASES ─────────────────────────────────────────────────────────────
   /purchases:
     get:
@@ -2865,6 +2913,9 @@ components:
           type: ["string", "null"]
         openingBalance:
           type: number
+        openingBalanceDate:
+          type: ["string", "null"]
+          format: date
         payableBalance:
           type: number
         createdAt:
@@ -2887,6 +2938,9 @@ components:
           type: ["string", "null"]
         openingBalance:
           type: number
+        openingBalanceDate:
+          type: ["string", "null"]
+          format: date
         payableBalance:
           type: number
         createdAt:
@@ -3074,6 +3128,79 @@ components:
           $ref: "#/components/schemas/PurchaseInvoiceRow"
         correction:
           $ref: "#/components/schemas/PurchaseInvoiceRow"
+
+    SupplierLedgerEntry:
+      type: object
+      required: [srNo, date, transactionType, documentNo, purchaseValue, paidAmount, balance]
+      properties:
+        srNo:
+          type: integer
+        date:
+          type: string
+          format: date
+        transactionType:
+          type: string
+        remarks:
+          type: ["string", "null"]
+        documentNo:
+          type: ["string", "null"]
+        item:
+          type: ["string", "null"]
+        unit:
+          type: ["string", "null"]
+        qtyBags:
+          type: ["number", "null"]
+        rateBag:
+          type: ["number", "null"]
+        purchaseValue:
+          type: number
+        paidAmount:
+          type: number
+        balance:
+          type: number
+
+    SupplierLedger:
+      type: object
+      required: [supplier, openingBalance, openingBalanceDate, closingBalance, totalPurchased, totalPaid, from, to, entries, categoryBreakdown]
+      properties:
+        supplier:
+          $ref: "#/components/schemas/SupplierRow"
+        openingBalance:
+          type: number
+        openingBalanceDate:
+          type: ["string", "null"]
+          format: date
+        closingBalance:
+          type: number
+        totalPurchased:
+          type: number
+        totalPaid:
+          type: number
+        from:
+          type: ["string", "null"]
+          format: date
+        to:
+          type: ["string", "null"]
+          format: date
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierLedgerEntry"
+        categoryBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryBreakdownItem"
+
+    SupplierStatement:
+      type: object
+      required: [supplierId, supplierName, text]
+      properties:
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        text:
+          type: string
 
     # ── CASHBOOK SCHEMAS ──────────────────────────────────────────────────
     CashbookEntry:

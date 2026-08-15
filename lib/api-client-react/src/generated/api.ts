@@ -49,6 +49,7 @@ import type {
   GetDailyProfitReportParams,
   GetMonthlySalesReportParams,
   GetProfitBreakdownParams,
+  GetSupplierLedgerParams,
   HealthStatus,
   InstallmentPaymentCorrectionInput,
   InstallmentPaymentInput,
@@ -91,11 +92,13 @@ import type {
   StockAdjustmentInput,
   SupplierDetail,
   SupplierInput,
+  SupplierLedger,
   SupplierPayment,
   SupplierPaymentCorrectionInput,
   SupplierPaymentCorrectionResult,
   SupplierPaymentInput,
   SupplierRow,
+  SupplierStatement,
   UpdateInventorySettingsResponse,
   User,
   UserInput,
@@ -4514,6 +4517,172 @@ export const useDeleteSupplier = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteSupplierMutationOptions(options));
     }
+
+export const getGetSupplierLedgerUrl = (id: number,
+    params?: GetSupplierLedgerParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/suppliers/${id}/ledger?${stringifiedParams}` : `/api/suppliers/${id}/ledger`
+}
+
+/**
+ * @summary Get a supplier's detailed ledger with running balance
+ */
+export const getSupplierLedger = async (id: number,
+    params?: GetSupplierLedgerParams, options?: RequestInit): Promise<SupplierLedger> => {
+
+  return customFetch<SupplierLedger>(getGetSupplierLedgerUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierLedgerQueryKey = (id: number,
+    params?: GetSupplierLedgerParams,) => {
+    return [
+    `/api/suppliers/${id}/ledger`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetSupplierLedgerQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierLedger>>, TError = ErrorType<unknown>>(id: number,
+    params?: GetSupplierLedgerParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierLedgerQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierLedger>>> = ({ signal }) => getSupplierLedger(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierLedgerQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierLedger>>>
+export type GetSupplierLedgerQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a supplier's detailed ledger with running balance
+ */
+
+export function useGetSupplierLedger<TData = Awaited<ReturnType<typeof getSupplierLedger>>, TError = ErrorType<unknown>>(
+ id: number,
+    params?: GetSupplierLedgerParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierLedgerQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSupplierStatementUrl = (id: number,) => {
+
+
+
+
+  return `/api/suppliers/${id}/statement`
+}
+
+/**
+ * @summary Get WhatsApp-ready plain text statement
+ */
+export const getSupplierStatement = async (id: number, options?: RequestInit): Promise<SupplierStatement> => {
+
+  return customFetch<SupplierStatement>(getGetSupplierStatementUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierStatementQueryKey = (id: number,) => {
+    return [
+    `/api/suppliers/${id}/statement`
+    ] as const;
+    }
+
+
+export const getGetSupplierStatementQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierStatement>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierStatement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierStatementQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierStatement>>> = ({ signal }) => getSupplierStatement(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierStatement>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierStatementQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierStatement>>>
+export type GetSupplierStatementQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get WhatsApp-ready plain text statement
+ */
+
+export function useGetSupplierStatement<TData = Awaited<ReturnType<typeof getSupplierStatement>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierStatement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierStatementQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListPurchasesUrl = (params?: ListPurchasesParams,) => {
   const normalizedParams = new URLSearchParams();

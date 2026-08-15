@@ -1563,6 +1563,7 @@ export const ListSuppliersResponseItem = zod.object({
   "address": zod.string().nullish(),
   "ntn": zod.string().nullish(),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
   "payableBalance": zod.number(),
   "createdAt": zod.coerce.date()
 })
@@ -1590,6 +1591,7 @@ export const CreateSupplierResponse = zod.object({
   "address": zod.string().nullish(),
   "ntn": zod.string().nullish(),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
   "payableBalance": zod.number(),
   "createdAt": zod.coerce.date()
 })
@@ -1609,6 +1611,7 @@ export const GetSupplierResponse = zod.object({
   "address": zod.string().nullish(),
   "ntn": zod.string().nullish(),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
   "payableBalance": zod.number(),
   "createdAt": zod.coerce.date(),
   "invoices": zod.array(zod.object({
@@ -1655,6 +1658,7 @@ export const UpdateSupplierResponse = zod.object({
   "address": zod.string().nullish(),
   "ntn": zod.string().nullish(),
   "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
   "payableBalance": zod.number(),
   "createdAt": zod.coerce.date()
 })
@@ -1668,6 +1672,75 @@ export const DeleteSupplierParams = zod.object({
 })
 
 export const DeleteSupplierResponse = zod.void()
+
+
+/**
+ * @summary Get a supplier's detailed ledger with running balance
+ */
+export const GetSupplierLedgerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSupplierLedgerQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional()
+})
+
+export const GetSupplierLedgerResponse = zod.object({
+  "supplier": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "contact": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "ntn": zod.string().nullish(),
+  "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullish(),
+  "payableBalance": zod.number(),
+  "createdAt": zod.coerce.date()
+}),
+  "openingBalance": zod.number(),
+  "openingBalanceDate": zod.coerce.date().nullable(),
+  "closingBalance": zod.number(),
+  "totalPurchased": zod.number(),
+  "totalPaid": zod.number(),
+  "from": zod.coerce.date().nullable(),
+  "to": zod.coerce.date().nullable(),
+  "entries": zod.array(zod.object({
+  "srNo": zod.number(),
+  "date": zod.coerce.date(),
+  "transactionType": zod.string(),
+  "remarks": zod.string().nullish(),
+  "documentNo": zod.string().nullable(),
+  "item": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qtyBags": zod.number().nullish(),
+  "rateBag": zod.number().nullish(),
+  "purchaseValue": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number()
+})),
+  "categoryBreakdown": zod.array(zod.object({
+  "category": zod.string(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "amount": zod.number(),
+  "share": zod.number()
+}))
+})
+
+
+/**
+ * @summary Get WhatsApp-ready plain text statement
+ */
+export const GetSupplierStatementParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSupplierStatementResponse = zod.object({
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "text": zod.string()
+})
 
 
 /**
