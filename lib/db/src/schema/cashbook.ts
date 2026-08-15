@@ -8,9 +8,10 @@ export const cashbookEntriesTable = pgTable("cashbook_entries", {
   // "purchase" was previously mislabeled "manual" — widened here so the Purchases
   // correction workflow can find/cascade its own auto-posted entry unambiguously,
   // the same way "payment" already lets Payments do so. TS-level hint only (plain
-  // text column, no DB enum), so no migration needed to add a value.
+  // text column, no DB enum), so no migration needed to add a value. "sale_return"/
+  // "purchase_return" added the same way for the return refund auto-post/cascade.
   source: text("source")
-    .$type<"manual" | "payment" | "expense" | "purchase" | "supplier_payment" | "opening_balance" | "adjustment" | "salary" | "transfer">()
+    .$type<"manual" | "payment" | "expense" | "purchase" | "supplier_payment" | "opening_balance" | "adjustment" | "salary" | "transfer" | "sale_return" | "purchase_return">()
     .notNull()
     .default("manual"),
   referenceId: integer("reference_id"),

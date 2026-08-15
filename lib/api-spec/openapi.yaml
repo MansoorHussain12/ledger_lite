@@ -17,6 +17,8 @@ tags:
     description: Product/inventory management
   - name: saleOrders
     description: Sale orders & invoices
+  - name: saleReturns
+    description: Returns of goods against a specific sale order
   - name: payments
     description: Payments & receipts
   - name: reports
@@ -29,6 +31,8 @@ tags:
     description: Inventory management & stock movements
   - name: suppliers
     description: Suppliers & purchase invoices
+  - name: purchaseReturns
+    description: Returns of goods against a specific purchase invoice
   - name: supplierPayments
     description: Payments made to suppliers, independent of any single purchase invoice
   - name: cashbook
@@ -523,6 +527,135 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SaleOrderCorrectionResult"
+        "409":
+          description: The target row is not currently posted
+
+  # ── SALE RETURNS ──────────────────────────────────────────────────────────
+  /sale-returns/eligible/{saleOrderId}:
+    get:
+      operationId: getSaleReturnEligibility
+      tags: [saleReturns]
+      summary: Get a sale order's items with remaining returnable qty per item
+      parameters:
+        - name: saleOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Eligible items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleReturnEligibleResponse"
+        "409":
+          description: The sale order is not currently posted
+
+  /sale-returns:
+    get:
+      operationId: listSaleReturns
+      tags: [saleReturns]
+      summary: List sale returns
+      parameters:
+        - name: saleOrderId
+          in: query
+          schema:
+            type: integer
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Sale return list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SaleReturnRow"
+    post:
+      operationId: createSaleReturn
+      tags: [saleReturns]
+      summary: Create a sale return against a specific posted sale order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaleReturnInput"
+      responses:
+        "201":
+          description: Sale return created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleReturnRow"
+
+  /sale-returns/{id}:
+    get:
+      operationId: getSaleReturn
+      tags: [saleReturns]
+      summary: Get a sale return with items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sale return detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleReturnDetail"
+
+  /sale-returns/{id}/correct:
+    post:
+      operationId: correctSaleReturn
+      tags: [saleReturns]
+      summary: Correct (or void) a posted sale return — never edits or deletes it in place
+      description: >
+        Standard correction workflow (see /sale-orders/{id}/correct). The return's
+        saleOrderId cannot change in a correction — only which/how much of that order's
+        items are returned, and the refund. Also reverses/reposts the return's auto-posted
+        cashbook refund entry (if any).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaleReturnCorrectionInput"
+      responses:
+        "200":
+          description: Correction applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleReturnCorrectionResult"
         "409":
           description: The target row is not currently posted
 
@@ -1365,6 +1498,135 @@ paths:
         "409":
           description: The target row is not currently posted
 
+  # ── PURCHASE RETURNS ──────────────────────────────────────────────────────
+  /purchase-returns/eligible/{purchaseInvoiceId}:
+    get:
+      operationId: getPurchaseReturnEligibility
+      tags: [purchaseReturns]
+      summary: Get a purchase invoice's items with remaining returnable qty per item
+      parameters:
+        - name: purchaseInvoiceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Eligible items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseReturnEligibleResponse"
+        "409":
+          description: The purchase invoice is not currently posted
+
+  /purchase-returns:
+    get:
+      operationId: listPurchaseReturns
+      tags: [purchaseReturns]
+      summary: List purchase returns
+      parameters:
+        - name: purchaseInvoiceId
+          in: query
+          schema:
+            type: integer
+        - name: supplierId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Purchase return list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PurchaseReturnRow"
+    post:
+      operationId: createPurchaseReturn
+      tags: [purchaseReturns]
+      summary: Create a purchase return against a specific posted purchase invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseReturnInput"
+      responses:
+        "201":
+          description: Purchase return created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseReturnRow"
+
+  /purchase-returns/{id}:
+    get:
+      operationId: getPurchaseReturn
+      tags: [purchaseReturns]
+      summary: Get a purchase return with items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase return detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseReturnDetail"
+
+  /purchase-returns/{id}/correct:
+    post:
+      operationId: correctPurchaseReturn
+      tags: [purchaseReturns]
+      summary: Correct (or void) a posted purchase return — never edits or deletes it in place
+      description: >
+        Standard correction workflow (see /sale-orders/{id}/correct). The return's
+        purchaseInvoiceId cannot change in a correction — only which/how much of that
+        invoice's items are returned, and the refund. Also reverses/reposts the return's
+        auto-posted cashbook refund entry (if any).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseReturnCorrectionInput"
+      responses:
+        "200":
+          description: Correction applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseReturnCorrectionResult"
+        "409":
+          description: The target row is not currently posted
+
   # ── CASHBOOK ──────────────────────────────────────────────────────────────
   /cashbook:
     get:
@@ -1865,7 +2127,7 @@ components:
 
     LedgerEntry:
       type: object
-      required: [srNo, date, transactionType, documentNo, receivedAmount, paidAmount, soValue, balance]
+      required: [srNo, date, transactionType, documentNo, receivedAmount, paidAmount, soValue, returnValue, refundAmount, balance]
       properties:
         srNo:
           type: integer
@@ -1898,6 +2160,10 @@ components:
           type: number
         soValue:
           type: number
+        returnValue:
+          type: number
+        refundAmount:
+          type: number
         balance:
           type: number
 
@@ -1918,7 +2184,7 @@ components:
 
     CustomerLedger:
       type: object
-      required: [customer, openingBalance, openingBalanceDate, closingBalance, totalReceived, totalSoValue, from, to, entries, categoryBreakdown]
+      required: [customer, openingBalance, openingBalanceDate, closingBalance, totalReceived, totalSoValue, totalReturnValue, totalRefundAmount, from, to, entries, categoryBreakdown]
       properties:
         customer:
           $ref: "#/components/schemas/Customer"
@@ -1934,6 +2200,10 @@ components:
         totalPaid:
           type: number
         totalSoValue:
+          type: number
+        totalReturnValue:
+          type: number
+        totalRefundAmount:
           type: number
         totalTons:
           type: number
@@ -2152,6 +2422,211 @@ components:
           $ref: "#/components/schemas/SaleOrder"
         correction:
           $ref: "#/components/schemas/SaleOrder"
+
+    SaleReturnEligibleItem:
+      type: object
+      required: [saleOrderItemId, productId, productName, originalQty, alreadyReturnedQty, returnableQty, rate]
+      properties:
+        saleOrderItemId:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        unit:
+          type: ["string", "null"]
+        originalQty:
+          type: number
+        alreadyReturnedQty:
+          type: number
+        returnableQty:
+          type: number
+        rate:
+          type: number
+        costPrice:
+          type: ["number", "null"]
+
+    SaleReturnEligibleResponse:
+      type: object
+      required: [saleOrder, items]
+      properties:
+        saleOrder:
+          $ref: "#/components/schemas/SaleOrder"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleReturnEligibleItem"
+
+    SaleReturnItemRow:
+      type: object
+      required: [id, saleOrderItemId, productId, productName, qty, rate, amount]
+      properties:
+        id:
+          type: integer
+        saleOrderItemId:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        qty:
+          type: number
+        rate:
+          type: number
+        amount:
+          type: number
+        costPrice:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    SaleReturnRow:
+      type: object
+      required: [id, saleOrderId, customerId, customerName, date, totalAmount, refundPaid, refundMode, createdAt, status]
+      properties:
+        id:
+          type: integer
+        saleOrderId:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        date:
+          type: string
+          format: date
+        totalAmount:
+          type: number
+        refundPaid:
+          type: number
+        refundMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        reason:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
+
+    SaleReturnDetail:
+      type: object
+      required: [id, saleOrderId, customerId, customerName, date, totalAmount, refundPaid, refundMode, createdAt, items, status]
+      properties:
+        id:
+          type: integer
+        saleOrderId:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        date:
+          type: string
+          format: date
+        totalAmount:
+          type: number
+        refundPaid:
+          type: number
+        refundMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        reason:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleReturnItemRow"
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
+
+    SaleReturnItemInput:
+      type: object
+      required: [saleOrderItemId, qty]
+      properties:
+        saleOrderItemId:
+          type: integer
+        qty:
+          type: number
+        notes:
+          type: string
+
+    SaleReturnInput:
+      type: object
+      required: [saleOrderId, date, items]
+      properties:
+        saleOrderId:
+          type: integer
+        date:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleReturnItemInput"
+        refundPaid:
+          type: number
+          default: 0
+        refundMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+          default: cash
+        reason:
+          type: string
+        notes:
+          type: string
+
+    SaleReturnCorrectionInput:
+      type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (items/refund/reason/notes — saleOrderId cannot change)
+        to reverse-and-replace.
+      properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleReturnItemInput"
+        refundPaid:
+          type: number
+        refundMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        notes:
+          type: string
+
+    SaleReturnCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/SaleReturnRow"
+        reversal:
+          $ref: "#/components/schemas/SaleReturnRow"
+        correction:
+          $ref: "#/components/schemas/SaleReturnRow"
 
     # ── PAYMENTS ──────────────────────────────────────────────────────────
     Payment:
@@ -2688,6 +3163,10 @@ components:
           type: number
         adjusted:
           type: number
+        salesReturned:
+          type: number
+        purchasesReturned:
+          type: number
         currentStock:
           type: number
         status:
@@ -3129,9 +3608,210 @@ components:
         correction:
           $ref: "#/components/schemas/PurchaseInvoiceRow"
 
+    PurchaseReturnEligibleItem:
+      type: object
+      required: [purchaseInvoiceItemId, productId, productName, originalQty, alreadyReturnedQty, returnableQty, rate]
+      properties:
+        purchaseInvoiceItemId:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        unit:
+          type: ["string", "null"]
+        originalQty:
+          type: number
+        alreadyReturnedQty:
+          type: number
+        returnableQty:
+          type: number
+        rate:
+          type: number
+
+    PurchaseReturnEligibleResponse:
+      type: object
+      required: [purchaseInvoice, items]
+      properties:
+        purchaseInvoice:
+          $ref: "#/components/schemas/PurchaseInvoiceRow"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseReturnEligibleItem"
+
+    PurchaseReturnItemRow:
+      type: object
+      required: [id, purchaseInvoiceItemId, productId, productName, qty, rate, amount]
+      properties:
+        id:
+          type: integer
+        purchaseInvoiceItemId:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        qty:
+          type: number
+        rate:
+          type: number
+        amount:
+          type: number
+        notes:
+          type: ["string", "null"]
+
+    PurchaseReturnRow:
+      type: object
+      required: [id, purchaseInvoiceId, supplierId, supplierName, date, totalAmount, refundReceived, refundMode, createdAt, status]
+      properties:
+        id:
+          type: integer
+        purchaseInvoiceId:
+          type: integer
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        date:
+          type: string
+          format: date
+        totalAmount:
+          type: number
+        refundReceived:
+          type: number
+        refundMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        reason:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
+
+    PurchaseReturnDetail:
+      type: object
+      required: [id, purchaseInvoiceId, supplierId, supplierName, date, totalAmount, refundReceived, refundMode, createdAt, items, status]
+      properties:
+        id:
+          type: integer
+        purchaseInvoiceId:
+          type: integer
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        date:
+          type: string
+          format: date
+        totalAmount:
+          type: number
+        refundReceived:
+          type: number
+        refundMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        reason:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseReturnItemRow"
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
+
+    PurchaseReturnItemInput:
+      type: object
+      required: [purchaseInvoiceItemId, qty]
+      properties:
+        purchaseInvoiceItemId:
+          type: integer
+        qty:
+          type: number
+        notes:
+          type: string
+
+    PurchaseReturnInput:
+      type: object
+      required: [purchaseInvoiceId, date, items]
+      properties:
+        purchaseInvoiceId:
+          type: integer
+        date:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseReturnItemInput"
+        refundReceived:
+          type: number
+          default: 0
+        refundMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+          default: cash
+        reason:
+          type: string
+        notes:
+          type: string
+
+    PurchaseReturnCorrectionInput:
+      type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (items/refund/reason/notes — purchaseInvoiceId cannot
+        change) to reverse-and-replace.
+      properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseReturnItemInput"
+        refundReceived:
+          type: number
+        refundMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        notes:
+          type: string
+
+    PurchaseReturnCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/PurchaseReturnRow"
+        reversal:
+          $ref: "#/components/schemas/PurchaseReturnRow"
+        correction:
+          $ref: "#/components/schemas/PurchaseReturnRow"
+
     SupplierLedgerEntry:
       type: object
-      required: [srNo, date, transactionType, documentNo, purchaseValue, paidAmount, balance]
+      required: [srNo, date, transactionType, documentNo, purchaseValue, paidAmount, returnValue, refundAmount, balance]
       properties:
         srNo:
           type: integer
@@ -3156,12 +3836,16 @@ components:
           type: number
         paidAmount:
           type: number
+        returnValue:
+          type: number
+        refundAmount:
+          type: number
         balance:
           type: number
 
     SupplierLedger:
       type: object
-      required: [supplier, openingBalance, openingBalanceDate, closingBalance, totalPurchased, totalPaid, from, to, entries, categoryBreakdown]
+      required: [supplier, openingBalance, openingBalanceDate, closingBalance, totalPurchased, totalPaid, totalReturnValue, totalRefundAmount, from, to, entries, categoryBreakdown]
       properties:
         supplier:
           $ref: "#/components/schemas/SupplierRow"
@@ -3175,6 +3859,10 @@ components:
         totalPurchased:
           type: number
         totalPaid:
+          type: number
+        totalReturnValue:
+          type: number
+        totalRefundAmount:
           type: number
         from:
           type: ["string", "null"]

@@ -62,8 +62,10 @@ import type {
   ListCustomersParams,
   ListExpensesParams,
   ListPaymentsParams,
+  ListPurchaseReturnsParams,
   ListPurchasesParams,
   ListSaleOrdersParams,
+  ListSaleReturnsParams,
   ListSupplierPaymentsParams,
   LoginInput,
   LookupInput,
@@ -84,10 +86,22 @@ import type {
   PurchaseInvoiceDetail,
   PurchaseInvoiceInput,
   PurchaseInvoiceRow,
+  PurchaseReturnCorrectionInput,
+  PurchaseReturnCorrectionResult,
+  PurchaseReturnDetail,
+  PurchaseReturnEligibleResponse,
+  PurchaseReturnInput,
+  PurchaseReturnRow,
   SaleOrder,
   SaleOrderCorrectionInput,
   SaleOrderCorrectionResult,
   SaleOrderInput,
+  SaleReturnCorrectionInput,
+  SaleReturnCorrectionResult,
+  SaleReturnDetail,
+  SaleReturnEligibleResponse,
+  SaleReturnInput,
+  SaleReturnRow,
   StockAdjustment,
   StockAdjustmentInput,
   SupplierDetail,
@@ -2008,6 +2022,388 @@ export const useCorrectSaleOrder = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCorrectSaleOrderMutationOptions(options));
+    }
+
+export const getGetSaleReturnEligibilityUrl = (saleOrderId: number,) => {
+
+
+
+
+  return `/api/sale-returns/eligible/${saleOrderId}`
+}
+
+/**
+ * @summary Get a sale order's items with remaining returnable qty per item
+ */
+export const getSaleReturnEligibility = async (saleOrderId: number, options?: RequestInit): Promise<SaleReturnEligibleResponse> => {
+
+  return customFetch<SaleReturnEligibleResponse>(getGetSaleReturnEligibilityUrl(saleOrderId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSaleReturnEligibilityQueryKey = (saleOrderId: number,) => {
+    return [
+    `/api/sale-returns/eligible/${saleOrderId}`
+    ] as const;
+    }
+
+
+export const getGetSaleReturnEligibilityQueryOptions = <TData = Awaited<ReturnType<typeof getSaleReturnEligibility>>, TError = ErrorType<void>>(saleOrderId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSaleReturnEligibility>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSaleReturnEligibilityQueryKey(saleOrderId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSaleReturnEligibility>>> = ({ signal }) => getSaleReturnEligibility(saleOrderId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: saleOrderId !== null && saleOrderId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSaleReturnEligibility>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSaleReturnEligibilityQueryResult = NonNullable<Awaited<ReturnType<typeof getSaleReturnEligibility>>>
+export type GetSaleReturnEligibilityQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a sale order's items with remaining returnable qty per item
+ */
+
+export function useGetSaleReturnEligibility<TData = Awaited<ReturnType<typeof getSaleReturnEligibility>>, TError = ErrorType<void>>(
+ saleOrderId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSaleReturnEligibility>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSaleReturnEligibilityQueryOptions(saleOrderId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListSaleReturnsUrl = (params?: ListSaleReturnsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/sale-returns?${stringifiedParams}` : `/api/sale-returns`
+}
+
+/**
+ * @summary List sale returns
+ */
+export const listSaleReturns = async (params?: ListSaleReturnsParams, options?: RequestInit): Promise<SaleReturnRow[]> => {
+
+  return customFetch<SaleReturnRow[]>(getListSaleReturnsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSaleReturnsQueryKey = (params?: ListSaleReturnsParams,) => {
+    return [
+    `/api/sale-returns`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSaleReturnsQueryOptions = <TData = Awaited<ReturnType<typeof listSaleReturns>>, TError = ErrorType<unknown>>(params?: ListSaleReturnsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSaleReturns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSaleReturnsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSaleReturns>>> = ({ signal }) => listSaleReturns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSaleReturns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSaleReturnsQueryResult = NonNullable<Awaited<ReturnType<typeof listSaleReturns>>>
+export type ListSaleReturnsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List sale returns
+ */
+
+export function useListSaleReturns<TData = Awaited<ReturnType<typeof listSaleReturns>>, TError = ErrorType<unknown>>(
+ params?: ListSaleReturnsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSaleReturns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSaleReturnsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateSaleReturnUrl = () => {
+
+
+
+
+  return `/api/sale-returns`
+}
+
+/**
+ * @summary Create a sale return against a specific posted sale order
+ */
+export const createSaleReturn = async (saleReturnInput: SaleReturnInput, options?: RequestInit): Promise<SaleReturnRow> => {
+
+  return customFetch<SaleReturnRow>(getCreateSaleReturnUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(saleReturnInput)
+  }
+);}
+
+
+
+
+
+export const getCreateSaleReturnMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSaleReturn>>, TError,{data: BodyType<SaleReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSaleReturn>>, TError,{data: BodyType<SaleReturnInput>}, TContext> => {
+
+const mutationKey = ['createSaleReturn'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSaleReturn>>, {data: BodyType<SaleReturnInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSaleReturn(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSaleReturnMutationResult = NonNullable<Awaited<ReturnType<typeof createSaleReturn>>>
+    export type CreateSaleReturnMutationBody = BodyType<SaleReturnInput>
+    export type CreateSaleReturnMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a sale return against a specific posted sale order
+ */
+export const useCreateSaleReturn = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSaleReturn>>, TError,{data: BodyType<SaleReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSaleReturn>>,
+        TError,
+        {data: BodyType<SaleReturnInput>},
+        TContext
+      > => {
+      return useMutation(getCreateSaleReturnMutationOptions(options));
+    }
+
+export const getGetSaleReturnUrl = (id: number,) => {
+
+
+
+
+  return `/api/sale-returns/${id}`
+}
+
+/**
+ * @summary Get a sale return with items
+ */
+export const getSaleReturn = async (id: number, options?: RequestInit): Promise<SaleReturnDetail> => {
+
+  return customFetch<SaleReturnDetail>(getGetSaleReturnUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSaleReturnQueryKey = (id: number,) => {
+    return [
+    `/api/sale-returns/${id}`
+    ] as const;
+    }
+
+
+export const getGetSaleReturnQueryOptions = <TData = Awaited<ReturnType<typeof getSaleReturn>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSaleReturn>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSaleReturnQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSaleReturn>>> = ({ signal }) => getSaleReturn(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSaleReturn>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSaleReturnQueryResult = NonNullable<Awaited<ReturnType<typeof getSaleReturn>>>
+export type GetSaleReturnQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a sale return with items
+ */
+
+export function useGetSaleReturn<TData = Awaited<ReturnType<typeof getSaleReturn>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSaleReturn>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSaleReturnQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCorrectSaleReturnUrl = (id: number,) => {
+
+
+
+
+  return `/api/sale-returns/${id}/correct`
+}
+
+/**
+ * Standard correction workflow (see /sale-orders/{id}/correct). The return's saleOrderId cannot change in a correction — only which/how much of that order's items are returned, and the refund. Also reverses/reposts the return's auto-posted cashbook refund entry (if any).
+ * @summary Correct (or void) a posted sale return — never edits or deletes it in place
+ */
+export const correctSaleReturn = async (id: number,
+    saleReturnCorrectionInput: SaleReturnCorrectionInput, options?: RequestInit): Promise<SaleReturnCorrectionResult> => {
+
+  return customFetch<SaleReturnCorrectionResult>(getCorrectSaleReturnUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(saleReturnCorrectionInput)
+  }
+);}
+
+
+
+
+
+export const getCorrectSaleReturnMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctSaleReturn>>, TError,{id: number;data: BodyType<SaleReturnCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctSaleReturn>>, TError,{id: number;data: BodyType<SaleReturnCorrectionInput>}, TContext> => {
+
+const mutationKey = ['correctSaleReturn'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctSaleReturn>>, {id: number;data: BodyType<SaleReturnCorrectionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  correctSaleReturn(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CorrectSaleReturnMutationResult = NonNullable<Awaited<ReturnType<typeof correctSaleReturn>>>
+    export type CorrectSaleReturnMutationBody = BodyType<SaleReturnCorrectionInput>
+    export type CorrectSaleReturnMutationError = ErrorType<void>
+
+    /**
+ * @summary Correct (or void) a posted sale return — never edits or deletes it in place
+ */
+export const useCorrectSaleReturn = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctSaleReturn>>, TError,{id: number;data: BodyType<SaleReturnCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof correctSaleReturn>>,
+        TError,
+        {id: number;data: BodyType<SaleReturnCorrectionInput>},
+        TContext
+      > => {
+      return useMutation(getCorrectSaleReturnMutationOptions(options));
     }
 
 export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
@@ -4987,6 +5383,388 @@ export const useCorrectPurchase = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCorrectPurchaseMutationOptions(options));
+    }
+
+export const getGetPurchaseReturnEligibilityUrl = (purchaseInvoiceId: number,) => {
+
+
+
+
+  return `/api/purchase-returns/eligible/${purchaseInvoiceId}`
+}
+
+/**
+ * @summary Get a purchase invoice's items with remaining returnable qty per item
+ */
+export const getPurchaseReturnEligibility = async (purchaseInvoiceId: number, options?: RequestInit): Promise<PurchaseReturnEligibleResponse> => {
+
+  return customFetch<PurchaseReturnEligibleResponse>(getGetPurchaseReturnEligibilityUrl(purchaseInvoiceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPurchaseReturnEligibilityQueryKey = (purchaseInvoiceId: number,) => {
+    return [
+    `/api/purchase-returns/eligible/${purchaseInvoiceId}`
+    ] as const;
+    }
+
+
+export const getGetPurchaseReturnEligibilityQueryOptions = <TData = Awaited<ReturnType<typeof getPurchaseReturnEligibility>>, TError = ErrorType<void>>(purchaseInvoiceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPurchaseReturnEligibility>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPurchaseReturnEligibilityQueryKey(purchaseInvoiceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPurchaseReturnEligibility>>> = ({ signal }) => getPurchaseReturnEligibility(purchaseInvoiceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: purchaseInvoiceId !== null && purchaseInvoiceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPurchaseReturnEligibility>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPurchaseReturnEligibilityQueryResult = NonNullable<Awaited<ReturnType<typeof getPurchaseReturnEligibility>>>
+export type GetPurchaseReturnEligibilityQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a purchase invoice's items with remaining returnable qty per item
+ */
+
+export function useGetPurchaseReturnEligibility<TData = Awaited<ReturnType<typeof getPurchaseReturnEligibility>>, TError = ErrorType<void>>(
+ purchaseInvoiceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPurchaseReturnEligibility>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPurchaseReturnEligibilityQueryOptions(purchaseInvoiceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListPurchaseReturnsUrl = (params?: ListPurchaseReturnsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/purchase-returns?${stringifiedParams}` : `/api/purchase-returns`
+}
+
+/**
+ * @summary List purchase returns
+ */
+export const listPurchaseReturns = async (params?: ListPurchaseReturnsParams, options?: RequestInit): Promise<PurchaseReturnRow[]> => {
+
+  return customFetch<PurchaseReturnRow[]>(getListPurchaseReturnsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPurchaseReturnsQueryKey = (params?: ListPurchaseReturnsParams,) => {
+    return [
+    `/api/purchase-returns`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPurchaseReturnsQueryOptions = <TData = Awaited<ReturnType<typeof listPurchaseReturns>>, TError = ErrorType<unknown>>(params?: ListPurchaseReturnsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPurchaseReturns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPurchaseReturnsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPurchaseReturns>>> = ({ signal }) => listPurchaseReturns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPurchaseReturns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPurchaseReturnsQueryResult = NonNullable<Awaited<ReturnType<typeof listPurchaseReturns>>>
+export type ListPurchaseReturnsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List purchase returns
+ */
+
+export function useListPurchaseReturns<TData = Awaited<ReturnType<typeof listPurchaseReturns>>, TError = ErrorType<unknown>>(
+ params?: ListPurchaseReturnsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPurchaseReturns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPurchaseReturnsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePurchaseReturnUrl = () => {
+
+
+
+
+  return `/api/purchase-returns`
+}
+
+/**
+ * @summary Create a purchase return against a specific posted purchase invoice
+ */
+export const createPurchaseReturn = async (purchaseReturnInput: PurchaseReturnInput, options?: RequestInit): Promise<PurchaseReturnRow> => {
+
+  return customFetch<PurchaseReturnRow>(getCreatePurchaseReturnUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(purchaseReturnInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePurchaseReturnMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPurchaseReturn>>, TError,{data: BodyType<PurchaseReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPurchaseReturn>>, TError,{data: BodyType<PurchaseReturnInput>}, TContext> => {
+
+const mutationKey = ['createPurchaseReturn'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPurchaseReturn>>, {data: BodyType<PurchaseReturnInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPurchaseReturn(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePurchaseReturnMutationResult = NonNullable<Awaited<ReturnType<typeof createPurchaseReturn>>>
+    export type CreatePurchaseReturnMutationBody = BodyType<PurchaseReturnInput>
+    export type CreatePurchaseReturnMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a purchase return against a specific posted purchase invoice
+ */
+export const useCreatePurchaseReturn = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPurchaseReturn>>, TError,{data: BodyType<PurchaseReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPurchaseReturn>>,
+        TError,
+        {data: BodyType<PurchaseReturnInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePurchaseReturnMutationOptions(options));
+    }
+
+export const getGetPurchaseReturnUrl = (id: number,) => {
+
+
+
+
+  return `/api/purchase-returns/${id}`
+}
+
+/**
+ * @summary Get a purchase return with items
+ */
+export const getPurchaseReturn = async (id: number, options?: RequestInit): Promise<PurchaseReturnDetail> => {
+
+  return customFetch<PurchaseReturnDetail>(getGetPurchaseReturnUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPurchaseReturnQueryKey = (id: number,) => {
+    return [
+    `/api/purchase-returns/${id}`
+    ] as const;
+    }
+
+
+export const getGetPurchaseReturnQueryOptions = <TData = Awaited<ReturnType<typeof getPurchaseReturn>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPurchaseReturn>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPurchaseReturnQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPurchaseReturn>>> = ({ signal }) => getPurchaseReturn(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPurchaseReturn>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPurchaseReturnQueryResult = NonNullable<Awaited<ReturnType<typeof getPurchaseReturn>>>
+export type GetPurchaseReturnQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a purchase return with items
+ */
+
+export function useGetPurchaseReturn<TData = Awaited<ReturnType<typeof getPurchaseReturn>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPurchaseReturn>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPurchaseReturnQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCorrectPurchaseReturnUrl = (id: number,) => {
+
+
+
+
+  return `/api/purchase-returns/${id}/correct`
+}
+
+/**
+ * Standard correction workflow (see /sale-orders/{id}/correct). The return's purchaseInvoiceId cannot change in a correction — only which/how much of that invoice's items are returned, and the refund. Also reverses/reposts the return's auto-posted cashbook refund entry (if any).
+ * @summary Correct (or void) a posted purchase return — never edits or deletes it in place
+ */
+export const correctPurchaseReturn = async (id: number,
+    purchaseReturnCorrectionInput: PurchaseReturnCorrectionInput, options?: RequestInit): Promise<PurchaseReturnCorrectionResult> => {
+
+  return customFetch<PurchaseReturnCorrectionResult>(getCorrectPurchaseReturnUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(purchaseReturnCorrectionInput)
+  }
+);}
+
+
+
+
+
+export const getCorrectPurchaseReturnMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctPurchaseReturn>>, TError,{id: number;data: BodyType<PurchaseReturnCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctPurchaseReturn>>, TError,{id: number;data: BodyType<PurchaseReturnCorrectionInput>}, TContext> => {
+
+const mutationKey = ['correctPurchaseReturn'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctPurchaseReturn>>, {id: number;data: BodyType<PurchaseReturnCorrectionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  correctPurchaseReturn(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CorrectPurchaseReturnMutationResult = NonNullable<Awaited<ReturnType<typeof correctPurchaseReturn>>>
+    export type CorrectPurchaseReturnMutationBody = BodyType<PurchaseReturnCorrectionInput>
+    export type CorrectPurchaseReturnMutationError = ErrorType<void>
+
+    /**
+ * @summary Correct (or void) a posted purchase return — never edits or deletes it in place
+ */
+export const useCorrectPurchaseReturn = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctPurchaseReturn>>, TError,{id: number;data: BodyType<PurchaseReturnCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof correctPurchaseReturn>>,
+        TError,
+        {id: number;data: BodyType<PurchaseReturnCorrectionInput>},
+        TContext
+      > => {
+      return useMutation(getCorrectPurchaseReturnMutationOptions(options));
     }
 
 export const getListCashbookEntriesUrl = (params?: ListCashbookEntriesParams,) => {

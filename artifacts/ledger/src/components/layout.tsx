@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { useCompany } from "@/lib/company";
 import {
   LayoutDashboard, Users, ShoppingCart, CreditCard,
-  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen, Truck, ShoppingBag, Boxes, CalendarClock, Monitor, HelpCircle, Settings, History
+  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen, Truck, ShoppingBag, Boxes, CalendarClock, Monitor, HelpCircle, Settings, History, Undo2
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -12,11 +12,13 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["owner", "salesman", "cashier"] },
   { href: "/customers", label: "Customers", icon: Users, roles: ["owner", "salesman", "cashier"] },
   { href: "/sale-orders", label: "Sale Orders", icon: ShoppingCart, roles: ["owner", "salesman"] },
+  { href: "/sale-returns", label: "Sale Returns", icon: Undo2, roles: ["owner", "salesman"] },
   { href: "/payments", label: "Payments", icon: CreditCard, roles: ["owner", "cashier"] },
   { href: "/cashbook", label: "Cashbook", icon: BookOpen, roles: ["owner", "cashier"] },
   { href: "/suppliers", label: "Suppliers", icon: Truck, roles: ["owner"] },
   { href: "/supplier-payments", label: "Supplier Payments", icon: CreditCard, roles: ["owner"] },
   { href: "/purchases", label: "Purchases", icon: ShoppingBag, roles: ["owner"] },
+  { href: "/purchase-returns", label: "Purchase Returns", icon: Undo2, roles: ["owner"] },
   { href: "/pos", label: "POS", icon: Monitor, roles: ["owner", "cashier", "salesman"] },
   { href: "/installments", label: "Installments", icon: CalendarClock, roles: ["owner", "cashier"] },
   { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["owner"] },

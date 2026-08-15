@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable } from "@workspace/db";
+import { saleReturnsTable, saleReturnItemsTable } from "@workspace/db/schema";
 import { eq, desc, sql, and, gte, lte, asc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import {
@@ -27,7 +28,18 @@ async function computeCustomerBalance(customerId: number, openingBalance: string
     .from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, customerId), eq(saleOrdersTable.status, "posted")));
   const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` })
     .from(paymentsTable).where(and(eq(paymentsTable.customerId, customerId), eq(paymentsTable.status, "posted")));
-  return parseFloat(openingBalance) + parseFloat(String(sales[0]?.total ?? 0)) - parseFloat(String(pmts[0]?.total ?? 0));
+  // Sale returns reduce receivable by their full value (goods credited back); any
+  // refundPaid on top of that is cash handed back to the customer, which adds back to
+  // the balance (settling whatever the return alone would have put us in the red for).
+  const returns = await db.select({
+    total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
+    refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
+  }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, customerId), eq(saleReturnsTable.status, "posted")));
+  return parseFloat(openingBalance)
+    + parseFloat(String(sales[0]?.total ?? 0))
+    - parseFloat(String(pmts[0]?.total ?? 0))
+    - parseFloat(String(returns[0]?.total ?? 0))
+    + parseFloat(String(returns[0]?.refunded ?? 0));
 }
 
 function toCustomerResponse(c: typeof customersTable.$inferSelect, balance: number) {
@@ -136,13 +148,16 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
   // reflects the correction, not the mistake (see the correction workflow).
   const orderConditions = [eq(saleOrdersTable.customerId, params.data.id), eq(saleOrdersTable.status, "posted")];
   const paymentConditions = [eq(paymentsTable.customerId, params.data.id), eq(paymentsTable.status, "posted")];
+  const returnConditions = [eq(saleReturnsTable.customerId, params.data.id), eq(saleReturnsTable.status, "posted")];
   if (fromDate) {
     orderConditions.push(gte(saleOrdersTable.date, fromDate));
     paymentConditions.push(gte(paymentsTable.date, fromDate));
+    returnConditions.push(gte(saleReturnsTable.date, fromDate));
   }
   if (toDate) {
     orderConditions.push(lte(saleOrdersTable.date, toDate));
     paymentConditions.push(lte(paymentsTable.date, toDate));
+    returnConditions.push(lte(saleReturnsTable.date, toDate));
   }
 
   // Get orders in date range
@@ -204,12 +219,22 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     const beforePmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.customerId, params.data.id), eq(paymentsTable.status, "posted"), sql`${paymentsTable.date} < ${fromDate}`));
+    const beforeReturns = await db.select({
+      total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
+      refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
+    }).from(saleReturnsTable)
+      .where(and(eq(saleReturnsTable.customerId, params.data.id), eq(saleReturnsTable.status, "posted"), sql`${saleReturnsTable.date} < ${fromDate}`));
     openingBalance = parseFloat(c.openingBalance ?? "0")
       + parseFloat(String(beforeOrders[0]?.total ?? 0))
-      - parseFloat(String(beforePmts[0]?.total ?? 0));
+      - parseFloat(String(beforePmts[0]?.total ?? 0))
+      - parseFloat(String(beforeReturns[0]?.total ?? 0))
+      + parseFloat(String(beforeReturns[0]?.refunded ?? 0));
   }
 
-  // Build unified timeline: one row per payment, one row per sale-order-item
+  // Build unified timeline: one row per payment, one row per sale-order-item, one row
+  // per sale-return-item (goods credited back) plus a separate row per return's own
+  // cash refund, if any — mirroring how payments are already separate rows from the
+  // sale-item rows they settle, rather than folded silently into a total.
   type TimelineRow = {
     date: string;
     sortKey: string;
@@ -226,6 +251,8 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     receivedAmount: number;
     paidAmount: number;
     soValue: number;
+    returnValue: number;
+    refundAmount: number;
   };
 
   const rows: TimelineRow[] = [];
@@ -253,6 +280,8 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       receivedAmount: parseFloat(p.amount),
       paidAmount: 0,
       soValue: 0,
+      returnValue: 0,
+      refundAmount: 0,
     });
   }
 
@@ -285,6 +314,8 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
         receivedAmount: 0,
         paidAmount: 0,
         soValue: item.amount,
+        returnValue: 0,
+        refundAmount: 0,
       });
     }
     // If order has no items (shouldn't happen), add a single row
@@ -305,6 +336,80 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
         receivedAmount: 0,
         paidAmount: 0,
         soValue: parseFloat(order.totalAmount),
+        returnValue: 0,
+        refundAmount: 0,
+      });
+    }
+  }
+
+  // Sale return rows — one row per returned item (mirrors the sale-order-item rows
+  // above, crediting the category breakdown back), plus a separate row for the
+  // return's own cash refund if any (mirrors payments being their own row rather
+  // than folded into the sale rows they settle).
+  const returns = await db.select().from(saleReturnsTable)
+    .where(and(...returnConditions))
+    .orderBy(asc(saleReturnsTable.date), asc(saleReturnsTable.id));
+
+  for (const ret of returns) {
+    const items = await db.select({
+      qty: saleReturnItemsTable.qty,
+      rate: saleReturnItemsTable.rate,
+      amount: saleReturnItemsTable.amount,
+      productName: productsTable.name,
+      category: productsTable.category,
+      unit: productsTable.unit,
+    }).from(saleReturnItemsTable)
+      .leftJoin(productsTable, eq(saleReturnItemsTable.productId, productsTable.id))
+      .where(eq(saleReturnItemsTable.saleReturnId, ret.id));
+
+    for (const item of items) {
+      const cat = item.category?.trim() || "Uncategorised";
+      const amount = parseFloat(item.amount);
+      const qty = parseFloat(item.qty);
+      // Credit the category totals back — a returned item is no longer net "sold".
+      categoryTotals.set(cat, (categoryTotals.get(cat) ?? 0) - amount);
+      categoryQtys.set(cat, (categoryQtys.get(cat) ?? 0) - qty);
+      if (item.unit) categoryUnits.set(cat, item.unit);
+      rows.push({
+        date: ret.date,
+        sortKey: `${ret.date}_2_${String(ret.id).padStart(8, "0")}`,
+        transactionType: "Sale Return",
+        remarks: `Against SO-${ret.saleOrderId}${ret.reason ? ` — ${ret.reason}` : ""}`,
+        documentNo: `SR-${ret.id}`,
+        billNo: null,
+        item: item.productName,
+        unit: item.unit ?? null,
+        billtyNo: null,
+        vehicleNo: null,
+        qtyBags: qty,
+        rateBag: parseFloat(item.rate),
+        receivedAmount: 0,
+        paidAmount: 0,
+        soValue: 0,
+        returnValue: amount,
+        refundAmount: 0,
+      });
+    }
+
+    if (parseFloat(ret.refundPaid) > 0) {
+      rows.push({
+        date: ret.date,
+        sortKey: `${ret.date}_3_${String(ret.id).padStart(8, "0")}`,
+        transactionType: "Return Refund",
+        remarks: `Refund (${ret.refundMode})`,
+        documentNo: `SR-${ret.id}`,
+        billNo: null,
+        item: null,
+        unit: null,
+        billtyNo: null,
+        vehicleNo: null,
+        qtyBags: null,
+        rateBag: null,
+        receivedAmount: 0,
+        paidAmount: 0,
+        soValue: 0,
+        returnValue: 0,
+        refundAmount: parseFloat(ret.refundPaid),
       });
     }
   }
@@ -312,15 +417,18 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
   // Sort by date then by type (payments before sales on same day, per original format)
   rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
-  // Compute running balance
+  // Compute running balance — a return's value reduces it (goods credited back),
+  // a refund adds back (cash actually handed back settles that credit).
   let running = openingBalance;
-  let totalReceived = 0, totalPaid = 0, totalSoValue = 0;
+  let totalReceived = 0, totalPaid = 0, totalSoValue = 0, totalReturnValue = 0, totalRefundAmount = 0;
 
   const entries = rows.map((row, i) => {
-    running = running - row.receivedAmount + row.paidAmount + row.soValue;
+    running = running - row.receivedAmount + row.paidAmount + row.soValue - row.returnValue + row.refundAmount;
     totalReceived += row.receivedAmount;
     totalPaid += row.paidAmount;
     totalSoValue += row.soValue;
+    totalReturnValue += row.returnValue;
+    totalRefundAmount += row.refundAmount;
     return {
       srNo: i + 1,
       date: row.date,
@@ -337,6 +445,8 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       receivedAmount: row.receivedAmount,
       paidAmount: row.paidAmount,
       soValue: row.soValue,
+      returnValue: row.returnValue,
+      refundAmount: row.refundAmount,
       balance: Math.round(running * 100) / 100,
     };
   });
@@ -360,6 +470,8 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     totalReceived: Math.round(totalReceived * 100) / 100,
     totalPaid: Math.round(totalPaid * 100) / 100,
     totalSoValue: Math.round(totalSoValue * 100) / 100,
+    totalReturnValue: Math.round(totalReturnValue * 100) / 100,
+    totalRefundAmount: Math.round(totalRefundAmount * 100) / 100,
     from: fromDate,
     to: toDate,
     entries,

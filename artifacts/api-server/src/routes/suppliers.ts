@@ -7,6 +7,8 @@ import {
   productsTable,
   cashbookEntriesTable,
   supplierPaymentsTable,
+  purchaseReturnsTable,
+  purchaseReturnItemsTable,
 } from "@workspace/db/schema";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -44,11 +46,24 @@ async function supplierBalance(supplierId: number): Promise<number> {
     .from(supplierPaymentsTable)
     .where(and(eq(supplierPaymentsTable.supplierId, supplierId), eq(supplierPaymentsTable.status, "posted")));
 
+  // Purchase returns reduce payable by their full value (goods sent back); any
+  // refundReceived on top of that is cash the supplier gave back, which adds back to
+  // the balance the same way a payment we made would — see returns' worked example.
+  const [returnsAgg] = await db
+    .select({
+      total: sql<string>`coalesce(sum(total_amount),0)`,
+      refunded: sql<string>`coalesce(sum(refund_received),0)`,
+    })
+    .from(purchaseReturnsTable)
+    .where(and(eq(purchaseReturnsTable.supplierId, supplierId), eq(purchaseReturnsTable.status, "posted")));
+
   const opening = parseFloat(s.openingBalance ?? "0");
   const billed = parseFloat(agg?.totalBilled ?? "0");
   const paid = parseFloat(agg?.totalPaid ?? "0");
   const directPayments = parseFloat(paymentsAgg?.total ?? "0");
-  return Math.round((opening + billed - paid - directPayments) * 100) / 100;
+  const returned = parseFloat(returnsAgg?.total ?? "0");
+  const returnRefunded = parseFloat(returnsAgg?.refunded ?? "0");
+  return Math.round((opening + billed - paid - directPayments - returned + returnRefunded) * 100) / 100;
 }
 
 // ── GET /suppliers ────────────────────────────────────────────────────────────
@@ -202,13 +217,16 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
 
   const invoiceConditions = [eq(purchaseInvoicesTable.supplierId, id), eq(purchaseInvoicesTable.status, "posted")];
   const paymentConditions = [eq(supplierPaymentsTable.supplierId, id), eq(supplierPaymentsTable.status, "posted")];
+  const returnConditions = [eq(purchaseReturnsTable.supplierId, id), eq(purchaseReturnsTable.status, "posted")];
   if (fromDate) {
     invoiceConditions.push(gte(purchaseInvoicesTable.date, fromDate));
     paymentConditions.push(gte(supplierPaymentsTable.date, fromDate));
+    returnConditions.push(gte(purchaseReturnsTable.date, fromDate));
   }
   if (toDate) {
     invoiceConditions.push(lte(purchaseInvoicesTable.date, toDate));
     paymentConditions.push(lte(supplierPaymentsTable.date, toDate));
+    returnConditions.push(lte(purchaseReturnsTable.date, toDate));
   }
 
   const invoices = await db.select().from(purchaseInvoicesTable)
@@ -230,10 +248,17 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
     const beforePmts = await db.select({ total: sql<number>`coalesce(sum(${supplierPaymentsTable.amount}),0)` })
       .from(supplierPaymentsTable)
       .where(and(eq(supplierPaymentsTable.supplierId, id), eq(supplierPaymentsTable.status, "posted"), sql`${supplierPaymentsTable.date} < ${fromDate}`));
+    const beforeReturns = await db.select({
+      total: sql<number>`coalesce(sum(${purchaseReturnsTable.totalAmount}),0)`,
+      refunded: sql<number>`coalesce(sum(${purchaseReturnsTable.refundReceived}),0)`,
+    }).from(purchaseReturnsTable)
+      .where(and(eq(purchaseReturnsTable.supplierId, id), eq(purchaseReturnsTable.status, "posted"), sql`${purchaseReturnsTable.date} < ${fromDate}`));
     openingBalance = parseFloat(s.openingBalance ?? "0")
       + parseFloat(String(beforeInvoices[0]?.totalAmount ?? 0))
       - parseFloat(String(beforeInvoices[0]?.paidAmount ?? 0))
-      - parseFloat(String(beforePmts[0]?.total ?? 0));
+      - parseFloat(String(beforePmts[0]?.total ?? 0))
+      - parseFloat(String(beforeReturns[0]?.total ?? 0))
+      + parseFloat(String(beforeReturns[0]?.refunded ?? 0));
   }
 
   type TimelineRow = {
@@ -248,6 +273,8 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
     rateBag: number | null;
     purchaseValue: number;
     paidAmount: number;
+    returnValue: number;
+    refundAmount: number;
   };
 
   const rows: TimelineRow[] = [];
@@ -292,6 +319,8 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
       rateBag: items.length === 1 ? parseFloat(items[0].rate) : null,
       purchaseValue: parseFloat(inv.totalAmount),
       paidAmount: parseFloat(inv.paidAmount),
+      returnValue: 0,
+      refundAmount: 0,
     });
   }
 
@@ -313,19 +342,86 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
       rateBag: null,
       purchaseValue: 0,
       paidAmount: parseFloat(p.amount),
+      returnValue: 0,
+      refundAmount: 0,
     });
+  }
+
+  // Purchase return rows — one row per returned item (credits the category breakdown
+  // back), plus a separate row for the return's own cash refund received, if any —
+  // mirrors sale returns in customers.ts's identical ledger.
+  const returns = await db.select().from(purchaseReturnsTable)
+    .where(and(...returnConditions))
+    .orderBy(asc(purchaseReturnsTable.date), asc(purchaseReturnsTable.id));
+
+  for (const ret of returns) {
+    const items = await db.select({
+      qty: purchaseReturnItemsTable.qty,
+      rate: purchaseReturnItemsTable.rate,
+      amount: purchaseReturnItemsTable.amount,
+      productName: productsTable.name,
+      category: productsTable.category,
+      unit: productsTable.unit,
+    }).from(purchaseReturnItemsTable)
+      .leftJoin(productsTable, eq(purchaseReturnItemsTable.productId, productsTable.id))
+      .where(eq(purchaseReturnItemsTable.purchaseReturnId, ret.id));
+
+    for (const item of items) {
+      const cat = item.category?.trim() || "Uncategorised";
+      const amount = parseFloat(item.amount);
+      const qty = parseFloat(item.qty);
+      // Credit the category totals back — a returned item is no longer net purchased.
+      categoryTotals.set(cat, (categoryTotals.get(cat) ?? 0) - amount);
+      categoryQtys.set(cat, (categoryQtys.get(cat) ?? 0) - qty);
+      if (item.unit) categoryUnits.set(cat, item.unit);
+      rows.push({
+        date: ret.date,
+        sortKey: `${ret.date}_2_${String(ret.id).padStart(8, "0")}`,
+        transactionType: "Purchase Return",
+        remarks: `Against PUR-${ret.purchaseInvoiceId}${ret.reason ? ` — ${ret.reason}` : ""}`,
+        documentNo: `PR-${ret.id}`,
+        item: item.productName,
+        unit: item.unit ?? null,
+        qtyBags: qty,
+        rateBag: parseFloat(item.rate),
+        purchaseValue: 0,
+        paidAmount: 0,
+        returnValue: amount,
+        refundAmount: 0,
+      });
+    }
+
+    if (parseFloat(ret.refundReceived) > 0) {
+      rows.push({
+        date: ret.date,
+        sortKey: `${ret.date}_3_${String(ret.id).padStart(8, "0")}`,
+        transactionType: "Return Refund",
+        remarks: `Refund (${ret.refundMode})`,
+        documentNo: `PR-${ret.id}`,
+        item: null,
+        unit: null,
+        qtyBags: null,
+        rateBag: null,
+        purchaseValue: 0,
+        paidAmount: 0,
+        returnValue: 0,
+        refundAmount: parseFloat(ret.refundReceived),
+      });
+    }
   }
 
   // Sort by date then by type (payments before purchases same day, per the customer convention)
   rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
   let running = openingBalance;
-  let totalPurchased = 0, totalPaid = 0;
+  let totalPurchased = 0, totalPaid = 0, totalReturnValue = 0, totalRefundAmount = 0;
 
   const entries = rows.map((row, i) => {
-    running = running + row.purchaseValue - row.paidAmount;
+    running = running + row.purchaseValue - row.paidAmount - row.returnValue + row.refundAmount;
     totalPurchased += row.purchaseValue;
     totalPaid += row.paidAmount;
+    totalReturnValue += row.returnValue;
+    totalRefundAmount += row.refundAmount;
     return {
       srNo: i + 1,
       date: row.date,
@@ -338,6 +434,8 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
       rateBag: row.rateBag,
       purchaseValue: row.purchaseValue,
       paidAmount: row.paidAmount,
+      returnValue: row.returnValue,
+      refundAmount: row.refundAmount,
       balance: Math.round(running * 100) / 100,
     };
   });
@@ -360,6 +458,8 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
     closingBalance: Math.round(running * 100) / 100,
     totalPurchased: Math.round(totalPurchased * 100) / 100,
     totalPaid: Math.round(totalPaid * 100) / 100,
+    totalReturnValue: Math.round(totalReturnValue * 100) / 100,
+    totalRefundAmount: Math.round(totalRefundAmount * 100) / 100,
     from: fromDate,
     to: toDate,
     entries,

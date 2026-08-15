@@ -7,6 +7,10 @@ import {
   saleOrderItemsTable,
   saleOrdersTable,
   stockAdjustmentsTable,
+  saleReturnsTable,
+  saleReturnItemsTable,
+  purchaseReturnsTable,
+  purchaseReturnItemsTable,
 } from "@workspace/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -46,15 +50,31 @@ async function calcStock(productId: number) {
     .from(stockAdjustmentsTable)
     .where(eq(stockAdjustmentsTable.productId, productId));
 
+  // Sale returns bring goods back into stock; purchase returns send them back out —
+  // same posted-status-filtered netting as the purchase/sale aggregates above.
+  const [saleRetAgg] = await db
+    .select({ total: sql<string>`coalesce(sum(${saleReturnItemsTable.qty}),0)` })
+    .from(saleReturnItemsTable)
+    .innerJoin(saleReturnsTable, eq(saleReturnItemsTable.saleReturnId, saleReturnsTable.id))
+    .where(and(eq(saleReturnItemsTable.productId, productId), eq(saleReturnsTable.status, "posted")));
+
+  const [purchRetAgg] = await db
+    .select({ total: sql<string>`coalesce(sum(${purchaseReturnItemsTable.qty}),0)` })
+    .from(purchaseReturnItemsTable)
+    .innerJoin(purchaseReturnsTable, eq(purchaseReturnItemsTable.purchaseReturnId, purchaseReturnsTable.id))
+    .where(and(eq(purchaseReturnItemsTable.productId, productId), eq(purchaseReturnsTable.status, "posted")));
+
   const opening = parseFloat(p.openingStock ?? "0");
   const purchased = parseFloat(purchAgg?.total ?? "0");
   const sold = parseFloat(saleAgg?.total ?? "0");
   const adjusted = parseFloat(adjAgg?.total ?? "0");
-  const current = Math.round((opening + purchased - sold + adjusted) * 100) / 100;
+  const salesReturned = parseFloat(saleRetAgg?.total ?? "0");
+  const purchasesReturned = parseFloat(purchRetAgg?.total ?? "0");
+  const current = Math.round((opening + purchased - sold + adjusted + salesReturned - purchasesReturned) * 100) / 100;
   const minStock = parseFloat(p.minStock ?? "0");
 
   return {
-    opening, purchased, sold, adjusted, current, minStock,
+    opening, purchased, sold, adjusted, salesReturned, purchasesReturned, current, minStock,
     status: current <= 0 ? "out" as const
       : (minStock > 0 && current <= minStock) ? "low" as const
         : "ok" as const,
@@ -83,6 +103,8 @@ router.get("/inventory", requireAuth, async (req, res) => {
       purchased: stock?.purchased ?? 0,
       sold: stock?.sold ?? 0,
       adjusted: stock?.adjusted ?? 0,
+      salesReturned: stock?.salesReturned ?? 0,
+      purchasesReturned: stock?.purchasesReturned ?? 0,
       currentStock: stock?.current ?? 0,
       status: stock?.status ?? "ok",
     };
@@ -153,6 +175,42 @@ router.get("/inventory/:productId/movements", requireAuth, async (req, res) => {
     adjustmentId: a.id,
   }));
 
+  // Sale returns — goods coming back in — same "live" (posted) filter as purchases/sales.
+  const saleReturnItems = await db
+    .select()
+    .from(saleReturnItemsTable)
+    .where(eq(saleReturnItemsTable.productId, productId));
+
+  const saleReturnMovements = (await Promise.all(saleReturnItems.map(async (item) => {
+    const [ret] = await db.select().from(saleReturnsTable).where(eq(saleReturnsTable.id, item.saleReturnId));
+    if (!ret || ret.status !== "posted") return null;
+    return {
+      id: `sr-${item.id}`, type: "in" as const,
+      date: toDateStr(ret.date),
+      qty: parseFloat(item.qty),
+      ref: `Sale Return (SO-${ret.saleOrderId})`,
+      notes: null,
+    };
+  }))).filter((m): m is NonNullable<typeof m> => m != null);
+
+  // Purchase returns — goods going back out — same "live" (posted) filter.
+  const purchReturnItems = await db
+    .select()
+    .from(purchaseReturnItemsTable)
+    .where(eq(purchaseReturnItemsTable.productId, productId));
+
+  const purchReturnMovements = (await Promise.all(purchReturnItems.map(async (item) => {
+    const [ret] = await db.select().from(purchaseReturnsTable).where(eq(purchaseReturnsTable.id, item.purchaseReturnId));
+    if (!ret || ret.status !== "posted") return null;
+    return {
+      id: `pr-${item.id}`, type: "out" as const,
+      date: toDateStr(ret.date),
+      qty: parseFloat(item.qty),
+      ref: `Purchase Return (PUR-${ret.purchaseInvoiceId})`,
+      notes: null,
+    };
+  }))).filter((m): m is NonNullable<typeof m> => m != null);
+
   // Opening stock as first entry
   const opening = parseFloat(p.openingStock ?? "0");
   const openingEntry = opening !== 0 ? [{
@@ -160,7 +218,7 @@ router.get("/inventory/:productId/movements", requireAuth, async (req, res) => {
     date: "", qty: opening, ref: "Opening Stock", notes: null,
   }] : [];
 
-  const all = [...openingEntry, ...purchMovements, ...saleMovements, ...adjMovements]
+  const all = [...openingEntry, ...purchMovements, ...saleMovements, ...adjMovements, ...saleReturnMovements, ...purchReturnMovements]
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   // Add running balance

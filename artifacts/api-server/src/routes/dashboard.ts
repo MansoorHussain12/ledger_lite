@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable } from "@workspace/db";
+import { saleReturnsTable, saleReturnItemsTable } from "@workspace/db/schema";
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/auth";
@@ -20,13 +21,27 @@ async function getProfitBreakdownForDate(date: string) {
     ? await db.select().from(saleOrderItemsTable).where(inArray(saleOrderItemsTable.saleOrderId, orderIds))
     : [];
 
-  const productIds = Array.from(new Set(items.map(i => i.productId)));
+  // Sale returns posted on this exact date (not the original sale's date) reverse
+  // revenue/profit for whichever customer they were returned by — must stay in
+  // agreement with /reports/daily-profit's identical per-date treatment.
+  const returns = await db.select().from(saleReturnsTable).where(and(eq(saleReturnsTable.date, date), eq(saleReturnsTable.status, "posted")));
+  const returnIds = returns.map(r => r.id);
+  const returnItems = returnIds.length
+    ? await db.select().from(saleReturnItemsTable).where(inArray(saleReturnItemsTable.saleReturnId, returnIds))
+    : [];
+  const returnItemsByReturnId = new Map<number, typeof returnItems>();
+  for (const item of returnItems) {
+    if (!returnItemsByReturnId.has(item.saleReturnId)) returnItemsByReturnId.set(item.saleReturnId, []);
+    returnItemsByReturnId.get(item.saleReturnId)!.push(item);
+  }
+
+  const productIds = Array.from(new Set([...items.map(i => i.productId), ...returnItems.map(i => i.productId)]));
   const products = productIds.length
     ? await db.select().from(productsTable).where(inArray(productsTable.id, productIds))
     : [];
   const productMap = new Map(products.map(p => [p.id, p]));
 
-  const customerIds = Array.from(new Set(orders.map(o => o.customerId)));
+  const customerIds = Array.from(new Set([...orders.map(o => o.customerId), ...returns.map(r => r.customerId)]));
   const customers = customerIds.length
     ? await db.select().from(customersTable).where(inArray(customersTable.id, customerIds))
     : [];
@@ -83,6 +98,39 @@ async function getProfitBreakdownForDate(date: string) {
     }
   }
 
+  // Surfaced as negative-qty/amount line items (not just a silently smaller subtotal)
+  // so the drill-down dialog stays transparent about what happened that day.
+  for (const ret of returns) {
+    if (!byCustomer.has(ret.customerId)) {
+      byCustomer.set(ret.customerId, {
+        customerId: ret.customerId,
+        customerName: customerMap.get(ret.customerId)?.name ?? "",
+        items: [], subtotalAmount: 0, subtotalProfit: 0,
+      });
+    }
+    const bucket = byCustomer.get(ret.customerId)!;
+
+    for (const item of returnItemsByReturnId.get(ret.id) ?? []) {
+      const product = productMap.get(item.productId);
+      const qty = parseFloat(item.qty);
+      const amount = parseFloat(item.amount);
+      const costPrice = item.costPrice != null ? parseFloat(item.costPrice) : null;
+      const profit = costPrice != null ? amount - qty * costPrice : null;
+      if (profit == null) hasMissingCost = true;
+
+      bucket.items.push({
+        productId: item.productId,
+        productName: `${product?.name ?? ""} (Return)`,
+        category: product?.category ?? null,
+        unit: product?.unit ?? "bag",
+        qty: round2(-qty), amount: round2(-amount),
+        profit: profit != null ? round2(-profit) : null,
+      });
+      bucket.subtotalAmount -= amount;
+      if (profit != null) bucket.subtotalProfit -= profit;
+    }
+  }
+
   const customersArr = Array.from(byCustomer.values())
     .map(c => ({ ...c, subtotalAmount: round2(c.subtotalAmount), subtotalProfit: round2(c.subtotalProfit) }))
     .sort((a, b) => b.subtotalAmount - a.subtotalAmount);
@@ -101,7 +149,15 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
   for (const c of customers) {
     const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
     const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
-    totalOutstanding += parseFloat(c.openingBalance ?? "0") + parseFloat(String(sales[0]?.total ?? 0)) - parseFloat(String(pmts[0]?.total ?? 0));
+    const returns = await db.select({
+      total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
+      refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
+    }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
+    totalOutstanding += parseFloat(c.openingBalance ?? "0")
+      + parseFloat(String(sales[0]?.total ?? 0))
+      - parseFloat(String(pmts[0]?.total ?? 0))
+      - parseFloat(String(returns[0]?.total ?? 0))
+      + parseFloat(String(returns[0]?.refunded ?? 0));
   }
 
   const todayCollections = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.date, today), eq(paymentsTable.status, "posted")));
@@ -134,7 +190,15 @@ router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<voi
   const withBalance = await Promise.all(customers.map(async (c) => {
     const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
     const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
-    const balance = parseFloat(c.openingBalance ?? "0") + parseFloat(String(sales[0]?.total ?? 0)) - parseFloat(String(pmts[0]?.total ?? 0));
+    const returns = await db.select({
+      total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
+      refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
+    }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
+    const balance = parseFloat(c.openingBalance ?? "0")
+      + parseFloat(String(sales[0]?.total ?? 0))
+      - parseFloat(String(pmts[0]?.total ?? 0))
+      - parseFloat(String(returns[0]?.total ?? 0))
+      + parseFloat(String(returns[0]?.refunded ?? 0));
     return { customerId: c.id, customerName: c.name, area: c.area ?? null, balance };
   }));
   res.json(withBalance.filter(x => x.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 10));

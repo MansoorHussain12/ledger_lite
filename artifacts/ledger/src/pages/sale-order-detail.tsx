@@ -49,9 +49,18 @@ export default function SaleOrderDetailPage() {
           </Link>
           <h1 className="text-xl font-bold">Sale Order #{order.id}</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={() => window.print()}>
-          <Printer size={14} className="mr-1.5" /> Print Invoice
-        </Button>
+        <div className="flex gap-2">
+          {order.status === "posted" && (
+            <Link href={`/sale-returns/new?saleOrderId=${order.id}`}>
+              <Button variant="outline" size="sm">
+                <Undo2 size={14} className="mr-1.5" /> Return
+              </Button>
+            </Link>
+          )}
+          <Button variant="outline" size="sm" onClick={() => window.print()}>
+            <Printer size={14} className="mr-1.5" /> Print Invoice
+          </Button>
+        </div>
       </div>
 
       {/* Correction workflow banner — a posted order is never edited/deleted in place;

@@ -172,6 +172,8 @@ export interface LedgerEntry {
   receivedAmount: number;
   paidAmount: number;
   soValue: number;
+  returnValue: number;
+  refundAmount: number;
   balance: number;
 }
 
@@ -193,6 +195,8 @@ export interface CustomerLedger {
   totalReceived: number;
   totalPaid?: number;
   totalSoValue: number;
+  totalReturnValue: number;
+  totalRefundAmount: number;
   totalTons?: number;
   /** @nullable */
   from: string | null;
@@ -321,6 +325,182 @@ export interface SaleOrderCorrectionResult {
   original: SaleOrder;
   reversal: SaleOrder;
   correction?: SaleOrder;
+}
+
+export interface SaleReturnEligibleItem {
+  saleOrderItemId: number;
+  productId: number;
+  productName: string;
+  /** @nullable */
+  unit?: string | null;
+  originalQty: number;
+  alreadyReturnedQty: number;
+  returnableQty: number;
+  rate: number;
+  /** @nullable */
+  costPrice?: number | null;
+}
+
+export interface SaleReturnEligibleResponse {
+  saleOrder: SaleOrder;
+  items: SaleReturnEligibleItem[];
+}
+
+export interface SaleReturnItemRow {
+  id: number;
+  saleOrderItemId: number;
+  productId: number;
+  productName: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  /** @nullable */
+  costPrice?: number | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type SaleReturnRowRefundMode = typeof SaleReturnRowRefundMode[keyof typeof SaleReturnRowRefundMode];
+
+
+export const SaleReturnRowRefundMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export type SaleReturnRowStatus = typeof SaleReturnRowStatus[keyof typeof SaleReturnRowStatus];
+
+
+export const SaleReturnRowStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
+export interface SaleReturnRow {
+  id: number;
+  saleOrderId: number;
+  customerId: number;
+  customerName: string;
+  date: string;
+  totalAmount: number;
+  refundPaid: number;
+  refundMode: SaleReturnRowRefundMode;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  status: SaleReturnRowStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export type SaleReturnDetailRefundMode = typeof SaleReturnDetailRefundMode[keyof typeof SaleReturnDetailRefundMode];
+
+
+export const SaleReturnDetailRefundMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export type SaleReturnDetailStatus = typeof SaleReturnDetailStatus[keyof typeof SaleReturnDetailStatus];
+
+
+export const SaleReturnDetailStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
+export interface SaleReturnDetail {
+  id: number;
+  saleOrderId: number;
+  customerId: number;
+  customerName: string;
+  date: string;
+  totalAmount: number;
+  refundPaid: number;
+  refundMode: SaleReturnDetailRefundMode;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  items: SaleReturnItemRow[];
+  status: SaleReturnDetailStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export interface SaleReturnItemInput {
+  saleOrderItemId: number;
+  qty: number;
+  notes?: string;
+}
+
+export type SaleReturnInputRefundMode = typeof SaleReturnInputRefundMode[keyof typeof SaleReturnInputRefundMode];
+
+
+export const SaleReturnInputRefundMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface SaleReturnInput {
+  saleOrderId: number;
+  date: string;
+  items: SaleReturnItemInput[];
+  refundPaid?: number;
+  refundMode?: SaleReturnInputRefundMode;
+  reason?: string;
+  notes?: string;
+}
+
+export type SaleReturnCorrectionInputRefundMode = typeof SaleReturnCorrectionInputRefundMode[keyof typeof SaleReturnCorrectionInputRefundMode];
+
+
+export const SaleReturnCorrectionInputRefundMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (items/refund/reason/notes — saleOrderId cannot change) to reverse-and-replace.
+ */
+export interface SaleReturnCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  items?: SaleReturnItemInput[];
+  refundPaid?: number;
+  refundMode?: SaleReturnCorrectionInputRefundMode;
+  notes?: string;
+}
+
+export interface SaleReturnCorrectionResult {
+  original: SaleReturnRow;
+  reversal: SaleReturnRow;
+  correction?: SaleReturnRow;
 }
 
 export type PaymentType = typeof PaymentType[keyof typeof PaymentType];
@@ -791,6 +971,8 @@ export interface InventoryRow {
   purchased: number;
   sold: number;
   adjusted: number;
+  salesReturned?: number;
+  purchasesReturned?: number;
   currentStock: number;
   status: InventoryRowStatus;
 }
@@ -1099,6 +1281,178 @@ export interface PurchaseCorrectionResult {
   correction?: PurchaseInvoiceRow;
 }
 
+export interface PurchaseReturnEligibleItem {
+  purchaseInvoiceItemId: number;
+  productId: number;
+  productName: string;
+  /** @nullable */
+  unit?: string | null;
+  originalQty: number;
+  alreadyReturnedQty: number;
+  returnableQty: number;
+  rate: number;
+}
+
+export interface PurchaseReturnEligibleResponse {
+  purchaseInvoice: PurchaseInvoiceRow;
+  items: PurchaseReturnEligibleItem[];
+}
+
+export interface PurchaseReturnItemRow {
+  id: number;
+  purchaseInvoiceItemId: number;
+  productId: number;
+  productName: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type PurchaseReturnRowRefundMode = typeof PurchaseReturnRowRefundMode[keyof typeof PurchaseReturnRowRefundMode];
+
+
+export const PurchaseReturnRowRefundMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export type PurchaseReturnRowStatus = typeof PurchaseReturnRowStatus[keyof typeof PurchaseReturnRowStatus];
+
+
+export const PurchaseReturnRowStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
+export interface PurchaseReturnRow {
+  id: number;
+  purchaseInvoiceId: number;
+  supplierId: number;
+  supplierName: string;
+  date: string;
+  totalAmount: number;
+  refundReceived: number;
+  refundMode: PurchaseReturnRowRefundMode;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  status: PurchaseReturnRowStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export type PurchaseReturnDetailRefundMode = typeof PurchaseReturnDetailRefundMode[keyof typeof PurchaseReturnDetailRefundMode];
+
+
+export const PurchaseReturnDetailRefundMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export type PurchaseReturnDetailStatus = typeof PurchaseReturnDetailStatus[keyof typeof PurchaseReturnDetailStatus];
+
+
+export const PurchaseReturnDetailStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
+export interface PurchaseReturnDetail {
+  id: number;
+  purchaseInvoiceId: number;
+  supplierId: number;
+  supplierName: string;
+  date: string;
+  totalAmount: number;
+  refundReceived: number;
+  refundMode: PurchaseReturnDetailRefundMode;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  items: PurchaseReturnItemRow[];
+  status: PurchaseReturnDetailStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export interface PurchaseReturnItemInput {
+  purchaseInvoiceItemId: number;
+  qty: number;
+  notes?: string;
+}
+
+export type PurchaseReturnInputRefundMode = typeof PurchaseReturnInputRefundMode[keyof typeof PurchaseReturnInputRefundMode];
+
+
+export const PurchaseReturnInputRefundMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface PurchaseReturnInput {
+  purchaseInvoiceId: number;
+  date: string;
+  items: PurchaseReturnItemInput[];
+  refundReceived?: number;
+  refundMode?: PurchaseReturnInputRefundMode;
+  reason?: string;
+  notes?: string;
+}
+
+export type PurchaseReturnCorrectionInputRefundMode = typeof PurchaseReturnCorrectionInputRefundMode[keyof typeof PurchaseReturnCorrectionInputRefundMode];
+
+
+export const PurchaseReturnCorrectionInputRefundMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (items/refund/reason/notes — purchaseInvoiceId cannot change) to reverse-and-replace.
+ */
+export interface PurchaseReturnCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  items?: PurchaseReturnItemInput[];
+  refundReceived?: number;
+  refundMode?: PurchaseReturnCorrectionInputRefundMode;
+  notes?: string;
+}
+
+export interface PurchaseReturnCorrectionResult {
+  original: PurchaseReturnRow;
+  reversal: PurchaseReturnRow;
+  correction?: PurchaseReturnRow;
+}
+
 export interface SupplierLedgerEntry {
   srNo: number;
   date: string;
@@ -1117,6 +1471,8 @@ export interface SupplierLedgerEntry {
   rateBag?: number | null;
   purchaseValue: number;
   paidAmount: number;
+  returnValue: number;
+  refundAmount: number;
   balance: number;
 }
 
@@ -1128,6 +1484,8 @@ export interface SupplierLedger {
   closingBalance: number;
   totalPurchased: number;
   totalPaid: number;
+  totalReturnValue: number;
+  totalRefundAmount: number;
   /** @nullable */
   from: string | null;
   /** @nullable */
@@ -1455,6 +1813,17 @@ to?: string;
 includeReversed?: boolean;
 };
 
+export type ListSaleReturnsParams = {
+saleOrderId?: number;
+customerId?: number;
+from?: string;
+to?: string;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
+};
+
 export type ListPaymentsParams = {
 customerId?: number;
 from?: string;
@@ -1525,6 +1894,17 @@ to?: string;
 };
 
 export type ListPurchasesParams = {
+supplierId?: number;
+from?: string;
+to?: string;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
+};
+
+export type ListPurchaseReturnsParams = {
+purchaseInvoiceId?: number;
 supplierId?: number;
 from?: string;
 to?: string;

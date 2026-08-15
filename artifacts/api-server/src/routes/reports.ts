@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable, expensesTable } from "@workspace/db";
+import { saleReturnsTable, saleReturnItemsTable } from "@workspace/db/schema";
 import { eq, sql, and, gte, lte } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { GetDailyCollectionReportQueryParams, GetMonthlySalesReportQueryParams } from "@workspace/api-zod";
@@ -13,6 +14,20 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
   const result = await Promise.all(customers.map(async (c) => {
     const orders = await db.select().from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
     const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
+    // Sale returns net against the specific order they were made against (each return
+    // is tied to one saleOrderId) — a return reduces that order's effective amount, a
+    // cash refund on top of it adds back, per the balance-formula worked example in
+    // customers.ts's computeCustomerBalance.
+    const returns = await db.select().from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
+    const returnsByOrder = new Map<number, { total: number; refunded: number }>();
+    for (const r of returns) {
+      const cur = returnsByOrder.get(r.saleOrderId) ?? { total: 0, refunded: 0 };
+      cur.total += parseFloat(r.totalAmount);
+      cur.refunded += parseFloat(r.refundPaid);
+      returnsByOrder.set(r.saleOrderId, cur);
+    }
+    const totalReturned = returns.reduce((s, r) => s + parseFloat(r.totalAmount), 0);
+    const totalRefunded = returns.reduce((s, r) => s + parseFloat(r.refundPaid), 0);
 
     const openingBal = parseFloat(c.openingBalance ?? "0");
     const totalPaid = parseFloat(String(pmts[0]?.total ?? 0));
@@ -20,7 +35,8 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
 
     let d0to30 = 0, d31to60 = 0, d61to90 = 0, dOver90 = 0;
     for (const o of orders.sort((a, b) => a.date.localeCompare(b.date))) {
-      const amt = parseFloat(o.totalAmount);
+      const ret = returnsByOrder.get(o.id);
+      const amt = parseFloat(o.totalAmount) - (ret?.total ?? 0) + (ret?.refunded ?? 0);
       const days = Math.floor((now.getTime() - new Date(o.date).getTime()) / (1000 * 60 * 60 * 24));
       const unpaid = Math.max(0, amt - remaining);
       remaining = Math.max(0, remaining - amt);
@@ -30,7 +46,7 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
       else dOver90 += unpaid;
     }
 
-    const totalSales = orders.reduce((s, o) => s + parseFloat(o.totalAmount), 0);
+    const totalSales = orders.reduce((s, o) => s + parseFloat(o.totalAmount), 0) - totalReturned + totalRefunded;
     const balance = openingBal + totalSales - parseFloat(String(pmts[0]?.total ?? 0));
     if (balance <= 0) return null;
 
@@ -186,6 +202,51 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
     }
   }
 
+  // Sale returns reverse revenue/COGS on the return's own date (not retroactively on
+  // the original sale's date) — mirrors the loop above, subtracting instead of adding,
+  // using each return item's frozen costPrice snapshot (copied from the original sale
+  // item at return time, not re-fetched from the product, so this matches exactly what
+  // was booked as profit on the original sale).
+  const returns = await db
+    .select()
+    .from(saleReturnsTable)
+    .where(and(gte(saleReturnsTable.date, from), lte(saleReturnsTable.date, to), eq(saleReturnsTable.status, "posted")));
+
+  for (const ret of returns) {
+    const dateStr = typeof ret.date === "string" ? ret.date : (ret.date as Date).toISOString().slice(0, 10);
+    if (!dayMap.has(dateStr)) {
+      dayMap.set(dateStr, { revenue: 0, cogs: 0, expenses: 0, orders: 0, qty: 0 });
+    }
+    const day = dayMap.get(dateStr)!;
+
+    const items = await db.select().from(saleReturnItemsTable).where(eq(saleReturnItemsTable.saleReturnId, ret.id));
+    for (const item of items) {
+      if (filteredProductIds && !filteredProductIds.has(item.productId)) continue;
+
+      const qty = parseFloat(item.qty);
+      const returnAmount = parseFloat(item.amount);
+      const costPrice = item.costPrice ? parseFloat(item.costPrice) : 0;
+      const itemCogs = qty * costPrice;
+
+      day.qty -= qty;
+      day.cogs -= itemCogs;
+      day.revenue -= returnAmount;
+
+      const product = productMap.get(item.productId);
+      if (!byProduct.has(item.productId)) {
+        byProduct.set(item.productId, {
+          productId: item.productId,
+          productName: product?.name ?? "",
+          qty: 0, revenue: 0, cogs: 0,
+        });
+      }
+      const prod = byProduct.get(item.productId)!;
+      prod.qty -= qty;
+      prod.revenue -= returnAmount;
+      prod.cogs -= itemCogs;
+    }
+  }
+
   // Distribute expenses into day map
   for (const exp of expenses) {
     const dateStr = typeof exp.date === "string" ? exp.date : (exp.date as Date).toISOString().slice(0, 10);
@@ -253,7 +314,15 @@ router.get("/reports/outstanding", requireAuth, async (_req, res): Promise<void>
   const result = await Promise.all(customers.map(async (c) => {
     const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
     const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
-    const balance = parseFloat(c.openingBalance ?? "0") + parseFloat(String(sales[0]?.total ?? 0)) - parseFloat(String(pmts[0]?.total ?? 0));
+    const returns = await db.select({
+      total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
+      refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
+    }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
+    const balance = parseFloat(c.openingBalance ?? "0")
+      + parseFloat(String(sales[0]?.total ?? 0))
+      - parseFloat(String(pmts[0]?.total ?? 0))
+      - parseFloat(String(returns[0]?.total ?? 0))
+      + parseFloat(String(returns[0]?.refunded ?? 0));
 
     const lastSale = await db.select({ date: saleOrdersTable.date }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted"))).orderBy(sql`${saleOrdersTable.date} desc`).limit(1);
     const lastPmt = await db.select({ date: paymentsTable.date }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted"))).orderBy(sql`${paymentsTable.date} desc`).limit(1);

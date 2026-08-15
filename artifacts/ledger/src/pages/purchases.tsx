@@ -159,6 +159,15 @@ function PurchaseDetailDialog({ id, open, onClose }: { id: number; open: boolean
               </tfoot>
             </table>
             {data.notes && <p className="text-sm text-muted-foreground">Notes: {data.notes}</p>}
+            {data.status === "posted" && (
+              <div className="flex justify-end">
+                <Link href={`/purchase-returns/new?purchaseInvoiceId=${data.id}`}>
+                  <Button variant="outline" size="sm">
+                    <Undo2 size={14} className="mr-1.5" /> Return
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         ) : null}
       </DialogContent>

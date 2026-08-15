@@ -12,6 +12,9 @@ import CustomerDetailPage from "@/pages/customer-detail";
 import SaleOrdersPage from "@/pages/sale-orders";
 import SaleOrderNewPage from "@/pages/sale-order-new";
 import SaleOrderDetailPage from "@/pages/sale-order-detail";
+import SaleReturnsPage from "@/pages/sale-returns";
+import SaleReturnNewPage from "@/pages/sale-return-new";
+import SaleReturnDetailPage from "@/pages/sale-return-detail";
 import PaymentsPage from "@/pages/payments";
 import CashbookPage from "@/pages/cashbook";
 import SuppliersPage from "@/pages/suppliers";
@@ -19,6 +22,8 @@ import SupplierDetailPage from "@/pages/supplier-detail";
 import SupplierPaymentsPage from "@/pages/supplier-payments";
 import PurchasesPage from "@/pages/purchases";
 import PurchaseNewPage from "@/pages/purchase-new";
+import PurchaseReturnsPage from "@/pages/purchase-returns";
+import PurchaseReturnNewPage from "@/pages/purchase-return-new";
 import SettingsPage from "@/pages/settings";
 import GuidePage from "@/pages/guide";
 import PosPage from "@/pages/pos";
@@ -63,6 +68,9 @@ function AuthenticatedApp() {
         <Route path="/sale-orders" component={SaleOrdersPage} />
         <Route path="/sale-orders/new" component={SaleOrderNewPage} />
         <Route path="/sale-orders/:id" component={SaleOrderDetailPage} />
+        <Route path="/sale-returns" component={SaleReturnsPage} />
+        <Route path="/sale-returns/new" component={SaleReturnNewPage} />
+        <Route path="/sale-returns/:id" component={SaleReturnDetailPage} />
         <Route path="/payments" component={PaymentsPage} />
         <Route path="/payments/new" component={PaymentsPage} />
         <Route path="/cashbook" component={CashbookPage} />
@@ -71,6 +79,8 @@ function AuthenticatedApp() {
         <Route path="/supplier-payments" component={SupplierPaymentsPage} />
         <Route path="/purchases/new" component={PurchaseNewPage} />
         <Route path="/purchases" component={PurchasesPage} />
+        <Route path="/purchase-returns/new" component={PurchaseReturnNewPage} />
+        <Route path="/purchase-returns" component={PurchaseReturnsPage} />
         <Route path="/guide" component={GuidePage} />
         <Route path="/pos" component={PosPage} />
         <Route path="/installments" component={InstallmentsPage} />

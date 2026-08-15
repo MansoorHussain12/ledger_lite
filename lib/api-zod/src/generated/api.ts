@@ -262,6 +262,8 @@ export const GetCustomerLedgerResponse = zod.object({
   "totalReceived": zod.number(),
   "totalPaid": zod.number().optional(),
   "totalSoValue": zod.number(),
+  "totalReturnValue": zod.number(),
+  "totalRefundAmount": zod.number(),
   "totalTons": zod.number().optional(),
   "from": zod.coerce.date().nullable(),
   "to": zod.coerce.date().nullable(),
@@ -281,6 +283,8 @@ export const GetCustomerLedgerResponse = zod.object({
   "receivedAmount": zod.number(),
   "paidAmount": zod.number(),
   "soValue": zod.number(),
+  "returnValue": zod.number(),
+  "refundAmount": zod.number(),
   "balance": zod.number()
 })),
   "categoryBreakdown": zod.array(zod.object({
@@ -624,6 +628,230 @@ export const CorrectSaleOrderResponse = zod.object({
   "notes": zod.string().nullish(),
   "costPrice": zod.number().nullish()
 })),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}).optional()
+})
+
+
+/**
+ * @summary Get a sale order's items with remaining returnable qty per item
+ */
+export const GetSaleReturnEligibilityParams = zod.object({
+  "saleOrderId": zod.coerce.number()
+})
+
+export const GetSaleReturnEligibilityResponse = zod.object({
+  "saleOrder": zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "vehicleNo": zod.string().nullish(),
+  "driverName": zod.string().nullish(),
+  "billtyNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "rate": zod.number(),
+  "amount": zod.number(),
+  "notes": zod.string().nullish(),
+  "costPrice": zod.number().nullish()
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "items": zod.array(zod.object({
+  "saleOrderItemId": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "unit": zod.string().nullish(),
+  "originalQty": zod.number(),
+  "alreadyReturnedQty": zod.number(),
+  "returnableQty": zod.number(),
+  "rate": zod.number(),
+  "costPrice": zod.number().nullish()
+}))
+})
+
+
+/**
+ * @summary List sale returns
+ */
+export const ListSaleReturnsQueryParams = zod.object({
+  "saleOrderId": zod.coerce.number().optional(),
+  "customerId": zod.coerce.number().optional(),
+  "from": zod.date().optional(),
+  "to": zod.date().optional(),
+  "includeReversed": zod.coerce.boolean().optional().describe('Include reversed originals and reversal rows (default excludes them — see the correction workflow).')
+})
+
+export const ListSaleReturnsResponseItem = zod.object({
+  "id": zod.number(),
+  "saleOrderId": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundPaid": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+export const ListSaleReturnsResponse = zod.array(ListSaleReturnsResponseItem)
+
+
+/**
+ * @summary Create a sale return against a specific posted sale order
+ */
+export const createSaleReturnBodyRefundPaidDefault = 0;
+export const createSaleReturnBodyRefundModeDefault = `cash`;
+
+export const CreateSaleReturnBody = zod.object({
+  "saleOrderId": zod.number(),
+  "date": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "saleOrderItemId": zod.number(),
+  "qty": zod.number(),
+  "notes": zod.string().optional()
+})),
+  "refundPaid": zod.number().default(createSaleReturnBodyRefundPaidDefault),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).default(createSaleReturnBodyRefundModeDefault),
+  "reason": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreateSaleReturnResponse = zod.object({
+  "id": zod.number(),
+  "saleOrderId": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundPaid": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+
+
+/**
+ * @summary Get a sale return with items
+ */
+export const GetSaleReturnParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSaleReturnResponse = zod.object({
+  "id": zod.number(),
+  "saleOrderId": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundPaid": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "saleOrderItemId": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "rate": zod.number(),
+  "amount": zod.number(),
+  "costPrice": zod.number().nullish(),
+  "notes": zod.string().nullish()
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+
+
+/**
+ * Standard correction workflow (see /sale-orders/{id}/correct). The return's saleOrderId cannot change in a correction — only which/how much of that order's items are returned, and the refund. Also reverses/reposts the return's auto-posted cashbook refund entry (if any).
+ * @summary Correct (or void) a posted sale return — never edits or deletes it in place
+ */
+export const CorrectSaleReturnParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CorrectSaleReturnBody = zod.object({
+  "void": zod.boolean().optional(),
+  "reason": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "saleOrderItemId": zod.number(),
+  "qty": zod.number(),
+  "notes": zod.string().optional()
+})).optional(),
+  "refundPaid": zod.number().optional(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional(),
+  "notes": zod.string().optional()
+}).describe('Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (items\/refund\/reason\/notes — saleOrderId cannot change) to reverse-and-replace.\n')
+
+export const CorrectSaleReturnResponse = zod.object({
+  "original": zod.object({
+  "id": zod.number(),
+  "saleOrderId": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundPaid": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "reversal": zod.object({
+  "id": zod.number(),
+  "saleOrderId": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundPaid": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "correction": zod.object({
+  "id": zod.number(),
+  "saleOrderId": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundPaid": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
   "status": zod.enum(['posted', 'reversed', 'reversal']),
   "reversesId": zod.number().nullish(),
   "correctsId": zod.number().nullish()
@@ -1455,6 +1683,8 @@ export const ListInventoryResponseItem = zod.object({
   "purchased": zod.number(),
   "sold": zod.number(),
   "adjusted": zod.number(),
+  "salesReturned": zod.number().optional(),
+  "purchasesReturned": zod.number().optional(),
   "currentStock": zod.number(),
   "status": zod.enum(['ok', 'low', 'out'])
 })
@@ -1479,6 +1709,8 @@ export const GetInventoryMovementsResponse = zod.object({
   "purchased": zod.number(),
   "sold": zod.number(),
   "adjusted": zod.number(),
+  "salesReturned": zod.number().optional(),
+  "purchasesReturned": zod.number().optional(),
   "currentStock": zod.number(),
   "status": zod.enum(['ok', 'low', 'out'])
 }),
@@ -1703,6 +1935,8 @@ export const GetSupplierLedgerResponse = zod.object({
   "closingBalance": zod.number(),
   "totalPurchased": zod.number(),
   "totalPaid": zod.number(),
+  "totalReturnValue": zod.number(),
+  "totalRefundAmount": zod.number(),
   "from": zod.coerce.date().nullable(),
   "to": zod.coerce.date().nullable(),
   "entries": zod.array(zod.object({
@@ -1717,6 +1951,8 @@ export const GetSupplierLedgerResponse = zod.object({
   "rateBag": zod.number().nullish(),
   "purchaseValue": zod.number(),
   "paidAmount": zod.number(),
+  "returnValue": zod.number(),
+  "refundAmount": zod.number(),
   "balance": zod.number()
 })),
   "categoryBreakdown": zod.array(zod.object({
@@ -1915,6 +2151,219 @@ export const CorrectPurchaseResponse = zod.object({
   "paidAmount": zod.number(),
   "balance": zod.number(),
   "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}).optional()
+})
+
+
+/**
+ * @summary Get a purchase invoice's items with remaining returnable qty per item
+ */
+export const GetPurchaseReturnEligibilityParams = zod.object({
+  "purchaseInvoiceId": zod.coerce.number()
+})
+
+export const GetPurchaseReturnEligibilityResponse = zod.object({
+  "purchaseInvoice": zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "invoiceNo": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "paidAmount": zod.number(),
+  "balance": zod.number(),
+  "paymentMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "items": zod.array(zod.object({
+  "purchaseInvoiceItemId": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "unit": zod.string().nullish(),
+  "originalQty": zod.number(),
+  "alreadyReturnedQty": zod.number(),
+  "returnableQty": zod.number(),
+  "rate": zod.number()
+}))
+})
+
+
+/**
+ * @summary List purchase returns
+ */
+export const ListPurchaseReturnsQueryParams = zod.object({
+  "purchaseInvoiceId": zod.coerce.number().optional(),
+  "supplierId": zod.coerce.number().optional(),
+  "from": zod.date().optional(),
+  "to": zod.date().optional(),
+  "includeReversed": zod.coerce.boolean().optional().describe('Include reversed originals and reversal rows (default excludes them — see the correction workflow).')
+})
+
+export const ListPurchaseReturnsResponseItem = zod.object({
+  "id": zod.number(),
+  "purchaseInvoiceId": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundReceived": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+export const ListPurchaseReturnsResponse = zod.array(ListPurchaseReturnsResponseItem)
+
+
+/**
+ * @summary Create a purchase return against a specific posted purchase invoice
+ */
+export const createPurchaseReturnBodyRefundReceivedDefault = 0;
+export const createPurchaseReturnBodyRefundModeDefault = `cash`;
+
+export const CreatePurchaseReturnBody = zod.object({
+  "purchaseInvoiceId": zod.number(),
+  "date": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "purchaseInvoiceItemId": zod.number(),
+  "qty": zod.number(),
+  "notes": zod.string().optional()
+})),
+  "refundReceived": zod.number().default(createPurchaseReturnBodyRefundReceivedDefault),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).default(createPurchaseReturnBodyRefundModeDefault),
+  "reason": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreatePurchaseReturnResponse = zod.object({
+  "id": zod.number(),
+  "purchaseInvoiceId": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundReceived": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+
+
+/**
+ * @summary Get a purchase return with items
+ */
+export const GetPurchaseReturnParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPurchaseReturnResponse = zod.object({
+  "id": zod.number(),
+  "purchaseInvoiceId": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundReceived": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "purchaseInvoiceItemId": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "qty": zod.number(),
+  "rate": zod.number(),
+  "amount": zod.number(),
+  "notes": zod.string().nullish()
+})),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+})
+
+
+/**
+ * Standard correction workflow (see /sale-orders/{id}/correct). The return's purchaseInvoiceId cannot change in a correction — only which/how much of that invoice's items are returned, and the refund. Also reverses/reposts the return's auto-posted cashbook refund entry (if any).
+ * @summary Correct (or void) a posted purchase return — never edits or deletes it in place
+ */
+export const CorrectPurchaseReturnParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CorrectPurchaseReturnBody = zod.object({
+  "void": zod.boolean().optional(),
+  "reason": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "purchaseInvoiceItemId": zod.number(),
+  "qty": zod.number(),
+  "notes": zod.string().optional()
+})).optional(),
+  "refundReceived": zod.number().optional(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']).optional(),
+  "notes": zod.string().optional()
+}).describe('Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (items\/refund\/reason\/notes — purchaseInvoiceId cannot change) to reverse-and-replace.\n')
+
+export const CorrectPurchaseReturnResponse = zod.object({
+  "original": zod.object({
+  "id": zod.number(),
+  "purchaseInvoiceId": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundReceived": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "reversal": zod.object({
+  "id": zod.number(),
+  "purchaseInvoiceId": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundReceived": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['posted', 'reversed', 'reversal']),
+  "reversesId": zod.number().nullish(),
+  "correctsId": zod.number().nullish()
+}),
+  "correction": zod.object({
+  "id": zod.number(),
+  "purchaseInvoiceId": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "refundReceived": zod.number(),
+  "refundMode": zod.enum(['cash', 'bank', 'easypaisa', 'jazzcash', 'cheque', 'other']),
+  "reason": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "status": zod.enum(['posted', 'reversed', 'reversal']),
