@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { useCompany } from "@/lib/company";
 import {
   LayoutDashboard, Users, ShoppingCart, CreditCard,
-  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen, Truck, ShoppingBag, Boxes, CalendarClock, Monitor, HelpCircle, Settings, History, Undo2
+  Package, BarChart3, UserCog, LogOut, Menu, X, BookOpen, Truck, ShoppingBag, Boxes, CalendarClock, Monitor, HelpCircle, Settings, History, Undo2, HandCoins
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["owner", "salesman", "cashier"] },
   { href: "/customers", label: "Customers", icon: Users, roles: ["owner", "salesman", "cashier"] },
+  { href: "/customer-loans", label: "Customer Loans", icon: HandCoins, roles: ["owner", "cashier"] },
   { href: "/sale-orders", label: "Sale Orders", icon: ShoppingCart, roles: ["owner", "salesman"] },
   { href: "/sale-returns", label: "Sale Returns", icon: Undo2, roles: ["owner", "salesman"] },
   { href: "/payments", label: "Payments", icon: CreditCard, roles: ["owner", "cashier"] },

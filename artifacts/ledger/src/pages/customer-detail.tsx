@@ -204,6 +204,7 @@ export default function CustomerDetailPage() {
                   <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-red-700">SO Value</th>
                   <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-emerald-700">Return Value</th>
                   <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-red-700">Refund</th>
+                  <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-red-700">Loan</th>
                   <th className="px-2 py-2.5 text-right font-semibold">Balance</th>
                 </tr>
               </thead>
@@ -213,22 +214,23 @@ export default function CustomerDetailPage() {
                   <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
                     {formatDate(ledger?.openingBalanceDate ?? fromDate)}
                   </td>
-                  <td className="px-2 py-2 font-medium text-muted-foreground" colSpan={13}>Opening Balance</td>
+                  <td className="px-2 py-2 font-medium text-muted-foreground" colSpan={14}>Opening Balance</td>
                   <td className="px-2 py-2 text-right font-bold text-blue-700 whitespace-nowrap">
                     Rs. {formatAmount(ledger?.openingBalance ?? 0)}
                   </td>
                 </tr>
                 {ledgerLoading && (
-                  <tr><td colSpan={16} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>
+                  <tr><td colSpan={17} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>
                 )}
                 {!ledgerLoading && ledger?.entries.length === 0 && (
-                  <tr><td colSpan={16} className="px-4 py-8 text-center text-muted-foreground">No transactions in this period</td></tr>
+                  <tr><td colSpan={17} className="px-4 py-8 text-center text-muted-foreground">No transactions in this period</td></tr>
                 )}
                 {ledger?.entries.map((entry) => {
                   // Balance direction, not just "is a sale" — a return refund increases
                   // the balance the same way a sale does (it undoes the return's credit),
-                  // while a return itself decreases it the same way a payment does.
-                  const isDebit = entry.transactionType === "Sale Order" || entry.transactionType === "Return Refund";
+                  // while a return itself decreases it the same way a payment does. A loan
+                  // is a debit too — cash handed over becomes receivable, same as a sale.
+                  const isDebit = entry.transactionType === "Sale Order" || entry.transactionType === "Return Refund" || entry.transactionType === "Loan";
                   return (
                     <tr key={`${entry.srNo}-${entry.documentNo}`}
                       className={cn("hover:bg-muted/20 transition-colors", !isDebit && "bg-emerald-50/30")}>
@@ -259,6 +261,9 @@ export default function CustomerDetailPage() {
                       <td className="px-2 py-2 text-right font-semibold text-red-600">
                         {(entry.refundAmount ?? 0) > 0 ? formatAmount(entry.refundAmount) : "—"}
                       </td>
+                      <td className="px-2 py-2 text-right font-semibold text-red-600">
+                        {(entry.loanAmount ?? 0) > 0 ? formatAmount(entry.loanAmount) : "—"}
+                      </td>
                       <td className={cn("px-2 py-2 text-right font-bold whitespace-nowrap",
                         entry.balance > 0 ? "text-red-700" : "text-emerald-700")}>
                         {formatAmount(entry.balance)}
@@ -274,6 +279,7 @@ export default function CustomerDetailPage() {
                     <td className="px-2 py-2.5 text-right text-red-600">{formatAmount(ledger.totalSoValue)}</td>
                     <td className="px-2 py-2.5 text-right text-emerald-600">{formatAmount(ledger.totalReturnValue)}</td>
                     <td className="px-2 py-2.5 text-right text-red-600">{formatAmount(ledger.totalRefundAmount)}</td>
+                    <td className="px-2 py-2.5 text-right text-red-600">{formatAmount(ledger.totalLoanAmount)}</td>
                     <td className="px-2 py-2.5 text-right"></td>
                   </tr>
                 )}
@@ -342,6 +348,9 @@ export default function CustomerDetailPage() {
           </Link>
           <Link href={`/payments?customerId=${customerId}`}>
             <Button variant="outline" size="sm">Record Payment</Button>
+          </Link>
+          <Link href={`/customer-loans?customerId=${customerId}`}>
+            <Button variant="outline" size="sm">Lend Money</Button>
           </Link>
         </div>
       </div>{/* end no-print */}
@@ -428,6 +437,7 @@ export default function CustomerDetailPage() {
               <th className="col-center" style={{ width: "6%" }}>SO Value</th>
               <th className="col-center" style={{ width: "6%" }}>Return<br/>Value</th>
               <th className="col-center" style={{ width: "6%" }}>Refund</th>
+              <th className="col-center" style={{ width: "6%" }}>Loan</th>
               <th className="col-center" style={{ width: "7%" }}>Balance</th>
             </tr>
           </thead>
@@ -437,6 +447,8 @@ export default function CustomerDetailPage() {
               <td className="col-center">—</td>
               <td className="col-center">{formatDatePrint(ledger?.openingBalanceDate)}</td>
               <td colSpan={7} style={{ fontStyle: "italic" }}>Opening Balance</td>
+              <td className="col-right"></td>
+              <td className="col-right"></td>
               <td className="col-right"></td>
               <td className="col-right"></td>
               <td className="col-right"></td>
@@ -468,6 +480,7 @@ export default function CustomerDetailPage() {
                 <td className="col-right">{entry.soValue > 0 ? formatAmount(entry.soValue) : ""}</td>
                 <td className="col-right">{(entry.returnValue ?? 0) > 0 ? formatAmount(entry.returnValue) : ""}</td>
                 <td className="col-right">{(entry.refundAmount ?? 0) > 0 ? formatAmount(entry.refundAmount) : ""}</td>
+                <td className="col-right">{(entry.loanAmount ?? 0) > 0 ? formatAmount(entry.loanAmount) : ""}</td>
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(entry.balance)}</td>
               </tr>
             ))}
@@ -486,6 +499,7 @@ export default function CustomerDetailPage() {
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(ledger.totalSoValue)}</td>
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(ledger.totalReturnValue)}</td>
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(ledger.totalRefundAmount)}</td>
+                <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(ledger.totalLoanAmount)}</td>
                 <td></td>
               </tr>
             )}

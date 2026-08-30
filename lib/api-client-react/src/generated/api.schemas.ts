@@ -174,6 +174,7 @@ export interface LedgerEntry {
   soValue: number;
   returnValue: number;
   refundAmount: number;
+  loanAmount: number;
   balance: number;
 }
 
@@ -197,6 +198,7 @@ export interface CustomerLedger {
   totalSoValue: number;
   totalReturnValue: number;
   totalRefundAmount: number;
+  totalLoanAmount: number;
   totalTons?: number;
   /** @nullable */
   from: string | null;
@@ -683,6 +685,103 @@ export interface SupplierPaymentCorrectionResult {
   original: SupplierPayment;
   reversal: SupplierPayment;
   correction?: SupplierPayment;
+}
+
+export type CustomerLoanPaymentMode = typeof CustomerLoanPaymentMode[keyof typeof CustomerLoanPaymentMode];
+
+
+export const CustomerLoanPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export type CustomerLoanStatus = typeof CustomerLoanStatus[keyof typeof CustomerLoanStatus];
+
+
+export const CustomerLoanStatus = {
+  posted: 'posted',
+  reversed: 'reversed',
+  reversal: 'reversal',
+} as const;
+
+export interface CustomerLoan {
+  id: number;
+  customerId: number;
+  customerName: string;
+  date: string;
+  paymentMode: CustomerLoanPaymentMode;
+  amount: number;
+  /** @nullable */
+  bankAccount?: string | null;
+  /** @nullable */
+  chequeNo?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  status: CustomerLoanStatus;
+  /** @nullable */
+  reversesId?: number | null;
+  /** @nullable */
+  correctsId?: number | null;
+}
+
+export type CustomerLoanInputPaymentMode = typeof CustomerLoanInputPaymentMode[keyof typeof CustomerLoanInputPaymentMode];
+
+
+export const CustomerLoanInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export interface CustomerLoanInput {
+  customerId: number;
+  date: string;
+  paymentMode: CustomerLoanInputPaymentMode;
+  amount: number;
+  bankAccount?: string;
+  chequeNo?: string;
+  notes?: string;
+}
+
+export type CustomerLoanCorrectionInputPaymentMode = typeof CustomerLoanCorrectionInputPaymentMode[keyof typeof CustomerLoanCorrectionInputPaymentMode];
+
+
+export const CustomerLoanCorrectionInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+/**
+ * Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as CustomerLoanInput) to reverse-and-replace.
+ */
+export interface CustomerLoanCorrectionInput {
+  void?: boolean;
+  reason?: string;
+  customerId?: number;
+  date?: string;
+  paymentMode?: CustomerLoanCorrectionInputPaymentMode;
+  amount?: number;
+  bankAccount?: string;
+  chequeNo?: string;
+  notes?: string;
+}
+
+export interface CustomerLoanCorrectionResult {
+  original: CustomerLoan;
+  reversal: CustomerLoan;
+  correction?: CustomerLoan;
 }
 
 export interface AgingRow {
@@ -1858,6 +1957,29 @@ export type ListSupplierPaymentsPaymentMode = typeof ListSupplierPaymentsPayment
 
 
 export const ListSupplierPaymentsPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  easypaisa: 'easypaisa',
+  jazzcash: 'jazzcash',
+  cheque: 'cheque',
+  other: 'other',
+} as const;
+
+export type ListCustomerLoansParams = {
+customerId?: number;
+from?: string;
+to?: string;
+paymentMode?: ListCustomerLoansPaymentMode;
+/**
+ * Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+ */
+includeReversed?: boolean;
+};
+
+export type ListCustomerLoansPaymentMode = typeof ListCustomerLoansPaymentMode[keyof typeof ListCustomerLoansPaymentMode];
+
+
+export const ListCustomerLoansPaymentMode = {
   cash: 'cash',
   bank: 'bank',
   easypaisa: 'easypaisa',

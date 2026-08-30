@@ -10,8 +10,9 @@ export const cashbookEntriesTable = pgTable("cashbook_entries", {
   // the same way "payment" already lets Payments do so. TS-level hint only (plain
   // text column, no DB enum), so no migration needed to add a value. "sale_return"/
   // "purchase_return" added the same way for the return refund auto-post/cascade.
+  // "customer_loan" added for cash lent to a customer (auto-posted, see customerLoans.ts).
   source: text("source")
-    .$type<"manual" | "payment" | "expense" | "purchase" | "supplier_payment" | "opening_balance" | "adjustment" | "salary" | "transfer" | "sale_return" | "purchase_return">()
+    .$type<"manual" | "payment" | "expense" | "purchase" | "supplier_payment" | "customer_loan" | "opening_balance" | "adjustment" | "salary" | "transfer" | "sale_return" | "purchase_return">()
     .notNull()
     .default("manual"),
   referenceId: integer("reference_id"),

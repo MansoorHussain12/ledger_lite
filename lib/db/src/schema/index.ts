@@ -8,6 +8,7 @@ export * from "./cashbook";
 export * from "./purchases";
 export * from "./purchaseReturns";
 export * from "./supplierPayments";
+export * from "./customerLoans";
 export * from "./inventory";
 export * from "./installments";
 export * from "./lookups";

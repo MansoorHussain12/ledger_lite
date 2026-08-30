@@ -875,6 +875,113 @@ paths:
         "409":
           description: The target row is not currently posted
 
+  /customer-loans:
+    get:
+      operationId: listCustomerLoans
+      tags: [customerLoans]
+      summary: List all customer loans
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: paymentMode
+          in: query
+          schema:
+            type: string
+            enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        - name: includeReversed
+          in: query
+          description: Include reversed originals and reversal rows (default excludes them — see the correction workflow).
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Customer loan list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerLoan"
+    post:
+      operationId: createCustomerLoan
+      tags: [customerLoans]
+      summary: Record money lent to a customer (no interest)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerLoanInput"
+      responses:
+        "201":
+          description: Customer loan recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerLoan"
+
+  /customer-loans/{id}:
+    get:
+      operationId: getCustomerLoan
+      tags: [customerLoans]
+      summary: Get a customer loan by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer loan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerLoan"
+
+  /customer-loans/{id}/correct:
+    post:
+      operationId: correctCustomerLoan
+      tags: [customerLoans]
+      summary: Correct (or void) a posted customer loan — never edits or deletes it in place
+      description: >
+        Same correction workflow as sale orders/payments (see there for details). Also
+        reverses and reposts the loan's auto-posted cashbook entry, so cashbook balance
+        (and customer receivable balance) reflect the correction too.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerLoanCorrectionInput"
+      responses:
+        "200":
+          description: Correction applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerLoanCorrectionResult"
+        "409":
+          description: The target row is not currently posted
+
   # ── REPORTS ───────────────────────────────────────────────────────────────
   /reports/aging:
     get:
@@ -2127,7 +2234,7 @@ components:
 
     LedgerEntry:
       type: object
-      required: [srNo, date, transactionType, documentNo, receivedAmount, paidAmount, soValue, returnValue, refundAmount, balance]
+      required: [srNo, date, transactionType, documentNo, receivedAmount, paidAmount, soValue, returnValue, refundAmount, loanAmount, balance]
       properties:
         srNo:
           type: integer
@@ -2164,6 +2271,8 @@ components:
           type: number
         refundAmount:
           type: number
+        loanAmount:
+          type: number
         balance:
           type: number
 
@@ -2184,7 +2293,7 @@ components:
 
     CustomerLedger:
       type: object
-      required: [customer, openingBalance, openingBalanceDate, closingBalance, totalReceived, totalSoValue, totalReturnValue, totalRefundAmount, from, to, entries, categoryBreakdown]
+      required: [customer, openingBalance, openingBalanceDate, closingBalance, totalReceived, totalSoValue, totalReturnValue, totalRefundAmount, totalLoanAmount, from, to, entries, categoryBreakdown]
       properties:
         customer:
           $ref: "#/components/schemas/Customer"
@@ -2204,6 +2313,8 @@ components:
         totalReturnValue:
           type: number
         totalRefundAmount:
+          type: number
+        totalLoanAmount:
           type: number
         totalTons:
           type: number
@@ -2817,6 +2928,100 @@ components:
           $ref: "#/components/schemas/SupplierPayment"
         correction:
           $ref: "#/components/schemas/SupplierPayment"
+
+    CustomerLoan:
+      type: object
+      required: [id, customerId, customerName, date, paymentMode, amount, createdAt, status]
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        date:
+          type: string
+          format: date
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+        bankAccount:
+          type: ["string", "null"]
+        chequeNo:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [posted, reversed, reversal]
+        reversesId:
+          type: ["integer", "null"]
+        correctsId:
+          type: ["integer", "null"]
+
+    CustomerLoanInput:
+      type: object
+      required: [customerId, date, paymentMode, amount]
+      properties:
+        customerId:
+          type: integer
+        date:
+          type: string
+          format: date
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+        bankAccount:
+          type: string
+        chequeNo:
+          type: string
+        notes:
+          type: string
+
+    CustomerLoanCorrectionInput:
+      type: object
+      description: >
+        Either set void=true to reverse the original with no replacement, or omit it and
+        supply the corrected data (same shape as CustomerLoanInput) to reverse-and-replace.
+      properties:
+        void:
+          type: boolean
+        reason:
+          type: string
+        customerId:
+          type: integer
+        date:
+          type: string
+          format: date
+        paymentMode:
+          type: string
+          enum: [cash, bank, easypaisa, jazzcash, cheque, other]
+        amount:
+          type: number
+        bankAccount:
+          type: string
+        chequeNo:
+          type: string
+        notes:
+          type: string
+
+    CustomerLoanCorrectionResult:
+      type: object
+      required: [original, reversal]
+      properties:
+        original:
+          $ref: "#/components/schemas/CustomerLoan"
+        reversal:
+          $ref: "#/components/schemas/CustomerLoan"
+        correction:
+          $ref: "#/components/schemas/CustomerLoan"
 
     # ── REPORTS ───────────────────────────────────────────────────────────
     AgingRow:

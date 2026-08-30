@@ -20,6 +20,7 @@ import CashbookPage from "@/pages/cashbook";
 import SuppliersPage from "@/pages/suppliers";
 import SupplierDetailPage from "@/pages/supplier-detail";
 import SupplierPaymentsPage from "@/pages/supplier-payments";
+import CustomerLoansPage from "@/pages/customer-loans";
 import PurchasesPage from "@/pages/purchases";
 import PurchaseNewPage from "@/pages/purchase-new";
 import PurchaseReturnsPage from "@/pages/purchase-returns";
@@ -65,6 +66,7 @@ function AuthenticatedApp() {
         <Route path="/" component={DashboardPage} />
         <Route path="/customers" component={CustomersPage} />
         <Route path="/customers/:id" component={CustomerDetailPage} />
+        <Route path="/customer-loans" component={CustomerLoansPage} />
         <Route path="/sale-orders" component={SaleOrdersPage} />
         <Route path="/sale-orders/new" component={SaleOrderNewPage} />
         <Route path="/sale-orders/:id" component={SaleOrderDetailPage} />
