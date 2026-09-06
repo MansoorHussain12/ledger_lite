@@ -235,7 +235,7 @@ function NewPlanDialog({ open, onClose }: { open: boolean; onClose: () => void }
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Total Amount (Rs) *</Label>
-              <Input type="number" min="1" step="0.01" value={totalAmount} onChange={e => setTotalAmount(e.target.value)} className="mt-1" />
+              <Input type="number" min="0.01" step="0.01" value={totalAmount} onChange={e => setTotalAmount(e.target.value)} className="mt-1" />
             </div>
             <div>
               <Label>Down Payment (Rs)</Label>
@@ -389,7 +389,7 @@ function RecordPaymentDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Amount (Rs) *</Label>
-              <Input type="number" min="1" step="0.01" value={amount}
+              <Input type="number" min="0.01" step="0.01" value={amount}
                 onChange={e => setAmount(e.target.value)} className="mt-1" />
             </div>
             <div>
@@ -775,7 +775,7 @@ function PlanDetail({ planId, onBack }: { planId: number; onBack: () => void }) 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Amount (Rs) *</Label>
-                    <Input type="number" min="1" step="0.01" value={correctPayAmount} onChange={e => setCorrectPayAmount(e.target.value)} className="mt-1" />
+                    <Input type="number" min="0.01" step="0.01" value={correctPayAmount} onChange={e => setCorrectPayAmount(e.target.value)} className="mt-1" />
                   </div>
                   <div>
                     <Label>Date *</Label>

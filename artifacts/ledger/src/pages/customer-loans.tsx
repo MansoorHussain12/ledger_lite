@@ -312,7 +312,7 @@ export default function CustomerLoansPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Amount (Rs.) *</Label>
-                <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required min="1" step="0.01" />
+                <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required min="0.01" step="0.01" />
               </div>
             </div>
             <div className="space-y-1.5">
@@ -376,7 +376,7 @@ export default function CustomerLoansPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label>Amount (Rs.) *</Label>
-                    <Input type="number" value={correctForm.amount} onChange={e => setCorrectForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required min="1" step="0.01" />
+                    <Input type="number" value={correctForm.amount} onChange={e => setCorrectForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required min="0.01" step="0.01" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
