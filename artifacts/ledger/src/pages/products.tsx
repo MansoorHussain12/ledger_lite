@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, History } from "lucide-react";
+import { Plus, Pencil, Trash2, History, Search } from "lucide-react";
 import { useCompany } from "@/lib/company";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -78,6 +78,7 @@ export default function ProductsPage() {
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<ProductForm>(BLANK);
   const [showHistory, setShowHistory] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
   const { toast } = useToast();
   const qc = useQueryClient();
   const { settings } = useCompany();
@@ -141,8 +142,10 @@ export default function ProductsPage() {
 
   const setField = (k: keyof ProductForm, v: string) => setForm(f => ({ ...f, [k]: v }));
 
+  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
   // Group products by category
-  const grouped = products.reduce<Record<string, Product[]>>((acc, p) => {
+  const grouped = filteredProducts.reduce<Record<string, Product[]>>((acc, p) => {
     const cat = p.category ?? "Uncategorised";
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(p);
@@ -171,10 +174,20 @@ export default function ProductsPage() {
         <Button onClick={openNew}><Plus size={15} className="mr-1.5" /> Add Product</Button>
       </div>
 
+      <div className="relative mb-6 max-w-sm">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search products…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-8"
+        />
+      </div>
+
       {Object.keys(grouped).length === 0 && !isLoading && (
         <div className="bg-card border rounded-xl p-12 text-center text-muted-foreground">
-          <p className="font-medium mb-1">No products yet</p>
-          <p className="text-sm">Add your first material to get started</p>
+          <p className="font-medium mb-1">{search ? "No products match this search" : "No products yet"}</p>
+          <p className="text-sm">{search ? "Try a different name" : "Add your first material to get started"}</p>
         </div>
       )}
 

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { CustomerCombobox } from "@/components/customer-combobox";
 import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Filter, Banknote, Building2, Undo2 } from "lucide-react";
@@ -168,10 +169,7 @@ export default function PaymentsPage() {
         <Filter size={14} className="text-muted-foreground mt-6" />
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Customer</label>
-          <select className="block text-sm border border-border rounded-md px-2 py-1.5 bg-background" value={filterCustomerId ?? ""} onChange={e => setFilterCustomerId(e.target.value ? parseInt(e.target.value) : undefined)}>
-            <option value="">All</option>
-            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CustomerCombobox customers={customers} value={filterCustomerId} onChange={setFilterCustomerId} className="w-44" />
         </div>
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Type</label>
