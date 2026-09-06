@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/combobox";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, History, Search } from "lucide-react";
 import { useCompany } from "@/lib/company";
@@ -285,16 +286,15 @@ export default function ProductsPage() {
             {/* Unit — dropdown from lookup list */}
             <div className="space-y-1.5">
               <Label>Unit of Measurement *</Label>
-              <Select value={form.unit} onValueChange={v => setField("unit", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a unit…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {allUnits.map(u => (
-                    <SelectItem key={u} value={u}>{u}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={allUnits.map(u => ({ value: u, label: u }))}
+                value={form.unit || undefined}
+                onChange={v => setField("unit", v ?? "")}
+                placeholder="Select a unit…"
+                searchPlaceholder="Search unit…"
+                emptyText="No units found."
+                className="w-full"
+              />
               <p className="text-xs text-muted-foreground">Used in invoices, POS, and stock tracking</p>
             </div>
 

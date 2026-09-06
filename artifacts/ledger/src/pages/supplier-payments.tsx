@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { SupplierCombobox } from "@/components/supplier-combobox";
+import { Combobox } from "@/components/combobox";
 import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Filter, Undo2 } from "lucide-react";
@@ -181,10 +183,7 @@ export default function SupplierPaymentsPage() {
         <Filter size={14} className="text-muted-foreground mt-6" />
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Supplier</label>
-          <select className="block text-sm border border-border rounded-md px-2 py-1.5 bg-background" value={filterSupplierId ?? ""} onChange={e => setFilterSupplierId(e.target.value ? parseInt(e.target.value) : undefined)}>
-            <option value="">All</option>
-            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <SupplierCombobox suppliers={suppliers} value={filterSupplierId} onChange={setFilterSupplierId} clearLabel="All" className="w-44" />
         </div>
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Mode</label>
@@ -296,10 +295,15 @@ export default function SupplierPaymentsPage() {
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1.5">
               <Label>Supplier *</Label>
-              <select className="w-full text-sm border border-border rounded-md px-3 py-2 bg-background" value={form.supplierId} onChange={e => setForm(f => ({ ...f, supplierId: e.target.value ? parseInt(e.target.value) : "" }))} required>
-                <option value="">Select supplier...</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <Combobox
+                options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                value={form.supplierId ? String(form.supplierId) : undefined}
+                onChange={v => setForm(f => ({ ...f, supplierId: v ? parseInt(v, 10) : "" }))}
+                placeholder="Select supplier…"
+                searchPlaceholder="Search supplier…"
+                emptyText="No suppliers found."
+                className="w-full"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -355,10 +359,15 @@ export default function SupplierPaymentsPage() {
               <>
                 <div className="space-y-1.5">
                   <Label>Supplier *</Label>
-                  <select className="w-full text-sm border border-border rounded-md px-3 py-2 bg-background" value={correctForm.supplierId} onChange={e => setCorrectForm(f => ({ ...f, supplierId: e.target.value ? parseInt(e.target.value) : "" }))} required>
-                    <option value="">Select supplier...</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <Combobox
+                    options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                    value={correctForm.supplierId ? String(correctForm.supplierId) : undefined}
+                    onChange={v => setCorrectForm(f => ({ ...f, supplierId: v ? parseInt(v, 10) : "" }))}
+                    placeholder="Select supplier…"
+                    searchPlaceholder="Search supplier…"
+                    emptyText="No suppliers found."
+                    className="w-full"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">

@@ -15,6 +15,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { SupplierCombobox } from "@/components/supplier-combobox";
+import { Combobox } from "@/components/combobox";
 import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -457,16 +459,13 @@ export default function PurchasesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-2">
                     <Label>Supplier *</Label>
-                    <Select value={correctSupplierId === "" ? "__none__" : String(correctSupplierId)} onValueChange={v => { if (v !== "__none__") setCorrectSupplierId(parseInt(v, 10)); }}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select supplier" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {suppliers.map(s => (
-                          <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SupplierCombobox
+                      suppliers={suppliers}
+                      value={correctSupplierId === "" ? undefined : correctSupplierId}
+                      onChange={v => { if (v != null) setCorrectSupplierId(v); }}
+                      placeholder="Select supplier"
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <Label>Date</Label>
@@ -502,20 +501,21 @@ export default function PurchasesPage() {
                         {correctLines.map((line, idx) => (
                           <tr key={idx} className="border-b border-border/50">
                             <td className="px-2 py-2">
-                              <select
-                                className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background h-8"
-                                value={line.productId || ""}
-                                onChange={e => {
-                                  const productId = parseInt(e.target.value);
+                              <Combobox
+                                options={products.map(p => ({ value: String(p.id), label: p.name }))}
+                                value={line.productId ? String(line.productId) : undefined}
+                                onChange={v => {
+                                  const productId = v ? parseInt(v, 10) : 0;
                                   const product = products.find(p => p.id === productId);
                                   setCorrectLines(prev => prev.map((l, i) => i === idx
                                     ? { ...l, productId, productName: product?.name ?? "", rate: product?.costPrice ?? product?.currentRate ?? l.rate, unit: product?.unit ?? "" }
                                     : l));
                                 }}
-                              >
-                                <option value="">Select product...</option>
-                                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                              </select>
+                                placeholder="Select product…"
+                                searchPlaceholder="Search product…"
+                                emptyText="No products found."
+                                className="h-8 w-full"
+                              />
                             </td>
                             <td className="px-2 py-2">
                               <Input type="number" min="0.01" step="0.01" value={line.qty}
@@ -523,15 +523,18 @@ export default function PurchasesPage() {
                                 className="h-8 text-sm text-right" />
                             </td>
                             <td className="px-2 py-2">
-                              <select
-                                className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background h-8"
-                                value={line.unit}
-                                onChange={e => setCorrectLines(prev => prev.map((l, i) => i === idx ? { ...l, unit: e.target.value } : l))}
-                              >
-                                <option value="">— unit —</option>
-                                {units.map(u => <option key={u.id} value={u.value}>{u.value}</option>)}
-                                {line.unit && !units.some(u => u.value === line.unit) && <option value={line.unit}>{line.unit}</option>}
-                              </select>
+                              <Combobox
+                                options={[
+                                  ...units.map(u => ({ value: u.value, label: u.value })),
+                                  ...(line.unit && !units.some(u => u.value === line.unit) ? [{ value: line.unit, label: line.unit }] : []),
+                                ]}
+                                value={line.unit || undefined}
+                                onChange={v => setCorrectLines(prev => prev.map((l, i) => i === idx ? { ...l, unit: v ?? "" } : l))}
+                                placeholder="— unit —"
+                                searchPlaceholder="Search unit…"
+                                emptyText="No units found."
+                                className="h-8 w-full"
+                              />
                             </td>
                             <td className="px-2 py-2">
                               <Input type="number" min="0" step="0.01" value={line.rate}

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { SupplierCombobox } from "@/components/supplier-combobox";
 import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Filter, Undo2, Pencil, Eye, ShoppingBag } from "lucide-react";
@@ -245,14 +246,7 @@ export default function PurchaseReturnsPage() {
         <Filter size={14} className="text-muted-foreground mb-2" />
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Supplier</Label>
-          <select
-            className="block text-sm border border-border rounded-md px-2 py-1.5 bg-background h-9"
-            value={supplierId ?? ""}
-            onChange={e => setSupplierId(e.target.value ? parseInt(e.target.value) : undefined)}
-          >
-            <option value="">All suppliers</option>
-            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <SupplierCombobox suppliers={suppliers} value={supplierId} onChange={setSupplierId} clearLabel="All suppliers" className="w-44" />
         </div>
         <div>
           <Label className="text-xs text-muted-foreground mb-1 block">From</Label>

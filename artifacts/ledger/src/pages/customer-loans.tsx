@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
+import { CustomerCombobox } from "@/components/customer-combobox";
+import { Combobox } from "@/components/combobox";
 import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Filter, Undo2 } from "lucide-react";
@@ -181,10 +183,7 @@ export default function CustomerLoansPage() {
         <Filter size={14} className="text-muted-foreground mt-6" />
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Customer</label>
-          <select className="block text-sm border border-border rounded-md px-2 py-1.5 bg-background" value={filterCustomerId ?? ""} onChange={e => setFilterCustomerId(e.target.value ? parseInt(e.target.value) : undefined)}>
-            <option value="">All</option>
-            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CustomerCombobox customers={customers} value={filterCustomerId} onChange={setFilterCustomerId} className="w-44" />
         </div>
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Mode</label>
@@ -296,10 +295,15 @@ export default function CustomerLoansPage() {
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1.5">
               <Label>Customer *</Label>
-              <select className="w-full text-sm border border-border rounded-md px-3 py-2 bg-background" value={form.customerId} onChange={e => setForm(f => ({ ...f, customerId: e.target.value ? parseInt(e.target.value) : "" }))} required>
-                <option value="">Select customer...</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <Combobox
+                options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                value={form.customerId ? String(form.customerId) : undefined}
+                onChange={v => setForm(f => ({ ...f, customerId: v ? parseInt(v, 10) : "" }))}
+                placeholder="Select customer…"
+                searchPlaceholder="Search customer…"
+                emptyText="No customers found."
+                className="w-full"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -355,10 +359,15 @@ export default function CustomerLoansPage() {
               <>
                 <div className="space-y-1.5">
                   <Label>Customer *</Label>
-                  <select className="w-full text-sm border border-border rounded-md px-3 py-2 bg-background" value={correctForm.customerId} onChange={e => setCorrectForm(f => ({ ...f, customerId: e.target.value ? parseInt(e.target.value) : "" }))} required>
-                    <option value="">Select customer...</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <Combobox
+                    options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                    value={correctForm.customerId ? String(correctForm.customerId) : undefined}
+                    onChange={v => setCorrectForm(f => ({ ...f, customerId: v ? parseInt(v, 10) : "" }))}
+                    placeholder="Select customer…"
+                    searchPlaceholder="Search customer…"
+                    emptyText="No customers found."
+                    className="w-full"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">

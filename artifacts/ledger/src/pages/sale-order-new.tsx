@@ -10,6 +10,7 @@ import { formatAmount } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/combobox";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
@@ -132,15 +133,15 @@ export default function SaleOrderNewPage() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Customer *</Label>
-              <select
-                className="w-full text-sm border border-border rounded-md px-3 py-2 bg-background"
-                value={customerId}
-                onChange={e => setCustomerId(e.target.value ? parseInt(e.target.value) : "")}
-                required
-              >
-                <option value="">Select customer...</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <Combobox
+                options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                value={customerId ? String(customerId) : undefined}
+                onChange={v => setCustomerId(v ? parseInt(v, 10) : "")}
+                placeholder="Select customer…"
+                searchPlaceholder="Search customer…"
+                emptyText="No customers found."
+                className="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Date *</Label>
@@ -186,14 +187,15 @@ export default function SaleOrderNewPage() {
               return (
                 <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-4">
-                    <select
-                      className="w-full text-sm border border-border rounded-md px-2 py-2 bg-background"
-                      value={item.productId || ""}
-                      onChange={e => handleProductChange(idx, parseInt(e.target.value))}
-                    >
-                      <option value="">Select product...</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
+                    <Combobox
+                      options={products.map(p => ({ value: String(p.id), label: p.name }))}
+                      value={item.productId ? String(item.productId) : undefined}
+                      onChange={v => handleProductChange(idx, v ? parseInt(v, 10) : 0)}
+                      placeholder="Select product…"
+                      searchPlaceholder="Search product…"
+                      emptyText="No products found."
+                      className="h-9 w-full"
+                    />
                   </div>
                   <div className="col-span-2">
                     <Input
@@ -206,17 +208,18 @@ export default function SaleOrderNewPage() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <select
-                      className="w-full text-sm border border-border rounded-md px-2 py-2 bg-background"
-                      value={item.unit}
-                      onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, unit: e.target.value } : it))}
-                    >
-                      <option value="">— unit —</option>
-                      {unitLookups.map(u => <option key={u.id} value={u.value}>{u.value}</option>)}
-                      {item.unit && !unitLookups.some(u => u.value === item.unit) && (
-                        <option value={item.unit}>{item.unit}</option>
-                      )}
-                    </select>
+                    <Combobox
+                      options={[
+                        ...unitLookups.map(u => ({ value: u.value, label: u.value })),
+                        ...(item.unit && !unitLookups.some(u => u.value === item.unit) ? [{ value: item.unit, label: item.unit }] : []),
+                      ]}
+                      value={item.unit || undefined}
+                      onChange={v => setItems(prev => prev.map((it, i) => i === idx ? { ...it, unit: v ?? "" } : it))}
+                      placeholder="— unit —"
+                      searchPlaceholder="Search unit…"
+                      emptyText="No units found."
+                      className="h-9 w-full"
+                    />
                   </div>
                   <div className="col-span-2">
                     <Input

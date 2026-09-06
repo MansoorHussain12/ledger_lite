@@ -13,6 +13,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/combobox";
 import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
 import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
@@ -195,12 +196,15 @@ function NewPlanDialog({ open, onClose }: { open: boolean; onClose: () => void }
           {/* Customer */}
           <div>
             <Label>Customer *</Label>
-            <Select value={customerId} onValueChange={handleCustomerChange}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Select customer…" /></SelectTrigger>
-              <SelectContent>
-                {customers.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Combobox
+              options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+              value={customerId || undefined}
+              onChange={v => handleCustomerChange(v ?? "")}
+              placeholder="Select customer…"
+              searchPlaceholder="Search customer…"
+              emptyText="No customers found."
+              className="mt-1 w-full"
+            />
           </div>
 
           {/* Link to Sale Order (optional) */}

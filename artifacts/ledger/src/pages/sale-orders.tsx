@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VoidToggle, CorrectionBadge } from "@/components/correction-fields";
 import { CustomerCombobox } from "@/components/customer-combobox";
+import { Combobox } from "@/components/combobox";
 import { groupCorrections } from "@/lib/correction-chain";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, ChevronRight, Filter, Undo2, Trash2 } from "lucide-react";
@@ -276,15 +277,15 @@ export default function SaleOrdersPage() {
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Customer *</Label>
-                    <select
-                      className="w-full text-sm border border-border rounded-md px-3 py-2 bg-background"
-                      value={correctCustomerId}
-                      onChange={e => setCorrectCustomerId(e.target.value ? parseInt(e.target.value) : "")}
-                      required
-                    >
-                      <option value="">Select customer...</option>
-                      {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    <Combobox
+                      options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                      value={correctCustomerId ? String(correctCustomerId) : undefined}
+                      onChange={v => setCorrectCustomerId(v ? parseInt(v, 10) : "")}
+                      placeholder="Select customer…"
+                      searchPlaceholder="Search customer…"
+                      emptyText="No customers found."
+                      className="w-full"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Date *</Label>
@@ -322,29 +323,33 @@ export default function SaleOrdersPage() {
                     return (
                       <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                         <div className="col-span-4">
-                          <select
-                            className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background"
-                            value={item.productId || ""}
-                            onChange={e => handleCorrectProductChange(idx, parseInt(e.target.value))}
-                          >
-                            <option value="">Select product...</option>
-                            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
+                          <Combobox
+                            options={products.map(p => ({ value: String(p.id), label: p.name }))}
+                            value={item.productId ? String(item.productId) : undefined}
+                            onChange={v => handleCorrectProductChange(idx, v ? parseInt(v, 10) : 0)}
+                            placeholder="Select product…"
+                            searchPlaceholder="Search product…"
+                            emptyText="No products found."
+                            className="h-8 w-full"
+                          />
                         </div>
                         <div className="col-span-2">
                           <Input type="number" value={item.qty} min="0" step="0.01"
                             onChange={e => setCorrectItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: e.target.value } : it))} />
                         </div>
                         <div className="col-span-2">
-                          <select
-                            className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background"
-                            value={item.unit}
-                            onChange={e => setCorrectItems(prev => prev.map((it, i) => i === idx ? { ...it, unit: e.target.value } : it))}
-                          >
-                            <option value="">— unit —</option>
-                            {unitLookups.map(u => <option key={u.id} value={u.value}>{u.value}</option>)}
-                            {item.unit && !unitLookups.some(u => u.value === item.unit) && <option value={item.unit}>{item.unit}</option>}
-                          </select>
+                          <Combobox
+                            options={[
+                              ...unitLookups.map(u => ({ value: u.value, label: u.value })),
+                              ...(item.unit && !unitLookups.some(u => u.value === item.unit) ? [{ value: item.unit, label: item.unit }] : []),
+                            ]}
+                            value={item.unit || undefined}
+                            onChange={v => setCorrectItems(prev => prev.map((it, i) => i === idx ? { ...it, unit: v ?? "" } : it))}
+                            placeholder="— unit —"
+                            searchPlaceholder="Search unit…"
+                            emptyText="No units found."
+                            className="h-8 w-full"
+                          />
                         </div>
                         <div className="col-span-1">
                           <Input type="number" value={item.rate} min="0" step="0.01"

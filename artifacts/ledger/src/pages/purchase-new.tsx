@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/combobox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -196,26 +197,26 @@ export default function PurchaseNewPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
             <Label>Supplier <span className="text-red-400">*</span></Label>
-            <Select value={supplierId === "" ? "__none__" : String(supplierId)} onValueChange={v => { if (v !== "__none__") setSupplierId(parseInt(v, 10)); }}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Select supplier" />
-              </SelectTrigger>
-              <SelectContent>
-                {suppliers.map(s => (
-                  <SelectItem key={s.id} value={String(s.id)}>
-                    <span>{s.name}</span>
-                    {s.payableBalance > 0 && (
-                      <span className="ml-2 text-xs text-red-400">owes Rs {fmt(s.payableBalance)}</span>
-                    )}
-                  </SelectItem>
-                ))}
-                {suppliers.length === 0 && (
-                  <div className="px-3 py-2 text-sm text-muted-foreground">
-                    No suppliers — <Link href="/suppliers"><span className="text-primary cursor-pointer">add one first</span></Link>
-                  </div>
-                )}
-              </SelectContent>
-            </Select>
+            <Combobox
+              options={suppliers.map(s => ({
+                value: String(s.id),
+                label: s.name,
+                hint: s.payableBalance > 0
+                  ? <span className="text-xs text-red-400 shrink-0">owes Rs {fmt(s.payableBalance)}</span>
+                  : undefined,
+              }))}
+              value={supplierId === "" ? undefined : String(supplierId)}
+              onChange={v => { if (v) setSupplierId(parseInt(v, 10)); }}
+              placeholder="Select supplier"
+              searchPlaceholder="Search supplier…"
+              emptyText="No suppliers found."
+              className="mt-1 w-full"
+            />
+            {suppliers.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                No suppliers — <Link href="/suppliers"><span className="text-primary cursor-pointer">add one first</span></Link>
+              </p>
+            )}
           </div>
           <div>
             <Label>Date</Label>
@@ -318,19 +319,18 @@ export default function PurchaseNewPage() {
                         />
                       </td>
                       <td className="px-2 py-2">
-                        <select
-                          className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background h-8"
-                          value={line.unit}
-                          onChange={e => setLine(idx, "unit", e.target.value)}
-                        >
-                          <option value="">— unit —</option>
-                          {units.map(u => (
-                            <option key={u.id} value={u.value}>{u.value}</option>
-                          ))}
-                          {line.unit && !units.some(u => u.value === line.unit) && (
-                            <option value={line.unit}>{line.unit}</option>
-                          )}
-                        </select>
+                        <Combobox
+                          options={[
+                            ...units.map(u => ({ value: u.value, label: u.value })),
+                            ...(line.unit && !units.some(u => u.value === line.unit) ? [{ value: line.unit, label: line.unit }] : []),
+                          ]}
+                          value={line.unit || undefined}
+                          onChange={v => setLine(idx, "unit", v ?? "")}
+                          placeholder="— unit —"
+                          searchPlaceholder="Search unit…"
+                          emptyText="No units found."
+                          className="h-8 w-full"
+                        />
                       </td>
                       <td className="px-2 py-2">
                         <Input
