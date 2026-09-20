@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable, expensesTable } from "@workspace/db";
-import { saleReturnsTable, saleReturnItemsTable } from "@workspace/db/schema";
+import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@workspace/db/schema";
 import { eq, sql, and, gte, lte } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { GetDailyCollectionReportQueryParams, GetMonthlySalesReportQueryParams } from "@workspace/api-zod";
@@ -29,17 +29,29 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
     const totalReturned = returns.reduce((s, r) => s + parseFloat(r.totalAmount), 0);
     const totalRefunded = returns.reduce((s, r) => s + parseFloat(r.refundPaid), 0);
 
+    // Loans increase what the customer owes, same direction as a sale — see the
+    // balance-formula rationale in customers.ts's computeCustomerBalance. Aged by the
+    // loan's own date, same as a sale order, so they land in the correct day bucket too.
+    const loans = await db.select().from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
+    const totalLoans = loans.reduce((s, l) => s + parseFloat(l.amount), 0);
+
     const openingBal = parseFloat(c.openingBalance ?? "0");
     const totalPaid = parseFloat(String(pmts[0]?.total ?? 0));
     let remaining = totalPaid;
 
+    const items = [
+      ...orders.map((o) => {
+        const ret = returnsByOrder.get(o.id);
+        return { date: o.date, amt: parseFloat(o.totalAmount) - (ret?.total ?? 0) + (ret?.refunded ?? 0) };
+      }),
+      ...loans.map((l) => ({ date: l.date, amt: parseFloat(l.amount) })),
+    ];
+
     let d0to30 = 0, d31to60 = 0, d61to90 = 0, dOver90 = 0;
-    for (const o of orders.sort((a, b) => a.date.localeCompare(b.date))) {
-      const ret = returnsByOrder.get(o.id);
-      const amt = parseFloat(o.totalAmount) - (ret?.total ?? 0) + (ret?.refunded ?? 0);
-      const days = Math.floor((now.getTime() - new Date(o.date).getTime()) / (1000 * 60 * 60 * 24));
-      const unpaid = Math.max(0, amt - remaining);
-      remaining = Math.max(0, remaining - amt);
+    for (const item of items.sort((a, b) => a.date.localeCompare(b.date))) {
+      const days = Math.floor((now.getTime() - new Date(item.date).getTime()) / (1000 * 60 * 60 * 24));
+      const unpaid = Math.max(0, item.amt - remaining);
+      remaining = Math.max(0, remaining - item.amt);
       if (days <= 30) d0to30 += unpaid;
       else if (days <= 60) d31to60 += unpaid;
       else if (days <= 90) d61to90 += unpaid;
@@ -47,7 +59,7 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
     }
 
     const totalSales = orders.reduce((s, o) => s + parseFloat(o.totalAmount), 0) - totalReturned + totalRefunded;
-    const balance = openingBal + totalSales - parseFloat(String(pmts[0]?.total ?? 0));
+    const balance = openingBal + totalSales - totalPaid + totalLoans;
     if (balance <= 0) return null;
 
     return {
@@ -318,11 +330,13 @@ router.get("/reports/outstanding", requireAuth, async (_req, res): Promise<void>
       total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
       refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
     }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
+    const loans = await db.select({ total: sql<number>`coalesce(sum(${customerLoansTable.amount}),0)` }).from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
     const balance = parseFloat(c.openingBalance ?? "0")
       + parseFloat(String(sales[0]?.total ?? 0))
       - parseFloat(String(pmts[0]?.total ?? 0))
       - parseFloat(String(returns[0]?.total ?? 0))
-      + parseFloat(String(returns[0]?.refunded ?? 0));
+      + parseFloat(String(returns[0]?.refunded ?? 0))
+      + parseFloat(String(loans[0]?.total ?? 0));
 
     const lastSale = await db.select({ date: saleOrdersTable.date }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted"))).orderBy(sql`${saleOrdersTable.date} desc`).limit(1);
     const lastPmt = await db.select({ date: paymentsTable.date }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted"))).orderBy(sql`${paymentsTable.date} desc`).limit(1);

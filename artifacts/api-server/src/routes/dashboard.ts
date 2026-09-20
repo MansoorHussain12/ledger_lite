@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable } from "@workspace/db";
-import { saleReturnsTable, saleReturnItemsTable } from "@workspace/db/schema";
+import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@workspace/db/schema";
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/auth";
@@ -153,11 +153,13 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
       total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
       refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
     }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
+    const loans = await db.select({ total: sql<number>`coalesce(sum(${customerLoansTable.amount}),0)` }).from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
     totalOutstanding += parseFloat(c.openingBalance ?? "0")
       + parseFloat(String(sales[0]?.total ?? 0))
       - parseFloat(String(pmts[0]?.total ?? 0))
       - parseFloat(String(returns[0]?.total ?? 0))
-      + parseFloat(String(returns[0]?.refunded ?? 0));
+      + parseFloat(String(returns[0]?.refunded ?? 0))
+      + parseFloat(String(loans[0]?.total ?? 0));
   }
 
   const todayCollections = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.date, today), eq(paymentsTable.status, "posted")));
@@ -194,11 +196,13 @@ router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<voi
       total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
       refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
     }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
+    const loans = await db.select({ total: sql<number>`coalesce(sum(${customerLoansTable.amount}),0)` }).from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
     const balance = parseFloat(c.openingBalance ?? "0")
       + parseFloat(String(sales[0]?.total ?? 0))
       - parseFloat(String(pmts[0]?.total ?? 0))
       - parseFloat(String(returns[0]?.total ?? 0))
-      + parseFloat(String(returns[0]?.refunded ?? 0));
+      + parseFloat(String(returns[0]?.refunded ?? 0))
+      + parseFloat(String(loans[0]?.total ?? 0));
     return { customerId: c.id, customerName: c.name, area: c.area ?? null, balance };
   }));
   res.json(withBalance.filter(x => x.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 10));
