@@ -118,7 +118,7 @@ router.post("/suppliers", requireAuth, async (req, res) => {
 // ── GET /suppliers/:id ────────────────────────────────────────────────────────
 
 router.get("/suppliers/:id", requireAuth, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, id));
@@ -159,7 +159,7 @@ router.get("/suppliers/:id", requireAuth, async (req, res) => {
 // ── PATCH /suppliers/:id ──────────────────────────────────────────────────────
 
 router.patch("/suppliers/:id", requireAuth, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = supplierInputSchema.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed" }); return; }
@@ -180,7 +180,7 @@ router.patch("/suppliers/:id", requireAuth, async (req, res) => {
 // ── DELETE /suppliers/:id ─────────────────────────────────────────────────────
 
 router.delete("/suppliers/:id", requireAuth, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(suppliersTable).where(eq(suppliersTable.id, id));
   res.status(204).send();
@@ -207,7 +207,7 @@ function toSupplierRowResponse(s: typeof suppliersTable.$inferSelect, balance: n
 // (posted) rows are summed — see the correction workflow.
 
 router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, id));
   if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
@@ -470,7 +470,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
 // ── GET /suppliers/:id/statement ──────────────────────────────────────────────
 
 router.get("/suppliers/:id/statement", requireAuth, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, id));
   if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
@@ -671,7 +671,7 @@ async function getPurchaseItems(purchaseInvoiceId: number) {
 }
 
 router.get("/purchases/:id", requireAuth, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [inv] = await db.select().from(purchaseInvoicesTable).where(eq(purchaseInvoicesTable.id, id));
@@ -711,7 +711,7 @@ const purchaseCorrectionSchema = z.object({
 });
 
 router.post("/purchases/:id/correct", requireRole("owner"), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = purchaseCorrectionSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", details: parsed.error.issues }); return; }

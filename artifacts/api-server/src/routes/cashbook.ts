@@ -23,8 +23,8 @@ const sources = ["manual", "opening_balance", "adjustment", "salary", "transfer"
 router.get("/cashbook", requireAuth, async (req, res) => {
   const from = req.query.from as string | undefined;
   const to = req.query.to as string | undefined;
-  const typeFilter = req.query.type as string | undefined;
-  const modeFilter = req.query.paymentMode as string | undefined;
+  const typeFilter = req.query.type as (typeof entryTypes)[number] | undefined;
+  const modeFilter = req.query.paymentMode as (typeof paymentModes)[number] | undefined;
   const includeReversed = req.query.includeReversed === "true";
 
   // Only "live" (posted) entries — a reversed original and its reversal (e.g. from a
@@ -181,7 +181,7 @@ const cashbookCorrectionSchema = z.object({
 });
 
 router.post("/cashbook/:id/correct", requireRole("owner"), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = cashbookCorrectionSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", details: parsed.error.issues }); return; }
@@ -348,7 +348,7 @@ const expenseCorrectionSchema = z.object({
 });
 
 router.post("/expenses/:id/correct", requireRole("owner"), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = expenseCorrectionSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", details: parsed.error.issues }); return; }
