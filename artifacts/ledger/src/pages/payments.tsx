@@ -75,6 +75,12 @@ export default function PaymentsPage() {
     setShowForm(true);
   };
 
+  // Current balance of whichever customer is picked in the new-payment form, plus a
+  // live projection of what it'll be after this payment posts — list endpoint already
+  // returns each customer's balance, so no extra fetch needed.
+  const formCustomer = customers.find(c => c.id === form.customerId);
+  const formAmount = parseFloat(form.amount) || 0;
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.customerId || !form.amount) return;
@@ -296,6 +302,22 @@ export default function PaymentsPage() {
                 className="w-full"
               />
             </div>
+            {formCustomer && (
+              <div className="grid grid-cols-3 gap-2 bg-muted/30 border border-border rounded-md px-3 py-2 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">Total Remaining</div>
+                  <div className="font-semibold">Rs. {formatAmount(formCustomer.balance)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Receiving</div>
+                  <div className="font-semibold text-emerald-600">Rs. {formatAmount(formAmount)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Balance After</div>
+                  <div className="font-semibold">Rs. {formatAmount(formCustomer.balance - formAmount)}</div>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Date *</Label>
