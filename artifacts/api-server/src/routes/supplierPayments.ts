@@ -3,6 +3,7 @@ import { db, supplierPaymentsTable, suppliersTable } from "@workspace/db";
 import { cashbookEntriesTable } from "@workspace/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
+import { supplierBalance } from "../lib/supplierBalance";
 import {
   CreateSupplierPaymentBody,
   GetSupplierPaymentParams,
@@ -22,9 +23,31 @@ function toSupplierPaymentResponse(p: typeof supplierPaymentsTable.$inferSelect,
   return {
     id: p.id, supplierId: p.supplierId, supplierName,
     date: p.date, paymentMode: p.paymentMode, amount: parseFloat(p.amount),
+    discountAmount: parseFloat(p.discountAmount ?? "0"), discountReason: p.discountReason ?? null,
     bankAccount: p.bankAccount ?? null, chequeNo: p.chequeNo ?? null, notes: p.notes ?? null, createdAt: p.createdAt,
     status: p.status, reversesId: p.reversesId ?? null, correctsId: p.correctsId ?? null,
   };
+}
+
+// A payment (cash + discount together) can't clear more than what's actually owed —
+// reject rather than let the supplier's payable balance go negative. discountAmount > 0
+// always needs a reason, since — unlike amount, which is self-evidently "cash paid" —
+// a discount with no reason on file is not auditable later.
+async function validatePayment(supplierId: number, amount: number, discountAmount: number, discountReason: string | undefined | null, excludePaymentId?: number): Promise<string | null> {
+  if (discountAmount < 0) return "discountAmount cannot be negative";
+  if (discountAmount > 0 && !discountReason?.trim()) return "discountReason is required when discountAmount > 0";
+  // supplierBalance() already excludes reversed/reversal rows; when correcting a payment
+  // we're about to reverse, its own old amount+discount must be added back first so the
+  // check reflects the balance *after* that reversal, not before it.
+  let balance = await supplierBalance(supplierId);
+  if (excludePaymentId != null) {
+    const [existing] = await db.select().from(supplierPaymentsTable).where(eq(supplierPaymentsTable.id, excludePaymentId));
+    if (existing && existing.status === "posted") {
+      balance += parseFloat(existing.amount) + parseFloat(existing.discountAmount ?? "0");
+    }
+  }
+  if (amount + discountAmount > balance + 0.01) return "amount + discountAmount cannot exceed the supplier's payable balance";
+  return null;
 }
 
 router.get("/supplier-payments", requireAuth, async (req, res): Promise<void> => {
@@ -54,14 +77,19 @@ router.get("/supplier-payments", requireAuth, async (req, res): Promise<void> =>
 router.post("/supplier-payments", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateSupplierPaymentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const { supplierId, date, paymentMode, amount, bankAccount, chequeNo, notes } = parsed.data;
+  const { supplierId, date, paymentMode, amount, discountAmount, discountReason, bankAccount, chequeNo, notes } = parsed.data;
   const userId = (req.session as any)?.userId ?? null;
+
+  const discount = discountAmount ?? 0;
+  const validationError = await validatePayment(supplierId, amount, discount, discountReason);
+  if (validationError) { res.status(400).json({ error: validationError }); return; }
 
   const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
   const dateStr = toDateStr(date);
 
   const [p] = await db.insert(supplierPaymentsTable).values({
     supplierId, date: dateStr, paymentMode, amount: String(amount),
+    discountAmount: String(discount), discountReason: discount > 0 ? discountReason ?? null : null,
     bankAccount: bankAccount ?? null, chequeNo: chequeNo ?? null, notes: notes ?? null, createdById: userId,
   }).returning();
 
@@ -115,6 +143,18 @@ router.post("/supplier-payments/:id/correct", requireRole("owner"), async (req, 
     return;
   }
 
+  const correctedDiscount = parsed.data.discountAmount ?? 0;
+  if (!isVoid) {
+    // excludePaymentId: original.id — its own amount+discount is being reversed as part
+    // of this same correction, so the balance check must be against the balance *after*
+    // that reversal, not before it (otherwise a same-amount correction would always
+    // look like it's double-spending the original payment).
+    const validationError = await validatePayment(
+      parsed.data.supplierId!, parsed.data.amount!, correctedDiscount, parsed.data.discountReason, original.id
+    );
+    if (validationError) { res.status(400).json({ error: validationError }); return; }
+  }
+
   const userId = (req.session as any)?.userId ?? null;
   const [supplier] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, original.supplierId));
   const [correctedSupplier] = !isVoid && parsed.data.supplierId !== original.supplierId
@@ -128,6 +168,7 @@ router.post("/supplier-payments/:id/correct", requireRole("owner"), async (req, 
     // a correction/void in the history view.
     const [reversal] = await tx.insert(supplierPaymentsTable).values({
       supplierId: original.supplierId, date: original.date, paymentMode: original.paymentMode, amount: original.amount,
+      discountAmount: original.discountAmount, discountReason: original.discountReason,
       bankAccount: original.bankAccount, chequeNo: original.chequeNo, notes: parsed.data.reason ?? original.notes,
       status: "reversal", reversesId: original.id,
     }).returning();
@@ -157,6 +198,7 @@ router.post("/supplier-payments/:id/correct", requireRole("owner"), async (req, 
       const dateStr = toDateStr(parsed.data.date!);
       const [correction] = await tx.insert(supplierPaymentsTable).values({
         supplierId: parsed.data.supplierId!, date: dateStr, paymentMode: parsed.data.paymentMode!, amount: String(parsed.data.amount!),
+        discountAmount: String(correctedDiscount), discountReason: correctedDiscount > 0 ? parsed.data.discountReason ?? null : null,
         bankAccount: parsed.data.bankAccount ?? null, chequeNo: parsed.data.chequeNo ?? null, notes: parsed.data.notes ?? null,
         status: "posted", correctsId: original.id, createdById: userId,
       }).returning();

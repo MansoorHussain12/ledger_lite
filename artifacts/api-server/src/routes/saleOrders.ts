@@ -27,10 +27,12 @@ async function buildSaleOrderResponse(orderId: number) {
     .leftJoin(productsTable, eq(saleOrderItemsTable.productId, productsTable.id))
     .where(eq(saleOrderItemsTable.saleOrderId, orderId));
 
+  const totalAmount = parseFloat(order.totalAmount);
+  const discountAmount = parseFloat(order.discountAmount ?? "0");
   return {
     id: order.id, customerId: order.customerId, customerName: customer?.name ?? "",
     date: order.date, vehicleNo: order.vehicleNo ?? null, driverName: order.driverName ?? null,
-    billtyNo: order.billtyNo ?? null, totalAmount: parseFloat(order.totalAmount),
+    billtyNo: order.billtyNo ?? null, totalAmount, discountAmount, netAmount: totalAmount - discountAmount,
     notes: order.notes ?? null, createdAt: order.createdAt,
     items: items.map(({ item, product }) => ({
       id: item.id, productId: item.productId, productName: product?.name ?? "",
@@ -40,6 +42,14 @@ async function buildSaleOrderResponse(orderId: number) {
     })),
     status: order.status, reversesId: order.reversesId ?? null, correctsId: order.correctsId ?? null,
   };
+}
+
+// A discount can't exceed what's actually owed on the order — reject rather than let
+// the order's net amount (and therefore the customer's balance) go negative.
+function validateDiscount(discountAmount: number, totalAmount: number): string | null {
+  if (discountAmount < 0) return "discountAmount cannot be negative";
+  if (discountAmount > totalAmount) return "discountAmount cannot exceed the order total";
+  return null;
 }
 
 // Shared by POST /sale-orders and the reversal-and-replace step of /correct — resolves
@@ -83,10 +93,12 @@ router.get("/sale-orders", requireAuth, async (req, res): Promise<void> => {
       .from(saleOrderItemsTable)
       .leftJoin(productsTable, eq(saleOrderItemsTable.productId, productsTable.id))
       .where(eq(saleOrderItemsTable.saleOrderId, o.id));
+    const totalAmount = parseFloat(o.totalAmount);
+    const discountAmount = parseFloat(o.discountAmount ?? "0");
     return {
       id: o.id, customerId: o.customerId, customerName: customer?.name ?? "",
       date: o.date, vehicleNo: o.vehicleNo ?? null, driverName: o.driverName ?? null,
-      billtyNo: o.billtyNo ?? null, totalAmount: parseFloat(o.totalAmount),
+      billtyNo: o.billtyNo ?? null, totalAmount, discountAmount, netAmount: totalAmount - discountAmount,
       notes: o.notes ?? null, createdAt: o.createdAt,
       items: items.map(({ item, product }) => ({
         id: item.id, productId: item.productId, productName: product?.name ?? "",
@@ -104,12 +116,16 @@ router.post("/sale-orders", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateSaleOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { customerId, date, vehicleNo, driverName, billtyNo, notes, items } = parsed.data;
+  const { customerId, date, vehicleNo, driverName, billtyNo, notes, items, discountAmount } = parsed.data;
   const { resolved: resolvedItems, totalAmount } = await resolveItems(items);
+
+  const discount = discountAmount ?? 0;
+  const discountError = validateDiscount(discount, totalAmount);
+  if (discountError) { res.status(400).json({ error: discountError }); return; }
 
   const [order] = await db.insert(saleOrdersTable).values({
     customerId, date: toDateStr(date), vehicleNo: vehicleNo ?? null, driverName: driverName ?? null,
-    billtyNo: billtyNo ?? null, notes: notes ?? null, totalAmount: String(totalAmount),
+    billtyNo: billtyNo ?? null, notes: notes ?? null, totalAmount: String(totalAmount), discountAmount: String(discount),
   }).returning();
 
   for (const item of resolvedItems) {
@@ -154,6 +170,17 @@ router.post("/sale-orders/:id/correct", requireRole("owner"), async (req, res): 
     return;
   }
 
+  // Resolve the replacement's items (and validate its discount) before opening the
+  // transaction, so an invalid discount 400s cleanly instead of failing mid-transaction.
+  let correctedItems: Awaited<ReturnType<typeof resolveItems>> | null = null;
+  let correctedDiscount = 0;
+  if (!isVoid) {
+    correctedItems = await resolveItems(parsed.data.items!);
+    correctedDiscount = parsed.data.discountAmount ?? 0;
+    const discountError = validateDiscount(correctedDiscount, correctedItems.totalAmount);
+    if (discountError) { res.status(400).json({ error: discountError }); return; }
+  }
+
   const originalItems = await db.select().from(saleOrderItemsTable).where(eq(saleOrderItemsTable.saleOrderId, original.id));
 
   const result = await db.transaction(async (tx) => {
@@ -164,7 +191,7 @@ router.post("/sale-orders/:id/correct", requireRole("owner"), async (req, res): 
     const [reversal] = await tx.insert(saleOrdersTable).values({
       customerId: original.customerId, date: original.date, vehicleNo: original.vehicleNo,
       driverName: original.driverName, billtyNo: original.billtyNo, notes: parsed.data.reason ?? original.notes,
-      totalAmount: original.totalAmount, status: "reversal", reversesId: original.id,
+      totalAmount: original.totalAmount, discountAmount: original.discountAmount, status: "reversal", reversesId: original.id,
     }).returning();
     for (const item of originalItems) {
       await tx.insert(saleOrderItemsTable).values({
@@ -179,12 +206,12 @@ router.post("/sale-orders/:id/correct", requireRole("owner"), async (req, res): 
     // 3. If this is a correction (not a pure void), post the replacement.
     let correctionId: number | null = null;
     if (!isVoid) {
-      const { resolved: resolvedItems, totalAmount } = await resolveItems(parsed.data.items!);
+      const { resolved: resolvedItems, totalAmount } = correctedItems!;
       const [correction] = await tx.insert(saleOrdersTable).values({
         customerId: parsed.data.customerId!, date: toDateStr(parsed.data.date!),
         vehicleNo: parsed.data.vehicleNo ?? null, driverName: parsed.data.driverName ?? null,
         billtyNo: parsed.data.billtyNo ?? null, notes: parsed.data.notes ?? null,
-        totalAmount: String(totalAmount), status: "posted", correctsId: original.id,
+        totalAmount: String(totalAmount), discountAmount: String(correctedDiscount), status: "posted", correctsId: original.id,
       }).returning();
       for (const item of resolvedItems) {
         await tx.insert(saleOrderItemsTable).values({ saleOrderId: correction.id, ...item });

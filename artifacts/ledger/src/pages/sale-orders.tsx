@@ -57,7 +57,7 @@ export default function SaleOrdersPage() {
 
   // One row per logical transaction: `head` is its current effective state.
   const groups = groupCorrections(orders);
-  const totalAmount = groups.reduce((s, g) => s + (g.isVoid ? 0 : g.head.totalAmount), 0);
+  const totalAmount = groups.reduce((s, g) => s + (g.isVoid ? 0 : g.head.netAmount), 0);
   const toggleExpanded = (id: number) => setExpandedIds(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -72,6 +72,7 @@ export default function SaleOrdersPage() {
   const [correctDriverName, setCorrectDriverName] = useState("");
   const [correctBilltyNo, setCorrectBilltyNo] = useState("");
   const [correctNotes, setCorrectNotes] = useState("");
+  const [correctDiscountAmount, setCorrectDiscountAmount] = useState("");
   const [correctItems, setCorrectItems] = useState<LineItem[]>([]);
   const [correctVoid, setCorrectVoid] = useState(false);
   const [correctReason, setCorrectReason] = useState("");
@@ -84,6 +85,7 @@ export default function SaleOrdersPage() {
     setCorrectDriverName(o.driverName ?? "");
     setCorrectBilltyNo(o.billtyNo ?? "");
     setCorrectNotes(o.notes ?? "");
+    setCorrectDiscountAmount(o.discountAmount ? String(o.discountAmount) : "");
     setCorrectItems(o.items.map(i => ({
       productId: i.productId, productName: i.productName,
       qty: String(i.qty), rate: String(i.rate),
@@ -105,6 +107,8 @@ export default function SaleOrdersPage() {
   const removeCorrectLine = (idx: number) => setCorrectItems(prev => prev.filter((_, i) => i !== idx));
 
   const correctTotal = correctItems.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.rate) || 0), 0);
+  const correctDiscount = Math.min(parseFloat(correctDiscountAmount) || 0, correctTotal);
+  const correctNet = correctTotal - correctDiscount;
 
   const handleCorrect = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,6 +133,7 @@ export default function SaleOrdersPage() {
               driverName: correctDriverName || undefined,
               billtyNo: correctBilltyNo || undefined,
               notes: correctNotes || undefined,
+              discountAmount: correctDiscount || undefined,
               items: correctItems
                 .filter(i => i.productId && i.qty && parseFloat(i.qty) > 0)
                 .map(i => ({ productId: i.productId, qty: parseFloat(i.qty), rate: parseFloat(i.rate) || undefined })),
@@ -213,7 +218,14 @@ export default function SaleOrdersPage() {
                     {o.billtyNo && <div>Billty: {o.billtyNo}</div>}
                     {o.vehicleNo && <div>Vehicle: {o.vehicleNo}</div>}
                   </td>
-                  <td className={cn("px-4 py-3 text-right font-semibold", g.isVoid ? "text-muted-foreground line-through decoration-1" : "text-red-600")}>Rs. {formatAmount(o.totalAmount)}</td>
+                  <td className={cn("px-4 py-3 text-right font-semibold", g.isVoid ? "text-muted-foreground line-through decoration-1" : "text-red-600")}>
+                    Rs. {formatAmount(o.netAmount)}
+                    {o.discountAmount > 0 && (
+                      <div className="text-xs font-normal text-muted-foreground">
+                        Rs. {formatAmount(o.totalAmount)} − {formatAmount(o.discountAmount)} discount
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       {!g.isVoid && (
@@ -369,9 +381,23 @@ export default function SaleOrdersPage() {
                   <button type="button" onClick={addCorrectLine} className="text-sm text-primary hover:underline flex items-center gap-1">
                     <Plus size={14} /> Add another item
                   </button>
-                  <div className="pt-2 border-t border-border flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Total Amount</span>
-                    <span className="text-lg font-bold text-red-600">Rs. {formatAmount(correctTotal)}</span>
+                  <div className="pt-2 border-t border-border space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Subtotal</span>
+                      <span className="text-sm font-medium">Rs. {formatAmount(correctTotal)}</span>
+                    </div>
+                    <div className="flex justify-between items-center gap-3">
+                      <Label className="text-sm text-muted-foreground font-normal shrink-0">Discount (Rs.)</Label>
+                      <Input
+                        type="number" value={correctDiscountAmount} min="0" max={correctTotal} step="0.01"
+                        onChange={e => setCorrectDiscountAmount(e.target.value)}
+                        placeholder="0" className="h-8 w-32 text-right"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Net Amount</span>
+                      <span className="text-lg font-bold text-red-600">Rs. {formatAmount(correctNet)}</span>
+                    </div>
                   </div>
                 </div>
               </>

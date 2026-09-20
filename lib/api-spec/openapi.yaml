@@ -2273,6 +2273,8 @@ components:
           type: number
         loanAmount:
           type: number
+        discountAmount:
+          type: number
         balance:
           type: number
 
@@ -2315,6 +2317,8 @@ components:
         totalRefundAmount:
           type: number
         totalLoanAmount:
+          type: number
+        totalDiscountAmount:
           type: number
         totalTons:
           type: number
@@ -2424,7 +2428,7 @@ components:
 
     SaleOrder:
       type: object
-      required: [id, customerId, customerName, date, totalAmount, createdAt, items, status]
+      required: [id, customerId, customerName, date, totalAmount, discountAmount, netAmount, createdAt, items, status]
       properties:
         id:
           type: integer
@@ -2443,6 +2447,12 @@ components:
           type: ["string", "null"]
         totalAmount:
           type: number
+        discountAmount:
+          type: number
+          description: Flat discount agreed at sale time. Never exceeds totalAmount.
+        netAmount:
+          type: number
+          description: totalAmount - discountAmount — what the customer actually owes for this order.
         notes:
           type: ["string", "null"]
         createdAt:
@@ -2490,6 +2500,9 @@ components:
           type: string
         notes:
           type: string
+        discountAmount:
+          type: number
+          description: Flat discount off the order total. Must not exceed the sum of item amounts.
         items:
           type: array
           items:
@@ -2518,6 +2531,9 @@ components:
           type: string
         notes:
           type: string
+        discountAmount:
+          type: number
+          description: Flat discount off the order total. Must not exceed the sum of item amounts.
         items:
           type: array
           items:
@@ -2853,6 +2869,16 @@ components:
           enum: [cash, bank, easypaisa, jazzcash, cheque, other]
         amount:
           type: number
+        discountAmount:
+          type: number
+          description: >
+            Settlement discount agreed with the supplier at payment time (e.g. owe
+            20,500, pay 20,000 cash, supplier writes off 500). Reduces payable the same
+            as amount, but never posts to cashbook. amount + discountAmount must not
+            exceed the supplier's payable balance at the time of payment.
+        discountReason:
+          type: ["string", "null"]
+          description: Required whenever discountAmount > 0 — a dedicated audit trail for why the discount was given.
         bankAccount:
           type: ["string", "null"]
         chequeNo:
@@ -2884,6 +2910,10 @@ components:
           enum: [cash, bank, easypaisa, jazzcash, cheque, other]
         amount:
           type: number
+        discountAmount:
+          type: number
+        discountReason:
+          type: string
         bankAccount:
           type: string
         chequeNo:
@@ -2911,6 +2941,10 @@ components:
           enum: [cash, bank, easypaisa, jazzcash, cheque, other]
         amount:
           type: number
+        discountAmount:
+          type: number
+        discountReason:
+          type: string
         bankAccount:
           type: string
         chequeNo:
@@ -4041,6 +4075,8 @@ components:
           type: number
         paidAmount:
           type: number
+        discountAmount:
+          type: number
         returnValue:
           type: number
         refundAmount:
@@ -4050,7 +4086,7 @@ components:
 
     SupplierLedger:
       type: object
-      required: [supplier, openingBalance, openingBalanceDate, closingBalance, totalPurchased, totalPaid, totalReturnValue, totalRefundAmount, from, to, entries, categoryBreakdown]
+      required: [supplier, openingBalance, openingBalanceDate, closingBalance, totalPurchased, totalPaid, totalDiscountAmount, totalReturnValue, totalRefundAmount, from, to, entries, categoryBreakdown]
       properties:
         supplier:
           $ref: "#/components/schemas/SupplierRow"
@@ -4064,6 +4100,8 @@ components:
         totalPurchased:
           type: number
         totalPaid:
+          type: number
+        totalDiscountAmount:
           type: number
         totalReturnValue:
           type: number

@@ -36,6 +36,8 @@ interface SupplierPaymentForm {
   date: string;
   paymentMode: PaymentMode;
   amount: string;
+  discountAmount: string;
+  discountReason: string;
   bankAccount: string;
   chequeNo: string;
   notes: string;
@@ -46,6 +48,8 @@ const defaultForm = (): SupplierPaymentForm => ({
   date: new Date().toISOString().split("T")[0],
   paymentMode: "cash",
   amount: "",
+  discountAmount: "",
+  discountReason: "",
   bankAccount: "",
   chequeNo: "",
   notes: "",
@@ -92,10 +96,15 @@ export default function SupplierPaymentsPage() {
   // returns each supplier's balance, so no extra fetch needed.
   const formSupplier = suppliers.find(s => s.id === form.supplierId);
   const formAmount = parseFloat(form.amount) || 0;
+  const formDiscount = parseFloat(form.discountAmount) || 0;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.supplierId || !form.amount) return;
+    if (formDiscount > 0 && !form.discountReason.trim()) {
+      toast({ title: "A reason is required when giving a discount", variant: "destructive" });
+      return;
+    }
     try {
       await createMutation.mutateAsync({
         data: {
@@ -103,6 +112,8 @@ export default function SupplierPaymentsPage() {
           date: form.date,
           paymentMode: form.paymentMode,
           amount: parseFloat(form.amount),
+          discountAmount: formDiscount || undefined,
+          discountReason: formDiscount > 0 ? form.discountReason : undefined,
           bankAccount: form.bankAccount || undefined,
           chequeNo: form.chequeNo || undefined,
           notes: form.notes || undefined,
@@ -128,15 +139,22 @@ export default function SupplierPaymentsPage() {
     setCorrecting(p);
     setCorrectForm({
       supplierId: p.supplierId, date: p.date, paymentMode: p.paymentMode as PaymentMode, amount: String(p.amount),
+      discountAmount: p.discountAmount ? String(p.discountAmount) : "", discountReason: p.discountReason ?? "",
       bankAccount: p.bankAccount ?? "", chequeNo: p.chequeNo ?? "", notes: p.notes ?? "",
     });
     setCorrectVoid(false);
     setCorrectReason("");
   };
 
+  const correctDiscount = parseFloat(correctForm.discountAmount) || 0;
+
   const handleCorrect = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!correcting) return;
+    if (!correctVoid && correctDiscount > 0 && !correctForm.discountReason.trim()) {
+      toast({ title: "A reason is required when giving a discount", variant: "destructive" });
+      return;
+    }
     try {
       await correctMutation.mutateAsync({
         id: correcting.id,
@@ -148,6 +166,8 @@ export default function SupplierPaymentsPage() {
               date: correctForm.date,
               paymentMode: correctForm.paymentMode,
               amount: parseFloat(correctForm.amount),
+              discountAmount: correctDiscount || undefined,
+              discountReason: correctDiscount > 0 ? correctForm.discountReason : undefined,
               bankAccount: correctForm.bankAccount || undefined,
               chequeNo: correctForm.chequeNo || undefined,
               notes: correctForm.notes || undefined,
@@ -163,6 +183,7 @@ export default function SupplierPaymentsPage() {
   };
 
   const totalPaid = payments.filter(p => p.status === "posted").reduce((s, p) => s + p.amount, 0);
+  const totalDiscount = payments.filter(p => p.status === "posted").reduce((s, p) => s + (p.discountAmount ?? 0), 0);
 
   // One row per logical transaction: `head` is its current effective state.
   const groups = groupCorrections(payments);
@@ -179,6 +200,7 @@ export default function SupplierPaymentsPage() {
           <h1 className="text-2xl font-bold">Supplier Payments</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Total paid: Rs. {formatAmount(totalPaid)}
+            {totalDiscount > 0 && <> · Discounts given: Rs. {formatAmount(totalDiscount)}</>}
           </p>
         </div>
         <Button onClick={openNewForm}><Plus size={15} className="mr-1.5" /> Record Payment</Button>
@@ -250,7 +272,12 @@ export default function SupplierPaymentsPage() {
                     {p.chequeNo && <div>Chq: {p.chequeNo}</div>}
                     {p.notes && <div>{p.notes}</div>}
                   </td>
-                  <td className={cn("px-4 py-3 text-right font-semibold", g.isVoid ? "text-muted-foreground line-through decoration-1" : "text-red-500")}>Rs. {formatAmount(p.amount)}</td>
+                  <td className={cn("px-4 py-3 text-right font-semibold", g.isVoid ? "text-muted-foreground line-through decoration-1" : "text-red-500")}>
+                    Rs. {formatAmount(p.amount)}
+                    {(p.discountAmount ?? 0) > 0 && (
+                      <div className="text-xs font-normal text-muted-foreground">+ Rs. {formatAmount(p.discountAmount ?? 0)} discount</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {!g.isVoid && (
                       <button onClick={() => openCorrect(p)} title="Correct this payment" className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors">
@@ -312,7 +339,7 @@ export default function SupplierPaymentsPage() {
               />
             </div>
             {formSupplier && (
-              <div className="grid grid-cols-3 gap-2 bg-muted/30 border border-border rounded-md px-3 py-2 text-sm">
+              <div className="grid grid-cols-4 gap-2 bg-muted/30 border border-border rounded-md px-3 py-2 text-sm">
                 <div>
                   <div className="text-xs text-muted-foreground">Total Remaining</div>
                   <div className="font-semibold">Rs. {formatAmount(formSupplier.payableBalance)}</div>
@@ -322,8 +349,12 @@ export default function SupplierPaymentsPage() {
                   <div className="font-semibold text-red-500">Rs. {formatAmount(formAmount)}</div>
                 </div>
                 <div>
+                  <div className="text-xs text-muted-foreground">Discount</div>
+                  <div className="font-semibold text-emerald-600">Rs. {formatAmount(formDiscount)}</div>
+                </div>
+                <div>
                   <div className="text-xs text-muted-foreground">Balance After</div>
-                  <div className="font-semibold">Rs. {formatAmount(formSupplier.payableBalance - formAmount)}</div>
+                  <div className="font-semibold">Rs. {formatAmount(formSupplier.payableBalance - formAmount - formDiscount)}</div>
                 </div>
               </div>
             )}
@@ -335,6 +366,24 @@ export default function SupplierPaymentsPage() {
               <div className="space-y-1.5">
                 <Label>Amount (Rs.) *</Label>
                 <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required min="0.01" step="0.01" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Discount (Rs.)</Label>
+                <Input
+                  type="number" value={form.discountAmount}
+                  onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))}
+                  placeholder="0" min="0" step="0.01"
+                  max={formSupplier ? formSupplier.payableBalance - formAmount : undefined}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Discount Reason {formDiscount > 0 && "*"}</Label>
+                <Input
+                  value={form.discountReason} onChange={e => setForm(f => ({ ...f, discountReason: e.target.value }))}
+                  placeholder="e.g. rounding, goodwill" required={formDiscount > 0}
+                />
               </div>
             </div>
             <div className="space-y-1.5">
@@ -399,6 +448,23 @@ export default function SupplierPaymentsPage() {
                   <div className="space-y-1.5">
                     <Label>Amount (Rs.) *</Label>
                     <Input type="number" value={correctForm.amount} onChange={e => setCorrectForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required min="0.01" step="0.01" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Discount (Rs.)</Label>
+                    <Input
+                      type="number" value={correctForm.discountAmount}
+                      onChange={e => setCorrectForm(f => ({ ...f, discountAmount: e.target.value }))}
+                      placeholder="0" min="0" step="0.01"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Discount Reason {correctDiscount > 0 && "*"}</Label>
+                    <Input
+                      value={correctForm.discountReason} onChange={e => setCorrectForm(f => ({ ...f, discountReason: e.target.value }))}
+                      placeholder="e.g. rounding, goodwill" required={correctDiscount > 0}
+                    />
                   </div>
                 </div>
                 <div className="space-y-1.5">

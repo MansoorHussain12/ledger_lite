@@ -13,57 +13,13 @@ import {
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
+import { supplierBalance } from "../lib/supplierBalance";
 
 const router = Router();
 
 function toDateStr(d: unknown): string {
   if (d instanceof Date) return d.toISOString().slice(0, 10);
   return String(d);
-}
-
-// ── helpers: supplier payable balance ────────────────────────────────────────
-// balance = opening_balance + sum(purchase.total_amount) - sum(purchase.paid_amount)
-//           - sum(supplier_payments.amount)
-// The last term is money paid against the running balance separately from any one
-// invoice (see supplierPayments.ts) — same relationship customer payments have to
-// sale orders.
-
-async function supplierBalance(supplierId: number): Promise<number> {
-  const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
-  if (!s) return 0;
-  // Only "live" (posted) invoices — a reversed/corrected mistake is excluded, so this
-  // reflects the correction, not the mistake (see the correction workflow).
-  const [agg] = await db
-    .select({
-      totalBilled: sql<string>`coalesce(sum(total_amount),0)`,
-      totalPaid: sql<string>`coalesce(sum(paid_amount),0)`,
-    })
-    .from(purchaseInvoicesTable)
-    .where(and(eq(purchaseInvoicesTable.supplierId, supplierId), eq(purchaseInvoicesTable.status, "posted")));
-
-  const [paymentsAgg] = await db
-    .select({ total: sql<string>`coalesce(sum(amount),0)` })
-    .from(supplierPaymentsTable)
-    .where(and(eq(supplierPaymentsTable.supplierId, supplierId), eq(supplierPaymentsTable.status, "posted")));
-
-  // Purchase returns reduce payable by their full value (goods sent back); any
-  // refundReceived on top of that is cash the supplier gave back, which adds back to
-  // the balance the same way a payment we made would — see returns' worked example.
-  const [returnsAgg] = await db
-    .select({
-      total: sql<string>`coalesce(sum(total_amount),0)`,
-      refunded: sql<string>`coalesce(sum(refund_received),0)`,
-    })
-    .from(purchaseReturnsTable)
-    .where(and(eq(purchaseReturnsTable.supplierId, supplierId), eq(purchaseReturnsTable.status, "posted")));
-
-  const opening = parseFloat(s.openingBalance ?? "0");
-  const billed = parseFloat(agg?.totalBilled ?? "0");
-  const paid = parseFloat(agg?.totalPaid ?? "0");
-  const directPayments = parseFloat(paymentsAgg?.total ?? "0");
-  const returned = parseFloat(returnsAgg?.total ?? "0");
-  const returnRefunded = parseFloat(returnsAgg?.refunded ?? "0");
-  return Math.round((opening + billed - paid - directPayments - returned + returnRefunded) * 100) / 100;
 }
 
 // ── GET /suppliers ────────────────────────────────────────────────────────────
@@ -245,7 +201,10 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
       paidAmount: sql<number>`coalesce(sum(${purchaseInvoicesTable.paidAmount}),0)`,
     }).from(purchaseInvoicesTable)
       .where(and(eq(purchaseInvoicesTable.supplierId, id), eq(purchaseInvoicesTable.status, "posted"), sql`${purchaseInvoicesTable.date} < ${fromDate}`));
-    const beforePmts = await db.select({ total: sql<number>`coalesce(sum(${supplierPaymentsTable.amount}),0)` })
+    const beforePmts = await db.select({
+      total: sql<number>`coalesce(sum(${supplierPaymentsTable.amount}),0)`,
+      discount: sql<number>`coalesce(sum(${supplierPaymentsTable.discountAmount}),0)`,
+    })
       .from(supplierPaymentsTable)
       .where(and(eq(supplierPaymentsTable.supplierId, id), eq(supplierPaymentsTable.status, "posted"), sql`${supplierPaymentsTable.date} < ${fromDate}`));
     const beforeReturns = await db.select({
@@ -257,6 +216,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
       + parseFloat(String(beforeInvoices[0]?.totalAmount ?? 0))
       - parseFloat(String(beforeInvoices[0]?.paidAmount ?? 0))
       - parseFloat(String(beforePmts[0]?.total ?? 0))
+      - parseFloat(String(beforePmts[0]?.discount ?? 0))
       - parseFloat(String(beforeReturns[0]?.total ?? 0))
       + parseFloat(String(beforeReturns[0]?.refunded ?? 0));
   }
@@ -273,6 +233,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
     rateBag: number | null;
     purchaseValue: number;
     paidAmount: number;
+    discountAmount: number;
     returnValue: number;
     refundAmount: number;
   };
@@ -319,6 +280,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
       rateBag: items.length === 1 ? parseFloat(items[0].rate) : null,
       purchaseValue: parseFloat(inv.totalAmount),
       paidAmount: parseFloat(inv.paidAmount),
+      discountAmount: 0,
       returnValue: 0,
       refundAmount: 0,
     });
@@ -330,11 +292,15 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
     jazzcash: "JazzCash Paid", cheque: "Cheque Paid", other: "Payment",
   };
   for (const p of pmts) {
+    const discount = parseFloat(p.discountAmount ?? "0");
+    const remarks = discount > 0
+      ? [p.notes, `Discount: Rs. ${discount.toLocaleString()}${p.discountReason ? ` — ${p.discountReason}` : ""}`].filter(Boolean).join(" · ")
+      : (p.notes ?? null);
     rows.push({
       date: p.date,
       sortKey: `${p.date}_0_${String(p.id).padStart(8, "0")}`,
       transactionType: paymentModeLabels[p.paymentMode] ?? "Payment",
-      remarks: p.notes ?? null,
+      remarks,
       documentNo: p.chequeNo ?? p.bankAccount ?? null,
       item: null,
       unit: null,
@@ -342,6 +308,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
       rateBag: null,
       purchaseValue: 0,
       paidAmount: parseFloat(p.amount),
+      discountAmount: discount,
       returnValue: 0,
       refundAmount: 0,
     });
@@ -386,6 +353,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
         rateBag: parseFloat(item.rate),
         purchaseValue: 0,
         paidAmount: 0,
+        discountAmount: 0,
         returnValue: amount,
         refundAmount: 0,
       });
@@ -404,6 +372,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
         rateBag: null,
         purchaseValue: 0,
         paidAmount: 0,
+        discountAmount: 0,
         returnValue: 0,
         refundAmount: parseFloat(ret.refundReceived),
       });
@@ -414,12 +383,13 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
   rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
   let running = openingBalance;
-  let totalPurchased = 0, totalPaid = 0, totalReturnValue = 0, totalRefundAmount = 0;
+  let totalPurchased = 0, totalPaid = 0, totalDiscountAmount = 0, totalReturnValue = 0, totalRefundAmount = 0;
 
   const entries = rows.map((row, i) => {
-    running = running + row.purchaseValue - row.paidAmount - row.returnValue + row.refundAmount;
+    running = running + row.purchaseValue - row.paidAmount - row.discountAmount - row.returnValue + row.refundAmount;
     totalPurchased += row.purchaseValue;
     totalPaid += row.paidAmount;
+    totalDiscountAmount += row.discountAmount;
     totalReturnValue += row.returnValue;
     totalRefundAmount += row.refundAmount;
     return {
@@ -434,6 +404,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
       rateBag: row.rateBag,
       purchaseValue: row.purchaseValue,
       paidAmount: row.paidAmount,
+      discountAmount: row.discountAmount,
       returnValue: row.returnValue,
       refundAmount: row.refundAmount,
       balance: Math.round(running * 100) / 100,
@@ -458,6 +429,7 @@ router.get("/suppliers/:id/ledger", requireAuth, async (req, res) => {
     closingBalance: Math.round(running * 100) / 100,
     totalPurchased: Math.round(totalPurchased * 100) / 100,
     totalPaid: Math.round(totalPaid * 100) / 100,
+    totalDiscountAmount: Math.round(totalDiscountAmount * 100) / 100,
     totalReturnValue: Math.round(totalReturnValue * 100) / 100,
     totalRefundAmount: Math.round(totalRefundAmount * 100) / 100,
     from: fromDate,
@@ -489,7 +461,11 @@ router.get("/suppliers/:id/statement", requireAuth, async (req, res) => {
       entries.push({ date: inv.date, desc: `Payment (Inv ${inv.invoiceNo ?? `#${inv.id}`})`, debit: 0, credit: parseFloat(inv.paidAmount) });
     }
   }
-  for (const p of pmts) entries.push({ date: p.date, desc: "Payment", debit: 0, credit: parseFloat(p.amount) });
+  for (const p of pmts) {
+    const discount = parseFloat(p.discountAmount ?? "0");
+    const desc = discount > 0 ? `Payment (Rs. ${discount.toLocaleString()} discount)` : "Payment";
+    entries.push({ date: p.date, desc, debit: 0, credit: parseFloat(p.amount) + discount });
+  }
   entries.sort((a, b) => a.date.localeCompare(b.date));
 
   const openingBalance = parseFloat(s.openingBalance ?? "0");

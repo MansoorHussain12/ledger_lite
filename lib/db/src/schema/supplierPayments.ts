@@ -16,6 +16,13 @@ export const supplierPaymentsTable = pgTable("supplier_payments", {
     .notNull()
     .default("cash"),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  // Settlement discount agreed with the supplier at payment time (e.g. owe 20,500, pay
+  // 20,000 cash, supplier writes off 500) — reduces payable the same as amount does, but
+  // never touches cashbook since no cash moved for it. discountReason is a dedicated
+  // audit field (distinct from the general notes below) since a discount always needs
+  // one — enforced in the route, not here.
+  discountAmount: numeric("discount_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  discountReason: text("discount_reason"),
   bankAccount: text("bank_account"),
   chequeNo: text("cheque_no"),
   notes: text("notes"),

@@ -12,6 +12,12 @@ export const saleOrdersTable = pgTable("sale_orders", {
   driverName: text("driver_name"),
   billtyNo: text("billty_no"),
   totalAmount: numeric("total_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  // Flat-amount discount agreed at sale time, e.g. rounding a bill down. Kept separate
+  // from totalAmount (which always stays sum(item.amount) — see saleOrders.ts's
+  // resolveItems) rather than baked into it, mirroring how sale returns are tracked as
+  // their own satellite adjustment rather than mutating the order row. Net amount owed
+  // for the order is totalAmount - discountAmount.
+  discountAmount: numeric("discount_amount", { precision: 14, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   // Correction workflow: a posted transaction is never edited or deleted in place.

@@ -31,6 +31,8 @@ export default function SaleOrderDetailPage() {
       if (cost == null) { missingCost = true; continue; }
       profit += (item.rate - cost) * item.qty;
     }
+    // Sale-time discount is pure revenue given up, not tied to any one product's cost.
+    profit -= order.discountAmount;
     return { profit, missingCost };
   }, [order]);
 
@@ -160,9 +162,19 @@ export default function SaleOrderDetailPage() {
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-border font-bold">
-              <td colSpan={3} className="pt-3 text-right">Total Amount:</td>
-              <td className="pt-3 text-right text-red-600">{settings.currency} {formatAmount(order.totalAmount)}</td>
+            <tr className="border-t-2 border-border">
+              <td colSpan={3} className="pt-3 text-right text-muted-foreground">Subtotal:</td>
+              <td className="pt-3 text-right">{settings.currency} {formatAmount(order.totalAmount)}</td>
+            </tr>
+            {order.discountAmount > 0 && (
+              <tr>
+                <td colSpan={3} className="pt-1 text-right text-muted-foreground">Discount:</td>
+                <td className="pt-1 text-right text-emerald-600">− {settings.currency} {formatAmount(order.discountAmount)}</td>
+              </tr>
+            )}
+            <tr className="font-bold">
+              <td colSpan={3} className="pt-2 text-right">Net Amount:</td>
+              <td className="pt-2 text-right text-red-600">{settings.currency} {formatAmount(order.netAmount)}</td>
             </tr>
           </tfoot>
         </table>

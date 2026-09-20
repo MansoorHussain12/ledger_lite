@@ -3,6 +3,7 @@ import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable
 import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@workspace/db/schema";
 import { eq, sql, and, gte, lte } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { computeCustomerBalance } from "../lib/customerBalance";
 import { GetDailyCollectionReportQueryParams, GetMonthlySalesReportQueryParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -26,23 +27,23 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
       cur.refunded += parseFloat(r.refundPaid);
       returnsByOrder.set(r.saleOrderId, cur);
     }
-    const totalReturned = returns.reduce((s, r) => s + parseFloat(r.totalAmount), 0);
-    const totalRefunded = returns.reduce((s, r) => s + parseFloat(r.refundPaid), 0);
 
     // Loans increase what the customer owes, same direction as a sale — see the
     // balance-formula rationale in customers.ts's computeCustomerBalance. Aged by the
     // loan's own date, same as a sale order, so they land in the correct day bucket too.
     const loans = await db.select().from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
-    const totalLoans = loans.reduce((s, l) => s + parseFloat(l.amount), 0);
 
     const openingBal = parseFloat(c.openingBalance ?? "0");
     const totalPaid = parseFloat(String(pmts[0]?.total ?? 0));
     let remaining = totalPaid;
 
+    // Discount is aged by the order's own date, same as the sale itself, since it's
+    // agreed at sale time — see saleOrders.ts's discountAmount column comment.
     const items = [
       ...orders.map((o) => {
         const ret = returnsByOrder.get(o.id);
-        return { date: o.date, amt: parseFloat(o.totalAmount) - (ret?.total ?? 0) + (ret?.refunded ?? 0) };
+        const discount = parseFloat(o.discountAmount ?? "0");
+        return { date: o.date, amt: parseFloat(o.totalAmount) - (ret?.total ?? 0) + (ret?.refunded ?? 0) - discount };
       }),
       ...loans.map((l) => ({ date: l.date, amt: parseFloat(l.amount) })),
     ];
@@ -58,8 +59,10 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
       else dOver90 += unpaid;
     }
 
-    const totalSales = orders.reduce((s, o) => s + parseFloat(o.totalAmount), 0) - totalReturned + totalRefunded;
-    const balance = openingBal + totalSales - totalPaid + totalLoans;
+    // Sourced from the same shared formula the Customers page uses, so this always
+    // agrees with it exactly (previously hand-duplicated here and it drifted — see the
+    // customer-loans balance bug this replaced).
+    const balance = await computeCustomerBalance(c.id, openingBal);
     if (balance <= 0) return null;
 
     return {
@@ -200,10 +203,12 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
       prod.cogs += itemCogs;
     }
 
-    // When no category filter, add full order revenue (avoids rounding discrepancies)
-    // When a filter is active, revenue is already accumulated per item above
+    // When no category filter, add full order revenue (avoids rounding discrepancies),
+    // net of any sale-time discount — pure revenue given up, not tied to one product.
+    // When a filter is active, revenue is already accumulated per item above (and the
+    // discount isn't attributed to any single category, so it's left out there).
     if (!filteredProductIds) {
-      day.revenue += parseFloat(order.totalAmount);
+      day.revenue += parseFloat(order.totalAmount) - parseFloat(order.discountAmount ?? "0");
       // Undo the per-item revenue we added (to avoid double-counting)
       for (const item of items) {
         day.revenue -= parseFloat(item.amount);
@@ -324,19 +329,9 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
 router.get("/reports/outstanding", requireAuth, async (_req, res): Promise<void> => {
   const customers = await db.select().from(customersTable).orderBy(customersTable.name);
   const result = await Promise.all(customers.map(async (c) => {
-    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
-    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
-    const returns = await db.select({
-      total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
-      refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
-    }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
-    const loans = await db.select({ total: sql<number>`coalesce(sum(${customerLoansTable.amount}),0)` }).from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
-    const balance = parseFloat(c.openingBalance ?? "0")
-      + parseFloat(String(sales[0]?.total ?? 0))
-      - parseFloat(String(pmts[0]?.total ?? 0))
-      - parseFloat(String(returns[0]?.total ?? 0))
-      + parseFloat(String(returns[0]?.refunded ?? 0))
-      + parseFloat(String(loans[0]?.total ?? 0));
+    // Sourced from the same shared formula the Customers page uses — see aging above
+    // for why this isn't hand-duplicated per report anymore.
+    const balance = await computeCustomerBalance(c.id, c.openingBalance ?? "0");
 
     const lastSale = await db.select({ date: saleOrdersTable.date }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted"))).orderBy(sql`${saleOrdersTable.date} desc`).limit(1);
     const lastPmt = await db.select({ date: paymentsTable.date }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted"))).orderBy(sql`${paymentsTable.date} desc`).limit(1);

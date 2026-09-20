@@ -3,6 +3,7 @@ import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable
 import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@workspace/db/schema";
 import { eq, desc, sql, and, gte, lte, asc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { computeCustomerBalance } from "../lib/customerBalance";
 import {
   ListCustomersQueryParams,
   CreateCustomerBody,
@@ -18,33 +19,6 @@ const router: IRouter = Router();
 function toDateStr(d: Date | string): string {
   if (d instanceof Date) return d.toISOString().split("T")[0];
   return String(d);
-}
-
-async function computeCustomerBalance(customerId: number, openingBalance: string) {
-  // Only "live" (posted) rows count — a reversed original and its reversal both net to
-  // zero here by being excluded entirely, and a correction is itself just a normal
-  // posted row. See the correction workflow (lib/db/src/schema/saleOrders.ts).
-  const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` })
-    .from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, customerId), eq(saleOrdersTable.status, "posted")));
-  const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` })
-    .from(paymentsTable).where(and(eq(paymentsTable.customerId, customerId), eq(paymentsTable.status, "posted")));
-  // Sale returns reduce receivable by their full value (goods credited back); any
-  // refundPaid on top of that is cash handed back to the customer, which adds back to
-  // the balance (settling whatever the return alone would have put us in the red for).
-  const returns = await db.select({
-    total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
-    refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
-  }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, customerId), eq(saleReturnsTable.status, "posted")));
-  // Loans increase what the customer owes, same direction as a sale (no interest — just
-  // cash handed over that's now tracked as receivable).
-  const loans = await db.select({ total: sql<number>`coalesce(sum(${customerLoansTable.amount}),0)` })
-    .from(customerLoansTable).where(and(eq(customerLoansTable.customerId, customerId), eq(customerLoansTable.status, "posted")));
-  return parseFloat(openingBalance)
-    + parseFloat(String(sales[0]?.total ?? 0))
-    - parseFloat(String(pmts[0]?.total ?? 0))
-    - parseFloat(String(returns[0]?.total ?? 0))
-    + parseFloat(String(returns[0]?.refunded ?? 0))
-    + parseFloat(String(loans[0]?.total ?? 0));
 }
 
 function toCustomerResponse(c: typeof customersTable.$inferSelect, balance: number) {
@@ -226,7 +200,10 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     // opening for range = base opening + all sales up to (fromDate-1) - all payments up to (fromDate-1)
     // But we use lte(fromDate) which includes fromDate — need lt(fromDate)
     // Simple approach: get everything before fromDate (exclusive)
-    const beforeOrders = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` })
+    const beforeOrders = await db.select({
+      total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)`,
+      discount: sql<number>`coalesce(sum(${saleOrdersTable.discountAmount}),0)`,
+    })
       .from(saleOrdersTable)
       .where(and(eq(saleOrdersTable.customerId, params.data.id), eq(saleOrdersTable.status, "posted"), sql`${saleOrdersTable.date} < ${fromDate}`));
     const beforePmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` })
@@ -245,7 +222,8 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       - parseFloat(String(beforePmts[0]?.total ?? 0))
       - parseFloat(String(beforeReturns[0]?.total ?? 0))
       + parseFloat(String(beforeReturns[0]?.refunded ?? 0))
-      + parseFloat(String(beforeLoans[0]?.total ?? 0));
+      + parseFloat(String(beforeLoans[0]?.total ?? 0))
+      - parseFloat(String(beforeOrders[0]?.discount ?? 0));
   }
 
   // Build unified timeline: one row per payment, one row per sale-order-item, one row
@@ -271,6 +249,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     returnValue: number;
     refundAmount: number;
     loanAmount: number;
+    discountAmount: number;
   };
 
   const rows: TimelineRow[] = [];
@@ -301,6 +280,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       returnValue: 0,
       refundAmount: 0,
       loanAmount: 0,
+      discountAmount: 0,
     });
   }
 
@@ -336,6 +316,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
         returnValue: 0,
         refundAmount: 0,
         loanAmount: 0,
+        discountAmount: 0,
       });
     }
     // If order has no items (shouldn't happen), add a single row
@@ -359,6 +340,34 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
         returnValue: 0,
         refundAmount: 0,
         loanAmount: 0,
+        discountAmount: 0,
+      });
+    }
+    // Discount row — a flat, sale-time discount agreed on this order. A credit to the
+    // customer, same direction as a return, so it's its own row rather than silently
+    // folded into soValue (mirrors how a return's refund is its own row too).
+    const orderDiscount = parseFloat(order.discountAmount ?? "0");
+    if (orderDiscount > 0) {
+      rows.push({
+        date: order.date,
+        sortKey: `${order.date}_1_${String(order.id).padStart(8, "0")}z`,
+        transactionType: "Discount",
+        remarks: `Against SO-${order.id}`,
+        documentNo: `SO-${order.id}`,
+        billNo: null,
+        item: null,
+        unit: null,
+        billtyNo: null,
+        vehicleNo: null,
+        qtyBags: null,
+        rateBag: null,
+        receivedAmount: 0,
+        paidAmount: 0,
+        soValue: 0,
+        returnValue: 0,
+        refundAmount: 0,
+        loanAmount: 0,
+        discountAmount: orderDiscount,
       });
     }
   }
@@ -410,6 +419,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
         returnValue: amount,
         refundAmount: 0,
         loanAmount: 0,
+        discountAmount: 0,
       });
     }
 
@@ -433,6 +443,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
         returnValue: 0,
         refundAmount: parseFloat(ret.refundPaid),
         loanAmount: 0,
+        discountAmount: 0,
       });
     }
   }
@@ -459,6 +470,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       returnValue: 0,
       refundAmount: 0,
       loanAmount: parseFloat(loan.amount),
+      discountAmount: 0,
     });
   }
 
@@ -469,16 +481,17 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
   // a refund adds back (cash actually handed back settles that credit), a loan adds
   // to it (cash handed over becomes receivable, same direction as a sale).
   let running = openingBalance;
-  let totalReceived = 0, totalPaid = 0, totalSoValue = 0, totalReturnValue = 0, totalRefundAmount = 0, totalLoanAmount = 0;
+  let totalReceived = 0, totalPaid = 0, totalSoValue = 0, totalReturnValue = 0, totalRefundAmount = 0, totalLoanAmount = 0, totalDiscountAmount = 0;
 
   const entries = rows.map((row, i) => {
-    running = running - row.receivedAmount + row.paidAmount + row.soValue - row.returnValue + row.refundAmount + row.loanAmount;
+    running = running - row.receivedAmount + row.paidAmount + row.soValue - row.returnValue + row.refundAmount + row.loanAmount - row.discountAmount;
     totalReceived += row.receivedAmount;
     totalPaid += row.paidAmount;
     totalSoValue += row.soValue;
     totalReturnValue += row.returnValue;
     totalRefundAmount += row.refundAmount;
     totalLoanAmount += row.loanAmount;
+    totalDiscountAmount += row.discountAmount;
     return {
       srNo: i + 1,
       date: row.date,
@@ -498,6 +511,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       returnValue: row.returnValue,
       refundAmount: row.refundAmount,
       loanAmount: row.loanAmount,
+      discountAmount: row.discountAmount,
       balance: Math.round(running * 100) / 100,
     };
   });
@@ -524,6 +538,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     totalReturnValue: Math.round(totalReturnValue * 100) / 100,
     totalRefundAmount: Math.round(totalRefundAmount * 100) / 100,
     totalLoanAmount: Math.round(totalLoanAmount * 100) / 100,
+    totalDiscountAmount: Math.round(totalDiscountAmount * 100) / 100,
     from: fromDate,
     to: toDate,
     entries,
@@ -541,7 +556,11 @@ router.get("/customers/:id/statement", requireAuth, async (req, res): Promise<vo
   const pmts = await db.select().from(paymentsTable).where(eq(paymentsTable.customerId, params.data.id)).orderBy(paymentsTable.date);
 
   const entries: Array<{ date: string; desc: string; debit: number; credit: number }> = [];
-  for (const o of orders) entries.push({ date: o.date, desc: `Sale #${o.id}`, debit: parseFloat(o.totalAmount), credit: 0 });
+  for (const o of orders) {
+    const discount = parseFloat(o.discountAmount ?? "0");
+    const desc = discount > 0 ? `Sale #${o.id} (Rs. ${discount.toLocaleString()} discount)` : `Sale #${o.id}`;
+    entries.push({ date: o.date, desc, debit: parseFloat(o.totalAmount) - discount, credit: 0 });
+  }
   for (const p of pmts) entries.push({ date: p.date, desc: `${p.type === "bank" ? "Bank" : "Cash"} payment`, debit: 0, credit: parseFloat(p.amount) });
   entries.sort((a, b) => a.date.localeCompare(b.date));
 

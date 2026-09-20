@@ -40,6 +40,7 @@ export default function SaleOrderNewPage() {
   const [driverName, setDriverName] = useState("");
   const [billtyNo, setBilltyNo] = useState("");
   const [notes, setNotes] = useState("");
+  const [discountAmount, setDiscountAmount] = useState("");
   const [items, setItems] = useState<LineItem[]>([{ productId: 0, productName: "", qty: "", rate: "", unit: "", notes: "" }]);
 
   const { data: customers = [] } = useListCustomers(undefined, { query: { queryKey: getListCustomersQueryKey() } });
@@ -64,6 +65,8 @@ export default function SaleOrderNewPage() {
     const rate = parseFloat(item.rate) || 0;
     return s + qty * rate;
   }, 0);
+  const discount = Math.min(parseFloat(discountAmount) || 0, totalAmount);
+  const netAmount = totalAmount - discount;
 
   // Order profit (owner-only) — rate minus each product's cost price, summed across the items.
   const costPriceMap = useMemo(
@@ -81,8 +84,10 @@ export default function SaleOrderNewPage() {
       if (cost == null) { missingCost = true; continue; }
       profit += (rate - cost) * qty;
     }
+    // Sale-time discount is pure revenue given up, not tied to any one product's cost.
+    profit -= discount;
     return { profit, missingCost };
-  }, [items, costPriceMap]);
+  }, [items, costPriceMap, discount]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +104,7 @@ export default function SaleOrderNewPage() {
           driverName: driverName || undefined,
           billtyNo: billtyNo || undefined,
           notes: notes || undefined,
+          discountAmount: discount || undefined,
           items: validItems.map(i => ({
             productId: i.productId,
             qty: parseFloat(i.qty),
@@ -259,9 +265,23 @@ export default function SaleOrderNewPage() {
             <Plus size={14} /> Add another item
           </button>
 
-          <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Total Amount</span>
-            <span className="text-xl font-bold text-red-600">Rs. {formatAmount(totalAmount)}</span>
+          <div className="mt-4 pt-4 border-t border-border space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Subtotal</span>
+              <span className="text-sm font-medium">Rs. {formatAmount(totalAmount)}</span>
+            </div>
+            <div className="flex justify-between items-center gap-3">
+              <Label className="text-sm text-muted-foreground font-normal shrink-0">Discount (Rs.)</Label>
+              <Input
+                type="number" value={discountAmount} min="0" max={totalAmount} step="0.01"
+                onChange={e => setDiscountAmount(e.target.value)}
+                placeholder="0" className="h-8 w-32 text-right"
+              />
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Net Amount</span>
+              <span className="text-xl font-bold text-red-600">Rs. {formatAmount(netAmount)}</span>
+            </div>
           </div>
           {canSeeProfit && (
             <div className="mt-1 flex justify-between items-center">

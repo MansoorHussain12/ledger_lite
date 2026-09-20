@@ -205,6 +205,7 @@ export default function CustomerDetailPage() {
                   <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-emerald-700">Return Value</th>
                   <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-red-700">Refund</th>
                   <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-red-700">Loan</th>
+                  <th className="px-2 py-2.5 text-right font-semibold whitespace-nowrap text-emerald-700">Discount</th>
                   <th className="px-2 py-2.5 text-right font-semibold">Balance</th>
                 </tr>
               </thead>
@@ -214,16 +215,16 @@ export default function CustomerDetailPage() {
                   <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
                     {formatDate(ledger?.openingBalanceDate ?? fromDate)}
                   </td>
-                  <td className="px-2 py-2 font-medium text-muted-foreground" colSpan={14}>Opening Balance</td>
+                  <td className="px-2 py-2 font-medium text-muted-foreground" colSpan={15}>Opening Balance</td>
                   <td className="px-2 py-2 text-right font-bold text-blue-700 whitespace-nowrap">
                     Rs. {formatAmount(ledger?.openingBalance ?? 0)}
                   </td>
                 </tr>
                 {ledgerLoading && (
-                  <tr><td colSpan={17} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>
+                  <tr><td colSpan={18} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>
                 )}
                 {!ledgerLoading && ledger?.entries.length === 0 && (
-                  <tr><td colSpan={17} className="px-4 py-8 text-center text-muted-foreground">No transactions in this period</td></tr>
+                  <tr><td colSpan={18} className="px-4 py-8 text-center text-muted-foreground">No transactions in this period</td></tr>
                 )}
                 {ledger?.entries.map((entry) => {
                   // Balance direction, not just "is a sale" — a return refund increases
@@ -264,6 +265,9 @@ export default function CustomerDetailPage() {
                       <td className="px-2 py-2 text-right font-semibold text-red-600">
                         {(entry.loanAmount ?? 0) > 0 ? formatAmount(entry.loanAmount) : "—"}
                       </td>
+                      <td className="px-2 py-2 text-right font-semibold text-emerald-600">
+                        {(entry.discountAmount ?? 0) > 0 ? formatAmount(entry.discountAmount) : "—"}
+                      </td>
                       <td className={cn("px-2 py-2 text-right font-bold whitespace-nowrap",
                         entry.balance > 0 ? "text-red-700" : "text-emerald-700")}>
                         {formatAmount(entry.balance)}
@@ -280,6 +284,7 @@ export default function CustomerDetailPage() {
                     <td className="px-2 py-2.5 text-right text-emerald-600">{formatAmount(ledger.totalReturnValue)}</td>
                     <td className="px-2 py-2.5 text-right text-red-600">{formatAmount(ledger.totalRefundAmount)}</td>
                     <td className="px-2 py-2.5 text-right text-red-600">{formatAmount(ledger.totalLoanAmount)}</td>
+                    <td className="px-2 py-2.5 text-right text-emerald-600">{formatAmount(ledger.totalDiscountAmount)}</td>
                     <td className="px-2 py-2.5 text-right"></td>
                   </tr>
                 )}
@@ -438,6 +443,7 @@ export default function CustomerDetailPage() {
               <th className="col-center" style={{ width: "6%" }}>Return<br/>Value</th>
               <th className="col-center" style={{ width: "6%" }}>Refund</th>
               <th className="col-center" style={{ width: "6%" }}>Loan</th>
+              <th className="col-center" style={{ width: "6%" }}>Discount</th>
               <th className="col-center" style={{ width: "7%" }}>Balance</th>
             </tr>
           </thead>
@@ -447,6 +453,7 @@ export default function CustomerDetailPage() {
               <td className="col-center">—</td>
               <td className="col-center">{formatDatePrint(ledger?.openingBalanceDate)}</td>
               <td colSpan={7} style={{ fontStyle: "italic" }}>Opening Balance</td>
+              <td className="col-right"></td>
               <td className="col-right"></td>
               <td className="col-right"></td>
               <td className="col-right"></td>
@@ -481,6 +488,7 @@ export default function CustomerDetailPage() {
                 <td className="col-right">{(entry.returnValue ?? 0) > 0 ? formatAmount(entry.returnValue) : ""}</td>
                 <td className="col-right">{(entry.refundAmount ?? 0) > 0 ? formatAmount(entry.refundAmount) : ""}</td>
                 <td className="col-right">{(entry.loanAmount ?? 0) > 0 ? formatAmount(entry.loanAmount) : ""}</td>
+                <td className="col-right">{(entry.discountAmount ?? 0) > 0 ? formatAmount(entry.discountAmount) : ""}</td>
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(entry.balance)}</td>
               </tr>
             ))}
@@ -500,6 +508,7 @@ export default function CustomerDetailPage() {
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(ledger.totalReturnValue)}</td>
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(ledger.totalRefundAmount)}</td>
                 <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(ledger.totalLoanAmount)}</td>
+                <td className="col-right" style={{ fontWeight: "bold" }}>{formatAmount(ledger.totalDiscountAmount)}</td>
                 <td></td>
               </tr>
             )}

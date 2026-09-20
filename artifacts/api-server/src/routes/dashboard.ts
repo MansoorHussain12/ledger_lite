@@ -4,6 +4,7 @@ import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@wor
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/auth";
+import { computeCustomerBalance } from "../lib/customerBalance";
 
 const router: IRouter = Router();
 
@@ -96,6 +97,19 @@ async function getProfitBreakdownForDate(date: string) {
       bucket.subtotalAmount += amount;
       if (profit != null) bucket.subtotalProfit += profit;
     }
+
+    // Sale-time discount — pure revenue given up, not tied to any one product, so it
+    // isn't COGS-adjusted like the item rows above. Surfaced as its own negative line
+    // (same convention as the return rows below) rather than a silently smaller total.
+    const orderDiscount = parseFloat(order.discountAmount ?? "0");
+    if (orderDiscount > 0) {
+      bucket.items.push({
+        productId: 0, productName: "Discount", category: null, unit: "",
+        qty: 0, amount: round2(-orderDiscount), profit: round2(-orderDiscount),
+      });
+      bucket.subtotalAmount -= orderDiscount;
+      bucket.subtotalProfit -= orderDiscount;
+    }
   }
 
   // Surfaced as negative-qty/amount line items (not just a silently smaller subtotal)
@@ -147,19 +161,9 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
   const customers = await db.select().from(customersTable);
   let totalOutstanding = 0;
   for (const c of customers) {
-    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
-    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
-    const returns = await db.select({
-      total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
-      refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
-    }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
-    const loans = await db.select({ total: sql<number>`coalesce(sum(${customerLoansTable.amount}),0)` }).from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
-    totalOutstanding += parseFloat(c.openingBalance ?? "0")
-      + parseFloat(String(sales[0]?.total ?? 0))
-      - parseFloat(String(pmts[0]?.total ?? 0))
-      - parseFloat(String(returns[0]?.total ?? 0))
-      + parseFloat(String(returns[0]?.refunded ?? 0))
-      + parseFloat(String(loans[0]?.total ?? 0));
+    // Sourced from the same shared formula the Customers page uses — see reports.ts's
+    // aging endpoint for why this isn't hand-duplicated per dashboard card anymore.
+    totalOutstanding += await computeCustomerBalance(c.id, c.openingBalance ?? "0");
   }
 
   const todayCollections = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.date, today), eq(paymentsTable.status, "posted")));
@@ -190,19 +194,8 @@ router.get("/dashboard/profit-breakdown", requireAuth, async (req, res): Promise
 router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<void> => {
   const customers = await db.select().from(customersTable);
   const withBalance = await Promise.all(customers.map(async (c) => {
-    const sales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
-    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
-    const returns = await db.select({
-      total: sql<number>`coalesce(sum(${saleReturnsTable.totalAmount}),0)`,
-      refunded: sql<number>`coalesce(sum(${saleReturnsTable.refundPaid}),0)`,
-    }).from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
-    const loans = await db.select({ total: sql<number>`coalesce(sum(${customerLoansTable.amount}),0)` }).from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
-    const balance = parseFloat(c.openingBalance ?? "0")
-      + parseFloat(String(sales[0]?.total ?? 0))
-      - parseFloat(String(pmts[0]?.total ?? 0))
-      - parseFloat(String(returns[0]?.total ?? 0))
-      + parseFloat(String(returns[0]?.refunded ?? 0))
-      + parseFloat(String(loans[0]?.total ?? 0));
+    // Sourced from the same shared formula the Customers page uses.
+    const balance = await computeCustomerBalance(c.id, c.openingBalance ?? "0");
     return { customerId: c.id, customerName: c.name, area: c.area ?? null, balance };
   }));
   res.json(withBalance.filter(x => x.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 10));

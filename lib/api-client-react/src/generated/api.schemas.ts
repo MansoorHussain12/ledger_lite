@@ -175,6 +175,7 @@ export interface LedgerEntry {
   returnValue: number;
   refundAmount: number;
   loanAmount: number;
+  discountAmount?: number;
   balance: number;
 }
 
@@ -199,6 +200,7 @@ export interface CustomerLedger {
   totalReturnValue: number;
   totalRefundAmount: number;
   totalLoanAmount: number;
+  totalDiscountAmount?: number;
   totalTons?: number;
   /** @nullable */
   from: string | null;
@@ -280,6 +282,10 @@ export interface SaleOrder {
   /** @nullable */
   billtyNo?: string | null;
   totalAmount: number;
+  /** Flat discount agreed at sale time. Never exceeds totalAmount. */
+  discountAmount: number;
+  /** totalAmount - discountAmount — what the customer actually owes for this order. */
+  netAmount: number;
   /** @nullable */
   notes?: string | null;
   createdAt: string;
@@ -305,6 +311,8 @@ export interface SaleOrderInput {
   driverName?: string;
   billtyNo?: string;
   notes?: string;
+  /** Flat discount off the order total. Must not exceed the sum of item amounts. */
+  discountAmount?: number;
   items: SaleOrderItemInput[];
 }
 
@@ -320,6 +328,8 @@ export interface SaleOrderCorrectionInput {
   driverName?: string;
   billtyNo?: string;
   notes?: string;
+  /** Flat discount off the order total. Must not exceed the sum of item amounts. */
+  discountAmount?: number;
   items?: SaleOrderItemInput[];
 }
 
@@ -618,6 +628,13 @@ export interface SupplierPayment {
   date: string;
   paymentMode: SupplierPaymentPaymentMode;
   amount: number;
+  /** Settlement discount agreed with the supplier at payment time (e.g. owe 20,500, pay 20,000 cash, supplier writes off 500). Reduces payable the same as amount, but never posts to cashbook. amount + discountAmount must not exceed the supplier's payable balance at the time of payment. */
+  discountAmount?: number;
+  /**
+     * Required whenever discountAmount > 0 — a dedicated audit trail for why the discount was given.
+     * @nullable
+     */
+  discountReason?: string | null;
   /** @nullable */
   bankAccount?: string | null;
   /** @nullable */
@@ -649,6 +666,8 @@ export interface SupplierPaymentInput {
   date: string;
   paymentMode: SupplierPaymentInputPaymentMode;
   amount: number;
+  discountAmount?: number;
+  discountReason?: string;
   bankAccount?: string;
   chequeNo?: string;
   notes?: string;
@@ -676,6 +695,8 @@ export interface SupplierPaymentCorrectionInput {
   date?: string;
   paymentMode?: SupplierPaymentCorrectionInputPaymentMode;
   amount?: number;
+  discountAmount?: number;
+  discountReason?: string;
   bankAccount?: string;
   chequeNo?: string;
   notes?: string;
@@ -1570,6 +1591,7 @@ export interface SupplierLedgerEntry {
   rateBag?: number | null;
   purchaseValue: number;
   paidAmount: number;
+  discountAmount?: number;
   returnValue: number;
   refundAmount: number;
   balance: number;
@@ -1583,6 +1605,7 @@ export interface SupplierLedger {
   closingBalance: number;
   totalPurchased: number;
   totalPaid: number;
+  totalDiscountAmount: number;
   totalReturnValue: number;
   totalRefundAmount: number;
   /** @nullable */
