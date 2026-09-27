@@ -4,9 +4,21 @@ import {
   useCreateSaleOrder, useListCustomers, getListCustomersQueryKey,
   useListProducts, getListProductsQueryKey, getListSaleOrdersQueryKey,
   useListLookups, getListLookupsQueryKey,
+  useListInventory, getListInventoryQueryKey,
+  useCreatePayment, getListPaymentsQueryKey,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatAmount } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/combobox";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -24,13 +36,6 @@ async function fetchCustomerLastRates(
   if (!r.ok) return {};
   return r.json();
 }
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Combobox } from "@/components/combobox";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/lib/auth";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 
 interface LineItem {
   productId: number;
@@ -59,11 +64,26 @@ export default function SaleOrderNewPage() {
   const [notes, setNotes] = useState("");
   const [discountAmount, setDiscountAmount] = useState("");
   const [items, setItems] = useState<LineItem[]>([{ productId: 0, productName: "", qty: "", rate: "", unit: "", notes: "" }]);
+  // Amount the customer is paying now, at the time of this sale order (optional — an
+  // unpaid order is just added to their outstanding balance, same as before this field existed).
+  const [receivedAmount, setReceivedAmount] = useState("");
+  const [payMode, setPayMode] = useState<"cash" | "bank" | "cheque">("cash");
+  const [bankAccount, setBankAccount] = useState("");
+  const [chequeNo, setChequeNo] = useState("");
 
   const { data: customers = [] } = useListCustomers(undefined, { query: { queryKey: getListCustomersQueryKey() } });
   const { data: products = [] } = useListProducts({ query: { queryKey: getListProductsQueryKey() } });
   const { data: unitLookups = [] } = useListLookups("unit", { query: { queryKey: getListLookupsQueryKey("unit") } });
+  const { data: inventory = [] } = useListInventory({ query: { queryKey: getListInventoryQueryKey() } });
   const createMutation = useCreateSaleOrder();
+  const createPaymentMutation = useCreatePayment();
+
+  const stockMap = useMemo(
+    () => new Map<number, number>(inventory.map(p => [p.id, p.currentStock])),
+    [inventory]
+  );
+  const selectedCustomer = customers.find(c => c.id === customerId);
+  const previousBalance = selectedCustomer?.balance ?? 0;
 
   // Previous rate for each line's product — the rate *this customer* was last charged
   // for it, so the rate can be sanity-checked against their own history while typing.
@@ -96,6 +116,13 @@ export default function SaleOrderNewPage() {
   }, 0);
   const discount = Math.min(parseFloat(discountAmount) || 0, totalAmount);
   const netAmount = totalAmount - discount;
+
+  // Balance context — previous balance is the customer's balance before this order;
+  // total balance is what they'll owe once this order posts; remaining is what's left
+  // after applying whatever they're paying now.
+  const totalBalance = previousBalance + netAmount;
+  const receivedAmt = parseFloat(receivedAmount) || 0;
+  const remainingAmount = totalBalance - receivedAmt;
 
   // Order profit (owner-only) — rate minus each product's cost price, summed across the items.
   const costPriceMap = useMemo(
@@ -142,7 +169,24 @@ export default function SaleOrderNewPage() {
           })),
         }
       });
+
+      if (receivedAmt > 0) {
+        await createPaymentMutation.mutateAsync({
+          data: {
+            customerId: customerId as number,
+            date,
+            type: payMode === "cash" ? "cash" : "bank",
+            amount: receivedAmt,
+            bankAccount: bankAccount || undefined,
+            chequeNo: chequeNo || undefined,
+            notes: notes || undefined,
+          }
+        });
+        queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
+      }
+
       queryClient.invalidateQueries({ queryKey: getListSaleOrdersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
       toast({ title: "Sale order created" });
       setLocation(`/sale-orders/${order.id}`);
     } catch {
@@ -177,6 +221,11 @@ export default function SaleOrderNewPage() {
                 emptyText="No customers found."
                 className="w-full"
               />
+              {selectedCustomer && (
+                <p className={`text-xs ${previousBalance > 0 ? "text-amber-500" : "text-muted-foreground"}`}>
+                  Previous balance: Rs. {formatAmount(previousBalance)}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Date *</Label>
@@ -209,7 +258,8 @@ export default function SaleOrderNewPage() {
           <div className="grid grid-cols-12 gap-2 mb-1 px-1">
             <div className="col-span-3 text-xs text-muted-foreground font-medium">Product</div>
             <div className="col-span-2 text-xs text-muted-foreground font-medium">Qty</div>
-            <div className="col-span-2 text-xs text-muted-foreground font-medium">Unit</div>
+            <div className="col-span-1 text-xs text-muted-foreground font-medium">Unit</div>
+            <div className="col-span-1 text-xs text-muted-foreground font-medium text-right">Rem.</div>
             <div className="col-span-1 text-xs text-muted-foreground font-medium text-right">Prev.</div>
             <div className="col-span-2 text-xs text-muted-foreground font-medium">Rate (Rs)</div>
             <div className="col-span-2 text-xs text-muted-foreground font-medium text-right">Amount</div>
@@ -221,6 +271,10 @@ export default function SaleOrderNewPage() {
               const product = products.find(p => p.id === item.productId);
               const isRateOverridden = !!product && item.rate !== "" && parseFloat(item.rate) !== product.currentRate;
               const previousRate = customerLastRates?.[item.productId]?.rate;
+              // Stock left for this product after this line's qty — a negative value
+              // flags an oversell before the order is even submitted.
+              const stock = item.productId ? stockMap.get(item.productId) : undefined;
+              const remainingQty = stock != null ? stock - (parseFloat(item.qty) || 0) : null;
               return (
                 <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-3">
@@ -244,7 +298,7 @@ export default function SaleOrderNewPage() {
                       step="0.01"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-1">
                     <Combobox
                       options={[
                         ...unitLookups.map(u => ({ value: u.value, label: u.value })),
@@ -257,6 +311,12 @@ export default function SaleOrderNewPage() {
                       emptyText="No units found."
                       className="h-9 w-full"
                     />
+                  </div>
+                  <div
+                    className={`col-span-1 text-right text-sm truncate ${remainingQty != null && remainingQty < 0 ? "text-red-600 font-semibold" : "text-muted-foreground"}`}
+                    title={remainingQty != null ? formatAmount(remainingQty) : undefined}
+                  >
+                    {remainingQty != null ? formatAmount(remainingQty) : "—"}
                   </div>
                   <div className="col-span-1 text-right text-sm text-muted-foreground truncate" title={previousRate != null ? formatAmount(previousRate) : undefined}>
                     {previousRate != null ? formatAmount(previousRate) : "—"}
@@ -334,12 +394,69 @@ export default function SaleOrderNewPage() {
           )}
         </div>
 
+        {/* Balance & payment */}
+        <div className="bg-card border border-card-border rounded-xl p-5">
+          <h2 className="font-semibold text-sm mb-4 text-muted-foreground uppercase tracking-wide">Balance & Payment</h2>
+
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Previous Balance</span>
+              <span className="text-sm font-medium">Rs. {formatAmount(previousBalance)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Total Balance</span>
+              <span className="text-lg font-bold">Rs. {formatAmount(totalBalance)}</span>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-border grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Received Amount (Rs.)</Label>
+              <Input
+                type="number" value={receivedAmount} min="0" step="0.01"
+                onChange={e => setReceivedAmount(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Mode</Label>
+              <Select value={payMode} onValueChange={v => setPayMode(v as typeof payMode)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {payMode === "bank" && (
+              <div className="space-y-1.5">
+                <Label>Bank Account</Label>
+                <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder="Account / reference" />
+              </div>
+            )}
+            {payMode === "cheque" && (
+              <div className="space-y-1.5">
+                <Label>Cheque No.</Label>
+                <Input value={chequeNo} onChange={e => setChequeNo(e.target.value)} placeholder="CHQ-001" />
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
+            <span className="text-sm font-medium">Remaining Amount</span>
+            <span className={`text-xl font-bold ${remainingAmount > 0 ? "text-amber-500" : "text-emerald-600"}`}>
+              Rs. {formatAmount(remainingAmount)}
+            </span>
+          </div>
+        </div>
+
         <div className="flex gap-3">
           <Link href="/sale-orders">
             <Button type="button" variant="outline">Cancel</Button>
           </Link>
-          <Button type="submit" disabled={createMutation.isPending}>
-            {createMutation.isPending ? "Creating..." : "Create Sale Order"}
+          <Button type="submit" disabled={createMutation.isPending || createPaymentMutation.isPending}>
+            {createMutation.isPending || createPaymentMutation.isPending ? "Creating..." : "Create Sale Order"}
           </Button>
         </div>
       </form>
