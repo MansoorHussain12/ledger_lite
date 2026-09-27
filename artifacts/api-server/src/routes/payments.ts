@@ -3,6 +3,7 @@ import { db, paymentsTable, customersTable } from "@workspace/db";
 import { cashbookEntriesTable } from "@workspace/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
+import { computeCustomerBalance } from "../lib/customerBalance";
 
 // Zod coerces date strings to JS Date objects. Format them back to YYYY-MM-DD for Postgres.
 function toDateStr(d: Date | string): string {
@@ -22,9 +23,33 @@ function toPaymentResponse(p: typeof paymentsTable.$inferSelect, customerName: s
   return {
     id: p.id, customerId: p.customerId, customerName,
     date: p.date, type: p.type, amount: parseFloat(p.amount),
+    discountAmount: parseFloat(p.discountAmount ?? "0"), discountReason: p.discountReason ?? null,
     bankAccount: p.bankAccount ?? null, chequeNo: p.chequeNo ?? null, notes: p.notes ?? null, createdAt: p.createdAt,
     status: p.status, reversesId: p.reversesId ?? null, correctsId: p.correctsId ?? null,
   };
+}
+
+// A payment (cash + discount together) can't clear more than what's actually owed —
+// reject rather than let the customer's balance go negative. discountAmount > 0 always
+// needs a reason, since — unlike amount, which is self-evidently "cash received" — a
+// discount with no reason on file is not auditable later. Mirrors
+// supplierPayments.ts's identical validatePayment.
+async function validatePayment(customerId: number, amount: number, discountAmount: number, discountReason: string | undefined | null, excludePaymentId?: number): Promise<string | null> {
+  if (discountAmount < 0) return "discountAmount cannot be negative";
+  if (discountAmount > 0 && !discountReason?.trim()) return "discountReason is required when discountAmount > 0";
+  // computeCustomerBalance() already excludes reversed/reversal rows; when correcting a
+  // payment we're about to reverse, its own old amount+discount must be added back first
+  // so the check reflects the balance *after* that reversal, not before it.
+  const [c] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
+  let balance = await computeCustomerBalance(customerId, c?.openingBalance ?? "0");
+  if (excludePaymentId != null) {
+    const [existing] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, excludePaymentId));
+    if (existing && existing.status === "posted") {
+      balance += parseFloat(existing.amount) + parseFloat(existing.discountAmount ?? "0");
+    }
+  }
+  if (amount + discountAmount > balance + 0.01) return "amount + discountAmount cannot exceed the customer's outstanding balance";
+  return null;
 }
 
 router.get("/payments", requireAuth, async (req, res): Promise<void> => {
@@ -54,14 +79,19 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
 router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const { customerId, date, type, amount, bankAccount, chequeNo, notes } = parsed.data;
+  const { customerId, date, type, amount, discountAmount, discountReason, bankAccount, chequeNo, notes } = parsed.data;
   const userId = (req.session as any)?.userId ?? null;
+
+  const discount = discountAmount ?? 0;
+  const validationError = await validatePayment(customerId, amount, discount, discountReason);
+  if (validationError) { res.status(400).json({ error: validationError }); return; }
 
   const [c] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
   const dateStr = toDateStr(date);
 
   const [p] = await db.insert(paymentsTable).values({
     customerId, date: dateStr, type, amount: String(amount),
+    discountAmount: String(discount), discountReason: discount > 0 ? discountReason ?? null : null,
     bankAccount: bankAccount ?? null, chequeNo: chequeNo ?? null, notes: notes ?? null,
   }).returning();
 
@@ -114,6 +144,18 @@ router.post("/payments/:id/correct", requireRole("owner"), async (req, res): Pro
     return;
   }
 
+  const correctedDiscount = parsed.data.discountAmount ?? 0;
+  if (!isVoid) {
+    // excludePaymentId: original.id — its own amount+discount is being reversed as part
+    // of this same correction, so the balance check must be against the balance *after*
+    // that reversal, not before it (otherwise a same-amount correction would always look
+    // like it's double-spending the original payment).
+    const validationError = await validatePayment(
+      parsed.data.customerId!, parsed.data.amount!, correctedDiscount, parsed.data.discountReason, original.id
+    );
+    if (validationError) { res.status(400).json({ error: validationError }); return; }
+  }
+
   const userId = (req.session as any)?.userId ?? null;
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, original.customerId));
   const [correctedCustomer] = !isVoid && parsed.data.customerId !== original.customerId
@@ -127,6 +169,7 @@ router.post("/payments/:id/correct", requireRole("owner"), async (req, res): Pro
     // a correction/void in the history view.
     const [reversal] = await tx.insert(paymentsTable).values({
       customerId: original.customerId, date: original.date, type: original.type, amount: original.amount,
+      discountAmount: original.discountAmount, discountReason: original.discountReason,
       bankAccount: original.bankAccount, chequeNo: original.chequeNo, notes: parsed.data.reason ?? original.notes,
       status: "reversal", reversesId: original.id,
     }).returning();
@@ -156,6 +199,7 @@ router.post("/payments/:id/correct", requireRole("owner"), async (req, res): Pro
       const dateStr = toDateStr(parsed.data.date!);
       const [correction] = await tx.insert(paymentsTable).values({
         customerId: parsed.data.customerId!, date: dateStr, type: parsed.data.type!, amount: String(parsed.data.amount!),
+        discountAmount: String(correctedDiscount), discountReason: correctedDiscount > 0 ? parsed.data.discountReason ?? null : null,
         bankAccount: parsed.data.bankAccount ?? null, chequeNo: parsed.data.chequeNo ?? null, notes: parsed.data.notes ?? null,
         status: "posted", correctsId: original.id,
       }).returning();

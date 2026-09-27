@@ -35,6 +35,7 @@ export async function computeCustomerBalances(
     db.select({
       customerId: paymentsTable.customerId,
       total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)`,
+      discount: sql<number>`coalesce(sum(${paymentsTable.discountAmount}),0)`,
     }).from(paymentsTable)
       .where(and(inArray(paymentsTable.customerId, ids), eq(paymentsTable.status, "posted")))
       .groupBy(paymentsTable.customerId),
@@ -73,6 +74,7 @@ export async function computeCustomerBalances(
       parseFloat(String(c.openingBalance))
         + parseFloat(String(s?.total ?? 0))
         - parseFloat(String(p?.total ?? 0))
+        - parseFloat(String(p?.discount ?? 0))
         - parseFloat(String(r?.total ?? 0))
         + parseFloat(String(r?.refunded ?? 0))
         + parseFloat(String(l?.total ?? 0))

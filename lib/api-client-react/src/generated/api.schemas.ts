@@ -539,6 +539,13 @@ export interface Payment {
   date: string;
   type: PaymentType;
   amount: number;
+  /** Settlement discount agreed with the customer at payment time (e.g. owes 20,500, pays 20,000 cash, we write off 500). Reduces receivable the same as amount, but never posts to cashbook. amount + discountAmount must not exceed the customer's outstanding balance at the time of payment. */
+  discountAmount?: number;
+  /**
+     * Required whenever discountAmount > 0 — a dedicated audit trail for why the discount was given.
+     * @nullable
+     */
+  discountReason?: string | null;
   /** @nullable */
   bankAccount?: string | null;
   /** @nullable */
@@ -566,6 +573,8 @@ export interface PaymentInput {
   date: string;
   type: PaymentInputType;
   amount: number;
+  discountAmount?: number;
+  discountReason?: string;
   bankAccount?: string;
   chequeNo?: string;
   notes?: string;
@@ -589,6 +598,8 @@ export interface PaymentCorrectionInput {
   date?: string;
   type?: PaymentCorrectionInputType;
   amount?: number;
+  discountAmount?: number;
+  discountReason?: string;
   bankAccount?: string;
   chequeNo?: string;
   notes?: string;

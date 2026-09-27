@@ -2774,6 +2774,16 @@ components:
           enum: [cash, bank]
         amount:
           type: number
+        discountAmount:
+          type: number
+          description: >
+            Settlement discount agreed with the customer at payment time (e.g. owes
+            20,500, pays 20,000 cash, we write off 500). Reduces receivable the same
+            as amount, but never posts to cashbook. amount + discountAmount must not
+            exceed the customer's outstanding balance at the time of payment.
+        discountReason:
+          type: ["string", "null"]
+          description: Required whenever discountAmount > 0 — a dedicated audit trail for why the discount was given.
         bankAccount:
           type: ["string", "null"]
         chequeNo:
@@ -2805,6 +2815,10 @@ components:
           enum: [cash, bank]
         amount:
           type: number
+        discountAmount:
+          type: number
+        discountReason:
+          type: string
         bankAccount:
           type: string
         chequeNo:
@@ -2832,6 +2846,10 @@ components:
           enum: [cash, bank]
         amount:
           type: number
+        discountAmount:
+          type: number
+        discountReason:
+          type: string
         bankAccount:
           type: string
         chequeNo:

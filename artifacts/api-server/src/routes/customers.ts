@@ -205,7 +205,10 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     })
       .from(saleOrdersTable)
       .where(and(eq(saleOrdersTable.customerId, params.data.id), eq(saleOrdersTable.status, "posted"), sql`${saleOrdersTable.date} < ${fromDate}`));
-    const beforePmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` })
+    const beforePmts = await db.select({
+      total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)`,
+      discount: sql<number>`coalesce(sum(${paymentsTable.discountAmount}),0)`,
+    })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.customerId, params.data.id), eq(paymentsTable.status, "posted"), sql`${paymentsTable.date} < ${fromDate}`));
     const beforeReturns = await db.select({
@@ -219,6 +222,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
     openingBalance = parseFloat(c.openingBalance ?? "0")
       + parseFloat(String(beforeOrders[0]?.total ?? 0))
       - parseFloat(String(beforePmts[0]?.total ?? 0))
+      - parseFloat(String(beforePmts[0]?.discount ?? 0))
       - parseFloat(String(beforeReturns[0]?.total ?? 0))
       + parseFloat(String(beforeReturns[0]?.refunded ?? 0))
       + parseFloat(String(beforeLoans[0]?.total ?? 0))
@@ -253,11 +257,19 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
 
   const rows: TimelineRow[] = [];
 
-  // Payment rows
+  // Payment rows — a settlement discount given at payment time (customer owes 20,500,
+  // pays 20,000, we write off 500) travels with its payment row rather than becoming a
+  // separate row, since it's the same transaction (mirrors suppliers.ts's identical
+  // payment-row discount handling).
   for (const p of pmts) {
     const transactionType = p.type === "bank" ? "Bank Deposited" : "Cash Received";
+    const discount = parseFloat(p.discountAmount ?? "0");
     // For bank: remarks = cheque/transaction ref; For cash: remarks = notes (name/description)
-    const remarks = p.type === "bank" ? (p.chequeNo ?? null) : (p.notes ?? null);
+    let remarks = p.type === "bank" ? (p.chequeNo ?? null) : (p.notes ?? null);
+    if (discount > 0) {
+      const discountNote = `Discount: Rs. ${discount.toLocaleString()}${p.discountReason ? ` — ${p.discountReason}` : ""}`;
+      remarks = remarks ? `${remarks} · ${discountNote}` : discountNote;
+    }
     // documentNo = the receipt/document number stored in bankAccount field
     const documentNo = p.bankAccount ?? null;
     rows.push({
@@ -279,7 +291,7 @@ router.get("/customers/:id/ledger", requireAuth, async (req, res): Promise<void>
       returnValue: 0,
       refundAmount: 0,
       loanAmount: 0,
-      discountAmount: 0,
+      discountAmount: discount,
     });
   }
 
@@ -560,7 +572,12 @@ router.get("/customers/:id/statement", requireAuth, async (req, res): Promise<vo
     const desc = discount > 0 ? `Sale #${o.id} (Rs. ${discount.toLocaleString()} discount)` : `Sale #${o.id}`;
     entries.push({ date: o.date, desc, debit: parseFloat(o.totalAmount) - discount, credit: 0 });
   }
-  for (const p of pmts) entries.push({ date: p.date, desc: `${p.type === "bank" ? "Bank" : "Cash"} payment`, debit: 0, credit: parseFloat(p.amount) });
+  for (const p of pmts) {
+    const discount = parseFloat(p.discountAmount ?? "0");
+    const base = `${p.type === "bank" ? "Bank" : "Cash"} payment`;
+    const desc = discount > 0 ? `${base} (Rs. ${discount.toLocaleString()} discount)` : base;
+    entries.push({ date: p.date, desc, debit: 0, credit: parseFloat(p.amount) + discount });
+  }
   entries.sort((a, b) => a.date.localeCompare(b.date));
 
   const openingBalance = parseFloat(c.openingBalance ?? "0");

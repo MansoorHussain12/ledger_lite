@@ -22,7 +22,11 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
   // per-customer loop made this report scale linearly with customer count.
   const [orders, pmtTotals, returns, loans, balances] = await Promise.all([
     ids.length ? db.select().from(saleOrdersTable).where(and(inArray(saleOrdersTable.customerId, ids), eq(saleOrdersTable.status, "posted"))) : Promise.resolve([] as SaleOrderRow[]),
-    ids.length ? db.select({ customerId: paymentsTable.customerId, total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(inArray(paymentsTable.customerId, ids), eq(paymentsTable.status, "posted"))).groupBy(paymentsTable.customerId) : Promise.resolve([] as { customerId: number; total: number }[]),
+    ids.length ? db.select({
+      customerId: paymentsTable.customerId,
+      total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)`,
+      discount: sql<number>`coalesce(sum(${paymentsTable.discountAmount}),0)`,
+    }).from(paymentsTable).where(and(inArray(paymentsTable.customerId, ids), eq(paymentsTable.status, "posted"))).groupBy(paymentsTable.customerId) : Promise.resolve([] as { customerId: number; total: number; discount: number }[]),
     // Sale returns net against the specific order they were made against (each return
     // is tied to one saleOrderId) — a return reduces that order's effective amount, a
     // cash refund on top of it adds back, per the balance-formula worked example in
@@ -43,7 +47,7 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
     if (!ordersByCustomer.has(o.customerId)) ordersByCustomer.set(o.customerId, []);
     ordersByCustomer.get(o.customerId)!.push(o);
   }
-  const pmtsMap = new Map(pmtTotals.map((r) => [r.customerId, r.total]));
+  const pmtsMap = new Map(pmtTotals.map((r) => [r.customerId, r.total + r.discount]));
   const returnsByCustomer = new Map<number, typeof returns>();
   for (const r of returns) {
     if (!returnsByCustomer.has(r.customerId)) returnsByCustomer.set(r.customerId, []);
