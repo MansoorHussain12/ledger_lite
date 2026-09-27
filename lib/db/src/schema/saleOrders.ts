@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, integer, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer, date, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -29,7 +29,14 @@ export const saleOrdersTable = pgTable("sale_orders", {
   status: text("status").$type<"posted" | "reversed" | "reversal">().notNull().default("posted"),
   reversesId: integer("reverses_id").references((): AnyPgColumn => saleOrdersTable.id),
   correctsId: integer("corrects_id").references((): AnyPgColumn => saleOrdersTable.id),
-});
+}, (table) => [
+  // Balance computation (computeCustomerBalances) and the aging/outstanding reports
+  // always filter by customerId + status together — without this, both do a full
+  // table scan per query as sale_orders grows.
+  index("sale_orders_customer_status_idx").on(table.customerId, table.status),
+  // Date-range reports (monthly-sales, dashboard profit breakdown) filter by date + status.
+  index("sale_orders_date_status_idx").on(table.date, table.status),
+]);
 
 export const saleOrderItemsTable = pgTable("sale_order_items", {
   id: serial("id").primaryKey(),

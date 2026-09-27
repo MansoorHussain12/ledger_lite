@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, integer, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer, date, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { productsTable } from "./products";
 
@@ -33,7 +33,10 @@ export const purchaseInvoicesTable = pgTable("purchase_invoices", {
   status: text("status").$type<"posted" | "reversed" | "reversal">().notNull().default("posted"),
   reversesId: integer("reverses_id").references((): AnyPgColumn => purchaseInvoicesTable.id),
   correctsId: integer("corrects_id").references((): AnyPgColumn => purchaseInvoicesTable.id),
-});
+}, (table) => [
+  index("purchase_invoices_supplier_status_idx").on(table.supplierId, table.status),
+  index("purchase_invoices_date_status_idx").on(table.date, table.status),
+]);
 
 export const purchaseInvoiceItemsTable = pgTable("purchase_invoice_items", {
   id: serial("id").primaryKey(),

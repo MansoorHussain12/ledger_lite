@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, integer, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer, date, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -38,7 +38,10 @@ export const saleReturnsTable = pgTable("sale_returns", {
   status: text("status").$type<"posted" | "reversed" | "reversal">().notNull().default("posted"),
   reversesId: integer("reverses_id").references((): AnyPgColumn => saleReturnsTable.id),
   correctsId: integer("corrects_id").references((): AnyPgColumn => saleReturnsTable.id),
-});
+}, (table) => [
+  index("sale_returns_customer_status_idx").on(table.customerId, table.status),
+  index("sale_returns_date_status_idx").on(table.date, table.status),
+]);
 
 export const saleReturnItemsTable = pgTable("sale_return_items", {
   id: serial("id").primaryKey(),

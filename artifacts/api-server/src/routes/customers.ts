@@ -3,7 +3,7 @@ import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable
 import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@workspace/db/schema";
 import { eq, desc, sql, and, gte, lte, asc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
-import { computeCustomerBalance } from "../lib/customerBalance";
+import { computeCustomerBalance, computeCustomerBalances } from "../lib/customerBalance";
 import {
   ListCustomersQueryParams,
   CreateCustomerBody,
@@ -41,10 +41,9 @@ router.get("/customers", requireAuth, async (req, res): Promise<void> => {
   const query = ListCustomersQueryParams.safeParse(req.query);
   const rows = await db.select().from(customersTable).orderBy(customersTable.name);
 
-  const result = await Promise.all(rows.map(async (c) => {
-    const balance = await computeCustomerBalance(c.id, c.openingBalance ?? "0");
-    return toCustomerResponse(c, balance);
-  }));
+  // Batched: 4 aggregate queries total instead of 4 per customer (see computeCustomerBalances).
+  const balances = await computeCustomerBalances(rows.map((c) => ({ id: c.id, openingBalance: c.openingBalance ?? "0" })));
+  const result = rows.map((c) => toCustomerResponse(c, balances.get(c.id) ?? parseFloat(c.openingBalance ?? "0")));
 
   let filtered = result;
   if (query.success && query.data.search) {

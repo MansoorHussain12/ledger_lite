@@ -10,10 +10,10 @@ import {
   purchaseReturnsTable,
   purchaseReturnItemsTable,
 } from "@workspace/db/schema";
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
-import { supplierBalance } from "../lib/supplierBalance";
+import { supplierBalance, supplierBalances } from "../lib/supplierBalance";
 
 const router = Router();
 
@@ -26,19 +26,19 @@ function toDateStr(d: unknown): string {
 
 router.get("/suppliers", requireAuth, async (_req, res) => {
   const rows = await db.select().from(suppliersTable).orderBy(suppliersTable.name);
-  const result = await Promise.all(
-    rows.map(async (s) => ({
-      id: s.id,
-      name: s.name,
-      contact: s.contact ?? null,
-      address: s.address ?? null,
-      ntn: s.ntn ?? null,
-      openingBalance: parseFloat(s.openingBalance ?? "0"),
-      openingBalanceDate: s.openingBalanceDate ?? null,
-      createdAt: s.createdAt,
-      payableBalance: await supplierBalance(s.id),
-    }))
-  );
+  // Batched: 3 aggregate queries total instead of 3 per supplier (see supplierBalances).
+  const balances = await supplierBalances(rows.map((s) => ({ id: s.id, openingBalance: s.openingBalance ?? "0" })));
+  const result = rows.map((s) => ({
+    id: s.id,
+    name: s.name,
+    contact: s.contact ?? null,
+    address: s.address ?? null,
+    ntn: s.ntn ?? null,
+    openingBalance: parseFloat(s.openingBalance ?? "0"),
+    openingBalanceDate: s.openingBalanceDate ?? null,
+    createdAt: s.createdAt,
+    payableBalance: balances.get(s.id) ?? parseFloat(s.openingBalance ?? "0"),
+  }));
   res.json(result);
 });
 
@@ -522,12 +522,11 @@ router.get("/purchases", requireAuth, async (req, res) => {
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(purchaseInvoicesTable.date), desc(purchaseInvoicesTable.id));
 
-  const result = await Promise.all(
-    rows.map(async (inv) => {
-      const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, inv.supplierId));
-      return toPurchaseResponse(inv, s?.name ?? "");
-    })
-  );
+  // Batched: one supplier lookup for all rows instead of one per invoice row.
+  const supplierIds = Array.from(new Set(rows.map((inv) => inv.supplierId)));
+  const supplierRows = supplierIds.length ? await db.select().from(suppliersTable).where(inArray(suppliersTable.id, supplierIds)) : [];
+  const supplierNameMap = new Map(supplierRows.map((s) => [s.id, s.name]));
+  const result = rows.map((inv) => toPurchaseResponse(inv, supplierNameMap.get(inv.supplierId) ?? ""));
   res.json(result);
 });
 

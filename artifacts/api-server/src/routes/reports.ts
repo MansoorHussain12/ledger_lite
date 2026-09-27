@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable, expensesTable } from "@workspace/db";
 import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@workspace/db/schema";
-import { eq, sql, and, gte, lte } from "drizzle-orm";
+import { eq, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
-import { computeCustomerBalance } from "../lib/customerBalance";
+import { computeCustomerBalances } from "../lib/customerBalance";
 import { GetDailyCollectionReportQueryParams, GetMonthlySalesReportQueryParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -11,41 +11,74 @@ const router: IRouter = Router();
 router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
   const customers = await db.select().from(customersTable).orderBy(customersTable.name);
   const now = new Date();
+  const ids = customers.map((c) => c.id);
 
-  const result = await Promise.all(customers.map(async (c) => {
-    const orders = await db.select().from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted")));
-    const pmts = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted")));
+  type SaleOrderRow = typeof saleOrdersTable.$inferSelect;
+  type SaleReturnRow = typeof saleReturnsTable.$inferSelect;
+  type CustomerLoanRow = typeof customerLoansTable.$inferSelect;
+
+  // Batched: 5 queries total for every customer instead of ~9 per customer (orders,
+  // payment total, returns, loans, plus computeCustomerBalance's own 4) — the old
+  // per-customer loop made this report scale linearly with customer count.
+  const [orders, pmtTotals, returns, loans, balances] = await Promise.all([
+    ids.length ? db.select().from(saleOrdersTable).where(and(inArray(saleOrdersTable.customerId, ids), eq(saleOrdersTable.status, "posted"))) : Promise.resolve([] as SaleOrderRow[]),
+    ids.length ? db.select({ customerId: paymentsTable.customerId, total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(inArray(paymentsTable.customerId, ids), eq(paymentsTable.status, "posted"))).groupBy(paymentsTable.customerId) : Promise.resolve([] as { customerId: number; total: number }[]),
     // Sale returns net against the specific order they were made against (each return
     // is tied to one saleOrderId) — a return reduces that order's effective amount, a
     // cash refund on top of it adds back, per the balance-formula worked example in
     // customers.ts's computeCustomerBalance.
-    const returns = await db.select().from(saleReturnsTable).where(and(eq(saleReturnsTable.customerId, c.id), eq(saleReturnsTable.status, "posted")));
+    ids.length ? db.select().from(saleReturnsTable).where(and(inArray(saleReturnsTable.customerId, ids), eq(saleReturnsTable.status, "posted"))) : Promise.resolve([] as SaleReturnRow[]),
+    // Loans increase what the customer owes, same direction as a sale — see the
+    // balance-formula rationale in customers.ts's computeCustomerBalance. Aged by the
+    // loan's own date, same as a sale order, so they land in the correct day bucket too.
+    ids.length ? db.select().from(customerLoansTable).where(and(inArray(customerLoansTable.customerId, ids), eq(customerLoansTable.status, "posted"))) : Promise.resolve([] as CustomerLoanRow[]),
+    // Sourced from the same shared formula the Customers page uses, so this always
+    // agrees with it exactly (previously hand-duplicated here and it drifted — see the
+    // customer-loans balance bug this replaced).
+    computeCustomerBalances(customers.map((c) => ({ id: c.id, openingBalance: c.openingBalance ?? "0" }))),
+  ]);
+
+  const ordersByCustomer = new Map<number, typeof orders>();
+  for (const o of orders) {
+    if (!ordersByCustomer.has(o.customerId)) ordersByCustomer.set(o.customerId, []);
+    ordersByCustomer.get(o.customerId)!.push(o);
+  }
+  const pmtsMap = new Map(pmtTotals.map((r) => [r.customerId, r.total]));
+  const returnsByCustomer = new Map<number, typeof returns>();
+  for (const r of returns) {
+    if (!returnsByCustomer.has(r.customerId)) returnsByCustomer.set(r.customerId, []);
+    returnsByCustomer.get(r.customerId)!.push(r);
+  }
+  const loansByCustomer = new Map<number, typeof loans>();
+  for (const l of loans) {
+    if (!loansByCustomer.has(l.customerId)) loansByCustomer.set(l.customerId, []);
+    loansByCustomer.get(l.customerId)!.push(l);
+  }
+
+  const result = customers.map((c) => {
+    const custOrders = ordersByCustomer.get(c.id) ?? [];
+    const custReturns = returnsByCustomer.get(c.id) ?? [];
     const returnsByOrder = new Map<number, { total: number; refunded: number }>();
-    for (const r of returns) {
+    for (const r of custReturns) {
       const cur = returnsByOrder.get(r.saleOrderId) ?? { total: 0, refunded: 0 };
       cur.total += parseFloat(r.totalAmount);
       cur.refunded += parseFloat(r.refundPaid);
       returnsByOrder.set(r.saleOrderId, cur);
     }
+    const custLoans = loansByCustomer.get(c.id) ?? [];
 
-    // Loans increase what the customer owes, same direction as a sale — see the
-    // balance-formula rationale in customers.ts's computeCustomerBalance. Aged by the
-    // loan's own date, same as a sale order, so they land in the correct day bucket too.
-    const loans = await db.select().from(customerLoansTable).where(and(eq(customerLoansTable.customerId, c.id), eq(customerLoansTable.status, "posted")));
-
-    const openingBal = parseFloat(c.openingBalance ?? "0");
-    const totalPaid = parseFloat(String(pmts[0]?.total ?? 0));
+    const totalPaid = parseFloat(String(pmtsMap.get(c.id) ?? 0));
     let remaining = totalPaid;
 
     // Discount is aged by the order's own date, same as the sale itself, since it's
     // agreed at sale time — see saleOrders.ts's discountAmount column comment.
     const items = [
-      ...orders.map((o) => {
+      ...custOrders.map((o) => {
         const ret = returnsByOrder.get(o.id);
         const discount = parseFloat(o.discountAmount ?? "0");
         return { date: o.date, amt: parseFloat(o.totalAmount) - (ret?.total ?? 0) + (ret?.refunded ?? 0) - discount };
       }),
-      ...loans.map((l) => ({ date: l.date, amt: parseFloat(l.amount) })),
+      ...custLoans.map((l) => ({ date: l.date, amt: parseFloat(l.amount) })),
     ];
 
     let d0to30 = 0, d31to60 = 0, d61to90 = 0, dOver90 = 0;
@@ -59,17 +92,14 @@ router.get("/reports/aging", requireAuth, async (_req, res): Promise<void> => {
       else dOver90 += unpaid;
     }
 
-    // Sourced from the same shared formula the Customers page uses, so this always
-    // agrees with it exactly (previously hand-duplicated here and it drifted — see the
-    // customer-loans balance bug this replaced).
-    const balance = await computeCustomerBalance(c.id, openingBal);
+    const balance = balances.get(c.id) ?? parseFloat(c.openingBalance ?? "0");
     if (balance <= 0) return null;
 
     return {
       customerId: c.id, customerName: c.name, area: c.area ?? null, contact: c.contact ?? null,
       balance, days0to30: d0to30, days31to60: d31to60, days61to90: d61to90, daysOver90: dOver90,
     };
-  }));
+  });
 
   res.json(result.filter(Boolean));
 });
@@ -328,21 +358,31 @@ router.get("/reports/daily-profit", requireAuth, async (req, res): Promise<void>
 
 router.get("/reports/outstanding", requireAuth, async (_req, res): Promise<void> => {
   const customers = await db.select().from(customersTable).orderBy(customersTable.name);
-  const result = await Promise.all(customers.map(async (c) => {
+  const ids = customers.map((c) => c.id);
+
+  // Batched: 3 queries total instead of 6 per customer (balance's own 4, plus the
+  // per-customer last-sale/last-payment lookups) — see the aging report above for the
+  // identical rationale.
+  const [balances, lastSales, lastPmts] = await Promise.all([
     // Sourced from the same shared formula the Customers page uses — see aging above
     // for why this isn't hand-duplicated per report anymore.
-    const balance = await computeCustomerBalance(c.id, c.openingBalance ?? "0");
+    computeCustomerBalances(customers.map((c) => ({ id: c.id, openingBalance: c.openingBalance ?? "0" }))),
+    ids.length ? db.select({ customerId: saleOrdersTable.customerId, date: sql<string>`max(${saleOrdersTable.date})` }).from(saleOrdersTable).where(and(inArray(saleOrdersTable.customerId, ids), eq(saleOrdersTable.status, "posted"))).groupBy(saleOrdersTable.customerId) : Promise.resolve([]),
+    ids.length ? db.select({ customerId: paymentsTable.customerId, date: sql<string>`max(${paymentsTable.date})` }).from(paymentsTable).where(and(inArray(paymentsTable.customerId, ids), eq(paymentsTable.status, "posted"))).groupBy(paymentsTable.customerId) : Promise.resolve([]),
+  ]);
+  const lastSaleMap = new Map(lastSales.map((r) => [r.customerId, r.date]));
+  const lastPmtMap = new Map(lastPmts.map((r) => [r.customerId, r.date]));
 
-    const lastSale = await db.select({ date: saleOrdersTable.date }).from(saleOrdersTable).where(and(eq(saleOrdersTable.customerId, c.id), eq(saleOrdersTable.status, "posted"))).orderBy(sql`${saleOrdersTable.date} desc`).limit(1);
-    const lastPmt = await db.select({ date: paymentsTable.date }).from(paymentsTable).where(and(eq(paymentsTable.customerId, c.id), eq(paymentsTable.status, "posted"))).orderBy(sql`${paymentsTable.date} desc`).limit(1);
+  const result = customers.map((c) => {
+    const balance = balances.get(c.id) ?? parseFloat(c.openingBalance ?? "0");
     const creditLimit = c.creditLimit ? parseFloat(c.creditLimit) : null;
     const isOverLimit = creditLimit != null && balance > creditLimit;
 
     return {
       customerId: c.id, customerName: c.name, area: c.area ?? null, contact: c.contact ?? null,
-      creditLimit, balance, lastSaleDate: lastSale[0]?.date ?? null, lastPaymentDate: lastPmt[0]?.date ?? null, isOverLimit,
+      creditLimit, balance, lastSaleDate: lastSaleMap.get(c.id) ?? null, lastPaymentDate: lastPmtMap.get(c.id) ?? null, isOverLimit,
     };
-  }));
+  });
   res.json(result.filter(r => r.balance > 0));
 });
 

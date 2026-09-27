@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, integer, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer, date, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { suppliersTable } from "./purchases";
@@ -34,7 +34,10 @@ export const supplierPaymentsTable = pgTable("supplier_payments", {
   status: text("status").$type<"posted" | "reversed" | "reversal">().notNull().default("posted"),
   reversesId: integer("reverses_id").references((): AnyPgColumn => supplierPaymentsTable.id),
   correctsId: integer("corrects_id").references((): AnyPgColumn => supplierPaymentsTable.id),
-});
+}, (table) => [
+  index("supplier_payments_supplier_status_idx").on(table.supplierId, table.status),
+  index("supplier_payments_date_status_idx").on(table.date, table.status),
+]);
 
 export const insertSupplierPaymentSchema = createInsertSchema(supplierPaymentsTable).omit({ id: true, createdAt: true });
 export type InsertSupplierPayment = z.infer<typeof insertSupplierPaymentSchema>;

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, integer, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer, date, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -28,7 +28,10 @@ export const customerLoansTable = pgTable("customer_loans", {
   status: text("status").$type<"posted" | "reversed" | "reversal">().notNull().default("posted"),
   reversesId: integer("reverses_id").references((): AnyPgColumn => customerLoansTable.id),
   correctsId: integer("corrects_id").references((): AnyPgColumn => customerLoansTable.id),
-});
+}, (table) => [
+  index("customer_loans_customer_status_idx").on(table.customerId, table.status),
+  index("customer_loans_date_status_idx").on(table.date, table.status),
+]);
 
 export const insertCustomerLoanSchema = createInsertSchema(customerLoansTable).omit({ id: true, createdAt: true });
 export type InsertCustomerLoan = z.infer<typeof insertCustomerLoanSchema>;

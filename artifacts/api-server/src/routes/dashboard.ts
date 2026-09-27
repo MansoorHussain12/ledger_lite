@@ -4,7 +4,7 @@ import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@wor
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/auth";
-import { computeCustomerBalance } from "../lib/customerBalance";
+import { computeCustomerBalances } from "../lib/customerBalance";
 
 const router: IRouter = Router();
 
@@ -159,11 +159,13 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
   const today = new Date().toISOString().split("T")[0];
 
   const customers = await db.select().from(customersTable);
+  // Sourced from the same shared formula the Customers page uses — see reports.ts's
+  // aging endpoint for why this isn't hand-duplicated per dashboard card anymore.
+  // Batched: 4 aggregate queries total instead of 4 sequential round trips per customer.
+  const balances = await computeCustomerBalances(customers.map((c) => ({ id: c.id, openingBalance: c.openingBalance ?? "0" })));
   let totalOutstanding = 0;
   for (const c of customers) {
-    // Sourced from the same shared formula the Customers page uses — see reports.ts's
-    // aging endpoint for why this isn't hand-duplicated per dashboard card anymore.
-    totalOutstanding += await computeCustomerBalance(c.id, c.openingBalance ?? "0");
+    totalOutstanding += balances.get(c.id) ?? parseFloat(c.openingBalance ?? "0");
   }
 
   const todayCollections = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.date, today), eq(paymentsTable.status, "posted")));
@@ -193,10 +195,11 @@ router.get("/dashboard/profit-breakdown", requireAuth, async (req, res): Promise
 
 router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<void> => {
   const customers = await db.select().from(customersTable);
-  const withBalance = await Promise.all(customers.map(async (c) => {
-    // Sourced from the same shared formula the Customers page uses.
-    const balance = await computeCustomerBalance(c.id, c.openingBalance ?? "0");
-    return { customerId: c.id, customerName: c.name, area: c.area ?? null, balance };
+  // Sourced from the same shared formula the Customers page uses. Batched, see above.
+  const balances = await computeCustomerBalances(customers.map((c) => ({ id: c.id, openingBalance: c.openingBalance ?? "0" })));
+  const withBalance = customers.map((c) => ({
+    customerId: c.id, customerName: c.name, area: c.area ?? null,
+    balance: balances.get(c.id) ?? parseFloat(c.openingBalance ?? "0"),
   }));
   res.json(withBalance.filter(x => x.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 10));
 });

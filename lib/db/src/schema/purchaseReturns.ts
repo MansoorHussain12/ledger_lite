@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, integer, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer, date, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { suppliersTable, purchaseInvoicesTable, purchaseInvoiceItemsTable } from "./purchases";
@@ -33,7 +33,10 @@ export const purchaseReturnsTable = pgTable("purchase_returns", {
   status: text("status").$type<"posted" | "reversed" | "reversal">().notNull().default("posted"),
   reversesId: integer("reverses_id").references((): AnyPgColumn => purchaseReturnsTable.id),
   correctsId: integer("corrects_id").references((): AnyPgColumn => purchaseReturnsTable.id),
-});
+}, (table) => [
+  index("purchase_returns_supplier_status_idx").on(table.supplierId, table.status),
+  index("purchase_returns_date_status_idx").on(table.date, table.status),
+]);
 
 export const purchaseReturnItemsTable = pgTable("purchase_return_items", {
   id: serial("id").primaryKey(),
