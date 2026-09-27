@@ -50,7 +50,11 @@ export const saleOrderItemsTable = pgTable("sale_order_items", {
   // captured automatically so historical profit stays frozen even if the product's
   // cost price changes later. Null on rows created before this column existed.
   costPrice: numeric("cost_price", { precision: 14, scale: 2 }),
-});
+}, (table) => [
+  // Every order-detail lookup (single order page, GET /sale-orders list, dashboard
+  // profit breakdown) filters/joins on saleOrderId — no index existed beyond the PK.
+  index("sale_order_items_sale_order_id_idx").on(table.saleOrderId),
+]);
 
 export const insertSaleOrderSchema = createInsertSchema(saleOrdersTable).omit({ id: true, createdAt: true });
 export type InsertSaleOrder = z.infer<typeof insertSaleOrderSchema>;

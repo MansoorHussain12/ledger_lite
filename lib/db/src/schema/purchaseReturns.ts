@@ -49,7 +49,9 @@ export const purchaseReturnItemsTable = pgTable("purchase_return_items", {
   rate: numeric("rate", { precision: 14, scale: 2 }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   notes: text("notes"),
-});
+}, (table) => [
+  index("purchase_return_items_purchase_return_id_idx").on(table.purchaseReturnId),
+]);
 
 export const insertPurchaseReturnSchema = createInsertSchema(purchaseReturnsTable).omit({ id: true, createdAt: true });
 export type InsertPurchaseReturn = z.infer<typeof insertPurchaseReturnSchema>;

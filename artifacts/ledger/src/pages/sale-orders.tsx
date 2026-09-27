@@ -27,8 +27,19 @@ interface LineItem {
   unit: string;
 }
 
+// Defaults the page to a recent window instead of fetching every sale order ever made —
+// with thousands of orders, an unfiltered load meant 1+2N DB round trips (see
+// GET /sale-orders) plus a huge payload/render. Filters remain fully in the user's
+// control: widen the range or hit Clear to go back to all-time.
+const DEFAULT_WINDOW_DAYS = 90;
+function defaultFromDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - DEFAULT_WINDOW_DAYS);
+  return d.toISOString().split("T")[0];
+}
+
 export default function SaleOrdersPage() {
-  const [fromDate, setFromDate] = useState("");
+  const [fromDate, setFromDate] = useState(defaultFromDate);
   const [toDate, setToDate] = useState("");
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
@@ -154,6 +165,7 @@ export default function SaleOrdersPage() {
           <h1 className="text-2xl font-bold">Sale Orders</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             {groups.length} orders · Rs. {formatAmount(totalAmount)}
+            {!fromDate && !toDate ? "" : " · filtered — clear the date range to see all-time"}
           </p>
         </div>
         <Link href="/sale-orders/new">

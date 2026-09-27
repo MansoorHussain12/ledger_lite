@@ -49,7 +49,9 @@ export const purchaseInvoiceItemsTable = pgTable("purchase_invoice_items", {
   qty: numeric("qty", { precision: 10, scale: 2 }).notNull(),
   rate: numeric("rate", { precision: 14, scale: 2 }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
-});
+}, (table) => [
+  index("purchase_invoice_items_purchase_invoice_id_idx").on(table.purchaseInvoiceId),
+]);
 
 export type Supplier = typeof suppliersTable.$inferSelect;
 export type PurchaseInvoice = typeof purchaseInvoicesTable.$inferSelect;

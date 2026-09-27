@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, saleOrdersTable, saleOrderItemsTable, productsTable, customersTable } from "@workspace/db";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 
 // Zod coerces date strings to JS Date objects. Format them back to YYYY-MM-DD for Postgres.
@@ -25,7 +25,8 @@ async function buildSaleOrderResponse(orderId: number) {
     .select({ item: saleOrderItemsTable, product: productsTable })
     .from(saleOrderItemsTable)
     .leftJoin(productsTable, eq(saleOrderItemsTable.productId, productsTable.id))
-    .where(eq(saleOrderItemsTable.saleOrderId, orderId));
+    .where(eq(saleOrderItemsTable.saleOrderId, orderId))
+    .orderBy(saleOrderItemsTable.id);
 
   const totalAmount = parseFloat(order.totalAmount);
   const discountAmount = parseFloat(order.discountAmount ?? "0");
@@ -86,13 +87,37 @@ router.get("/sale-orders", requireAuth, async (req, res): Promise<void> => {
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(saleOrdersTable.date));
 
-  const result = await Promise.all(orders.map(async (o) => {
-    const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, o.customerId));
-    const items = await db
-      .select({ item: saleOrderItemsTable, product: productsTable })
-      .from(saleOrderItemsTable)
-      .leftJoin(productsTable, eq(saleOrderItemsTable.productId, productsTable.id))
-      .where(eq(saleOrderItemsTable.saleOrderId, o.id));
+  // Batched: 2 queries total (customers + items/products) instead of 2 per order — the
+  // old per-order loop was the main cause of a slow load once sale_orders grows into the
+  // thousands (1 + 2N round trips, plus building the same product/customer maps N times).
+  type ItemRow = { item: typeof saleOrderItemsTable.$inferSelect; product: typeof productsTable.$inferSelect | null };
+  const orderIds = orders.map((o) => o.id);
+  const customerIds = Array.from(new Set(orders.map((o) => o.customerId)));
+  const [customers, itemRows] = await Promise.all([
+    customerIds.length ? db.select().from(customersTable).where(inArray(customersTable.id, customerIds)) : Promise.resolve([] as (typeof customersTable.$inferSelect)[]),
+    orderIds.length
+      ? db.select({ item: saleOrderItemsTable, product: productsTable })
+          .from(saleOrderItemsTable)
+          .leftJoin(productsTable, eq(saleOrderItemsTable.productId, productsTable.id))
+          .where(inArray(saleOrderItemsTable.saleOrderId, orderIds))
+          // Pin to insertion order (id asc) — a single-order query has no ORDER BY
+          // either, but batching into one IN query changes which incidental scan
+          // order comes back, so pin it explicitly to keep line-item order stable.
+          .orderBy(saleOrderItemsTable.id)
+      : Promise.resolve([] as ItemRow[]),
+  ]);
+
+  const customerMap = new Map(customers.map((c) => [c.id, c]));
+  const itemsByOrderId = new Map<number, ItemRow[]>();
+  for (const row of itemRows) {
+    const oid = row.item.saleOrderId;
+    if (!itemsByOrderId.has(oid)) itemsByOrderId.set(oid, []);
+    itemsByOrderId.get(oid)!.push(row);
+  }
+
+  const result = orders.map((o) => {
+    const customer = customerMap.get(o.customerId);
+    const items = itemsByOrderId.get(o.id) ?? [];
     const totalAmount = parseFloat(o.totalAmount);
     const discountAmount = parseFloat(o.discountAmount ?? "0");
     return {
@@ -108,7 +133,7 @@ router.get("/sale-orders", requireAuth, async (req, res): Promise<void> => {
       })),
       status: o.status, reversesId: o.reversesId ?? null, correctsId: o.correctsId ?? null,
     };
-  }));
+  });
   res.json(result);
 });
 

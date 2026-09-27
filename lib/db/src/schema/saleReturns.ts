@@ -59,7 +59,9 @@ export const saleReturnItemsTable = pgTable("sale_return_items", {
   // profit on the original sale, even if the product's cost price has since changed.
   costPrice: numeric("cost_price", { precision: 14, scale: 2 }),
   notes: text("notes"),
-});
+}, (table) => [
+  index("sale_return_items_sale_return_id_idx").on(table.saleReturnId),
+]);
 
 export const insertSaleReturnSchema = createInsertSchema(saleReturnsTable).omit({ id: true, createdAt: true });
 export type InsertSaleReturn = z.infer<typeof insertSaleReturnSchema>;
