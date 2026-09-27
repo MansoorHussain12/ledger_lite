@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getListCustomersQueryKey, getListSaleOrdersQueryKey, getListPaymentsQueryKey,
 } from "@workspace/api-client-react";
@@ -69,9 +69,15 @@ async function fetchInventory(): Promise<Product[]> {
   if (!r.ok) return [];
   return r.json();
 }
-async function fetchProductRates(productId: number): Promise<{ rate: number; effectiveDate: string }[]> {
-  const r = await fetch(`${BASE}/api/products/${productId}/rates`, { credentials: "include" });
-  if (!r.ok) return [];
+async function fetchCustomerLastRates(
+  customerId: number, productIds: number[]
+): Promise<Record<number, { rate: number; date: string }>> {
+  if (!productIds.length) return {};
+  const r = await fetch(
+    `${BASE}/api/sale-orders/last-rates?customerId=${customerId}&productIds=${productIds.join(",")}`,
+    { credentials: "include" }
+  );
+  if (!r.ok) return {};
   return r.json();
 }
 
@@ -423,24 +429,22 @@ export default function PosPage() {
 
   const stockMap = new Map<number, number>(inventory.map((p: any) => [p.id, p.currentStock ?? 0]));
 
-  // Previous rate (the rate in effect before the current one) for each product in the cart —
-  // shown alongside the editable rate so the cashier has context when re-pricing a line.
+  // Previous rate for each product in the cart — the rate *this customer* was last
+  // charged for it (not the product's global rate history), so the cashier sees what
+  // this specific customer has been paying when re-pricing a line.
   const cartProductIds = useMemo(() => Array.from(new Set(cart.map(i => i.productId))), [cart]);
-  const rateHistoryResults = useQueries({
-    queries: cartProductIds.map(id => ({
-      queryKey: ["product-rates", id],
-      queryFn: () => fetchProductRates(id),
-      staleTime: 5 * 60 * 1000,
-    })),
+  const { data: customerLastRates } = useQuery({
+    queryKey: ["customer-last-rates", customer?.id, cartProductIds],
+    queryFn: () => fetchCustomerLastRates(customer!.id, cartProductIds),
+    enabled: customer != null && cartProductIds.length > 0,
   });
   const previousRateMap = useMemo(() => {
     const map = new Map<number, number | null>();
-    cartProductIds.forEach((id, idx) => {
-      const rates = rateHistoryResults[idx]?.data;
-      map.set(id, rates && rates.length > 1 ? rates[1].rate : null);
+    cartProductIds.forEach(id => {
+      map.set(id, customerLastRates?.[id]?.rate ?? null);
     });
     return map;
-  }, [cartProductIds, rateHistoryResults]);
+  }, [cartProductIds, customerLastRates]);
 
   // Derived
   const subtotal = cart.reduce((s, i) => s + i.amount, 0);

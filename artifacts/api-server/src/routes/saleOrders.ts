@@ -161,6 +161,37 @@ router.post("/sale-orders", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(response);
 });
 
+// Per-customer previous rate — the rate this specific customer was last charged for
+// each product, not the product's global rate history (product_rates), since rates
+// are negotiated per customer at sale time. Bulk (not one-productId-per-call) because
+// the POS cart can hold several products at once.
+router.get("/sale-orders/last-rates", requireAuth, async (req, res): Promise<void> => {
+  const customerId = Number(req.query.customerId);
+  const productIds = String(req.query.productIds ?? "")
+    .split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+  if (!Number.isFinite(customerId) || customerId <= 0 || productIds.length === 0) { res.json({}); return; }
+
+  const rows = await db
+    .select({ productId: saleOrderItemsTable.productId, rate: saleOrderItemsTable.rate, date: saleOrdersTable.date })
+    .from(saleOrderItemsTable)
+    .innerJoin(saleOrdersTable, eq(saleOrderItemsTable.saleOrderId, saleOrdersTable.id))
+    .where(and(
+      eq(saleOrdersTable.customerId, customerId),
+      eq(saleOrdersTable.status, "posted"),
+      inArray(saleOrderItemsTable.productId, productIds),
+    ))
+    .orderBy(desc(saleOrdersTable.date), desc(saleOrderItemsTable.id));
+
+  // First row per productId is the most recent (already ordered newest-first).
+  const result: Record<number, { rate: number; date: string }> = {};
+  for (const row of rows) {
+    if (result[row.productId] === undefined) {
+      result[row.productId] = { rate: parseFloat(row.rate), date: row.date };
+    }
+  }
+  res.json(result);
+});
+
 router.get("/sale-orders/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetSaleOrderParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }

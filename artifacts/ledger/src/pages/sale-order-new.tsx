@@ -5,8 +5,25 @@ import {
   useListProducts, getListProductsQueryKey, getListSaleOrdersQueryKey,
   useListLookups, getListLookupsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatAmount } from "@/lib/format";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Per-customer previous rate — see pos.tsx's identical helper. Kept as raw fetch (not
+// generated codegen) since this endpoint isn't part of the OpenAPI spec, matching how
+// the products page and POS already bypass codegen for a couple of routes.
+async function fetchCustomerLastRates(
+  customerId: number, productIds: number[]
+): Promise<Record<number, { rate: number; date: string }>> {
+  if (!productIds.length) return {};
+  const r = await fetch(
+    `${BASE}/api/sale-orders/last-rates?customerId=${customerId}&productIds=${productIds.join(",")}`,
+    { credentials: "include" }
+  );
+  if (!r.ok) return {};
+  return r.json();
+}
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,6 +64,18 @@ export default function SaleOrderNewPage() {
   const { data: products = [] } = useListProducts({ query: { queryKey: getListProductsQueryKey() } });
   const { data: unitLookups = [] } = useListLookups("unit", { query: { queryKey: getListLookupsQueryKey("unit") } });
   const createMutation = useCreateSaleOrder();
+
+  // Previous rate for each line's product — the rate *this customer* was last charged
+  // for it, so the rate can be sanity-checked against their own history while typing.
+  const itemProductIds = useMemo(
+    () => Array.from(new Set(items.map(i => i.productId).filter(id => id > 0))),
+    [items]
+  );
+  const { data: customerLastRates } = useQuery({
+    queryKey: ["customer-last-rates", customerId, itemProductIds],
+    queryFn: () => fetchCustomerLastRates(customerId as number, itemProductIds),
+    enabled: customerId !== "" && itemProductIds.length > 0,
+  });
 
   const handleProductChange = (idx: number, productId: number) => {
     const product = products.find(p => p.id === productId);
@@ -178,9 +207,10 @@ export default function SaleOrderNewPage() {
 
           {/* Column headers */}
           <div className="grid grid-cols-12 gap-2 mb-1 px-1">
-            <div className="col-span-4 text-xs text-muted-foreground font-medium">Product</div>
+            <div className="col-span-3 text-xs text-muted-foreground font-medium">Product</div>
             <div className="col-span-2 text-xs text-muted-foreground font-medium">Qty</div>
             <div className="col-span-2 text-xs text-muted-foreground font-medium">Unit</div>
+            <div className="col-span-1 text-xs text-muted-foreground font-medium text-right">Prev.</div>
             <div className="col-span-2 text-xs text-muted-foreground font-medium">Rate (Rs)</div>
             <div className="col-span-2 text-xs text-muted-foreground font-medium text-right">Amount</div>
           </div>
@@ -190,9 +220,10 @@ export default function SaleOrderNewPage() {
               const amt = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
               const product = products.find(p => p.id === item.productId);
               const isRateOverridden = !!product && item.rate !== "" && parseFloat(item.rate) !== product.currentRate;
+              const previousRate = customerLastRates?.[item.productId]?.rate;
               return (
                 <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-4">
+                  <div className="col-span-3">
                     <Combobox
                       options={products.map(p => ({ value: String(p.id), label: p.name }))}
                       value={item.productId ? String(item.productId) : undefined}
@@ -226,6 +257,9 @@ export default function SaleOrderNewPage() {
                       emptyText="No units found."
                       className="h-9 w-full"
                     />
+                  </div>
+                  <div className="col-span-1 text-right text-sm text-muted-foreground truncate" title={previousRate != null ? formatAmount(previousRate) : undefined}>
+                    {previousRate != null ? formatAmount(previousRate) : "—"}
                   </div>
                   <div className="col-span-2">
                     <Input
