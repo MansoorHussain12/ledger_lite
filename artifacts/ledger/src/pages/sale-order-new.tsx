@@ -37,6 +37,12 @@ async function fetchCustomerLastRates(
   return r.json();
 }
 
+// Explicit column widths for the item grid — shared by the header and every row so
+// they're always pixel-aligned. Product is the only flexible track; everything else
+// is sized to its content (e.g. Unit needs room for a combobox + chevron, Amount for
+// "Rs. 1,150,000" without wrapping).
+const ITEM_GRID_COLS = "grid-cols-[minmax(160px,1fr)_80px_90px_64px_76px_110px_120px_28px]";
+
 interface LineItem {
   productId: number;
   productName: string;
@@ -254,15 +260,19 @@ export default function SaleOrderNewPage() {
         <div className="bg-card border border-card-border rounded-xl p-5">
           <h2 className="font-semibold text-sm mb-4 text-muted-foreground uppercase tracking-wide">Items</h2>
 
-          {/* Column headers */}
-          <div className="grid grid-cols-12 gap-2 mb-1 px-1">
-            <div className="col-span-3 text-xs text-muted-foreground font-medium">Product</div>
-            <div className="col-span-2 text-xs text-muted-foreground font-medium">Qty</div>
-            <div className="col-span-1 text-xs text-muted-foreground font-medium">Unit</div>
-            <div className="col-span-1 text-xs text-muted-foreground font-medium text-right">Rem.</div>
-            <div className="col-span-1 text-xs text-muted-foreground font-medium text-right">Prev.</div>
-            <div className="col-span-2 text-xs text-muted-foreground font-medium">Rate (Rs)</div>
-            <div className="col-span-2 text-xs text-muted-foreground font-medium text-right">Amount</div>
+          {/* Column headers — explicit pixel/fr tracks (not Tailwind's 12-col span
+              system) so the header and each row use the exact same column widths.
+              col-span arithmetic across rows with a different number of cells (e.g.
+              amount+delete sharing what the header treats as one column) silently
+              drifts out of alignment; a shared template can't. */}
+          <div className={`grid ${ITEM_GRID_COLS} gap-2 mb-1 px-1`}>
+            <div className="text-xs text-muted-foreground font-medium">Product</div>
+            <div className="text-xs text-muted-foreground font-medium">Qty</div>
+            <div className="text-xs text-muted-foreground font-medium">Unit</div>
+            <div className="text-xs text-muted-foreground font-medium text-right">Rem.</div>
+            <div className="text-xs text-muted-foreground font-medium text-right">Prev.</div>
+            <div className="text-xs text-muted-foreground font-medium">Rate (Rs)</div>
+            <div className="text-xs text-muted-foreground font-medium text-right">Amount</div>
           </div>
 
           <div className="space-y-3">
@@ -276,8 +286,8 @@ export default function SaleOrderNewPage() {
               const stock = item.productId ? stockMap.get(item.productId) : undefined;
               const remainingQty = stock != null ? stock - (parseFloat(item.qty) || 0) : null;
               return (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-3">
+                <div key={idx} className={`grid ${ITEM_GRID_COLS} gap-2 items-center`}>
+                  <div>
                     <Combobox
                       options={products.map(p => ({ value: String(p.id), label: p.name }))}
                       value={item.productId ? String(item.productId) : undefined}
@@ -288,7 +298,7 @@ export default function SaleOrderNewPage() {
                       className="h-9 w-full"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div>
                     <Input
                       type="number"
                       placeholder="Qty"
@@ -298,7 +308,7 @@ export default function SaleOrderNewPage() {
                       step="0.01"
                     />
                   </div>
-                  <div className="col-span-1">
+                  <div>
                     <Combobox
                       options={[
                         ...unitLookups.map(u => ({ value: u.value, label: u.value })),
@@ -313,15 +323,15 @@ export default function SaleOrderNewPage() {
                     />
                   </div>
                   <div
-                    className={`col-span-1 text-right text-sm truncate ${remainingQty != null && remainingQty < 0 ? "text-red-600 font-semibold" : "text-muted-foreground"}`}
+                    className={`text-right text-sm truncate ${remainingQty != null && remainingQty < 0 ? "text-red-600 font-semibold" : "text-muted-foreground"}`}
                     title={remainingQty != null ? formatAmount(remainingQty) : undefined}
                   >
                     {remainingQty != null ? formatAmount(remainingQty) : "—"}
                   </div>
-                  <div className="col-span-1 text-right text-sm text-muted-foreground truncate" title={previousRate != null ? formatAmount(previousRate) : undefined}>
+                  <div className="text-right text-sm text-muted-foreground truncate" title={previousRate != null ? formatAmount(previousRate) : undefined}>
                     {previousRate != null ? formatAmount(previousRate) : "—"}
                   </div>
-                  <div className="col-span-2">
+                  <div>
                     <Input
                       type="number"
                       placeholder="Rate"
@@ -332,17 +342,17 @@ export default function SaleOrderNewPage() {
                       className={isRateOverridden ? "border-amber-400/70" : undefined}
                     />
                   </div>
-                  <div className="col-span-1 text-right text-sm font-semibold text-muted-foreground">
+                  <div className="text-right text-sm font-semibold text-muted-foreground truncate" title={amt > 0 ? `Rs. ${formatAmount(amt)}` : undefined}>
                     {amt > 0 ? `Rs. ${formatAmount(amt)}` : "—"}
                   </div>
-                  <div className="col-span-1 flex justify-end">
+                  <div className="flex justify-end">
                     {items.length > 1 && (
                       <button type="button" onClick={() => removeLine(idx)} className="p-1 text-muted-foreground hover:text-destructive">
                         <Trash2 size={14} />
                       </button>
                     )}
                   </div>
-                  <div className="col-span-12">
+                  <div className="col-span-full">
                     <Input
                       value={item.notes}
                       onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, notes: e.target.value } : it))}
