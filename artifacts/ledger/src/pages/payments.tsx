@@ -347,7 +347,10 @@ export default function PaymentsPage() {
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Balance After</div>
-                  <div className="font-semibold">Rs. {formatAmount(formCustomer.balance - formAmount - formDiscount)}</div>
+                  <div className={cn("font-semibold", (formCustomer.balance - formAmount - formDiscount) < 0 ? "text-emerald-600" : undefined)}>
+                    Rs. {formatAmount(formCustomer.balance - formAmount - formDiscount)}
+                    {(formCustomer.balance - formAmount - formDiscount) < 0 && " (Advance)"}
+                  </div>
                 </div>
               </div>
             )}
@@ -368,7 +371,7 @@ export default function PaymentsPage() {
                   type="number" value={form.discountAmount}
                   onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))}
                   placeholder="0" min="0" step="0.01"
-                  max={formCustomer ? formCustomer.balance - formAmount : undefined}
+                  max={formCustomer ? Math.max(0, formCustomer.balance) : undefined}
                 />
               </div>
               <div className="space-y-1.5">

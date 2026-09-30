@@ -178,7 +178,7 @@ export default function CustomerDetailPage() {
           <div className="bg-card border border-card-border rounded-xl p-3">
             <div className="text-xs text-muted-foreground mb-1">Closing Balance</div>
             <div className={cn("font-bold text-base", (ledger?.closingBalance ?? 0) > 0 ? "text-red-600" : "text-emerald-600")}>
-              Rs. {formatAmount(ledger?.closingBalance ?? 0)}
+              Rs. {formatAmount(ledger?.closingBalance ?? 0)}{(ledger?.closingBalance ?? 0) < 0 && " (Advance)"}
             </div>
           </div>
         </div>
@@ -300,7 +300,7 @@ export default function CustomerDetailPage() {
                 Closing Balance as on {formatDate(toDate || today)}:
               </span>
               <span className={cn("text-lg font-bold", (ledger.closingBalance) > 0 ? "text-red-600" : "text-emerald-600")}>
-                Rs. {formatAmount(ledger.closingBalance)}
+                Rs. {formatAmount(ledger.closingBalance)}{ledger.closingBalance < 0 && " (Advance)"}
               </span>
             </div>
           </div>
@@ -519,7 +519,7 @@ export default function CustomerDetailPage() {
         <div className="print-closing">
           Closing Balance as on :&nbsp;&nbsp;
           {formatDatePrint(ledger?.to)}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-          {formatAmount(ledger?.closingBalance ?? 0)}
+          {formatAmount(ledger?.closingBalance ?? 0)}{(ledger?.closingBalance ?? 0) < 0 && " (Advance)"}
         </div>
 
         {/* Category breakdown — print */}

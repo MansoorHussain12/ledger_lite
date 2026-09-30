@@ -241,7 +241,7 @@ export default function SuppliersPage() {
                 <td className="px-4 py-3 text-right text-muted-foreground">Rs {fmt(s.openingBalance)}</td>
                 <td className="px-4 py-3 text-right">
                   <span className={cn("font-semibold", s.payableBalance > 0 ? "text-red-400" : "text-emerald-400")}>
-                    Rs {fmt(s.payableBalance)}
+                    Rs {fmt(s.payableBalance)}{s.payableBalance < 0 && " (Adv)"}
                   </span>
                 </td>
                 <td className="px-4 py-3">

@@ -137,7 +137,7 @@ export default function CustomersPage() {
                   <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{c.contact ?? "-"}</td>
                   <td className="px-4 py-3 text-right">
                     <span className={cn("font-semibold", c.balance > 0 ? "text-red-600" : "text-emerald-600")}>
-                      Rs. {formatAmount(c.balance)}
+                      Rs. {formatAmount(c.balance)}{c.balance < 0 && " (Adv)"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right text-muted-foreground hidden md:table-cell">

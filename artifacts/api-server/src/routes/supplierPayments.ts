@@ -29,10 +29,13 @@ function toSupplierPaymentResponse(p: typeof supplierPaymentsTable.$inferSelect,
   };
 }
 
-// A payment (cash + discount together) can't clear more than what's actually owed —
-// reject rather than let the supplier's payable balance go negative. discountAmount > 0
-// always needs a reason, since — unlike amount, which is self-evidently "cash paid" —
-// a discount with no reason on file is not auditable later.
+// Cash can be paid beyond what's currently owed — that's a supplier advance, which just
+// drives the payable balance negative (a credit) and gets absorbed by future purchases,
+// since payments aren't linked to any specific purchase invoice to begin with. A
+// settlement discount is different: it's a write-off of actual debt, so it still can't
+// exceed what's actually owed — no debt, nothing to discount. discountAmount > 0 always
+// needs a reason, since — unlike amount, which is self-evidently "cash paid" — a discount
+// with no reason on file is not auditable later.
 async function validatePayment(supplierId: number, amount: number, discountAmount: number, discountReason: string | undefined | null, excludePaymentId?: number): Promise<string | null> {
   if (discountAmount < 0) return "discountAmount cannot be negative";
   if (discountAmount > 0 && !discountReason?.trim()) return "discountReason is required when discountAmount > 0";
@@ -46,7 +49,7 @@ async function validatePayment(supplierId: number, amount: number, discountAmoun
       balance += parseFloat(existing.amount) + parseFloat(existing.discountAmount ?? "0");
     }
   }
-  if (amount + discountAmount > balance + 0.01) return "amount + discountAmount cannot exceed the supplier's payable balance";
+  if (discountAmount > balance + 0.01) return "discountAmount cannot exceed the supplier's payable balance";
   return null;
 }
 

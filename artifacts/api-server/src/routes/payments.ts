@@ -29,11 +29,13 @@ function toPaymentResponse(p: typeof paymentsTable.$inferSelect, customerName: s
   };
 }
 
-// A payment (cash + discount together) can't clear more than what's actually owed —
-// reject rather than let the customer's balance go negative. discountAmount > 0 always
-// needs a reason, since — unlike amount, which is self-evidently "cash received" — a
-// discount with no reason on file is not auditable later. Mirrors
-// supplierPayments.ts's identical validatePayment.
+// Cash can be received beyond what's currently owed — that's a customer advance, which
+// just drives the balance negative (a credit) and gets absorbed by future sales, since
+// payments aren't linked to any specific sale order to begin with. A settlement discount
+// is different: it's a write-off of actual debt, so it still can't exceed what's actually
+// owed — no debt, nothing to discount. discountAmount > 0 always needs a reason, since —
+// unlike amount, which is self-evidently "cash received" — a discount with no reason on
+// file is not auditable later. Mirrors supplierPayments.ts's identical validatePayment.
 async function validatePayment(customerId: number, amount: number, discountAmount: number, discountReason: string | undefined | null, excludePaymentId?: number): Promise<string | null> {
   if (discountAmount < 0) return "discountAmount cannot be negative";
   if (discountAmount > 0 && !discountReason?.trim()) return "discountReason is required when discountAmount > 0";
@@ -48,7 +50,7 @@ async function validatePayment(customerId: number, amount: number, discountAmoun
       balance += parseFloat(existing.amount) + parseFloat(existing.discountAmount ?? "0");
     }
   }
-  if (amount + discountAmount > balance + 0.01) return "amount + discountAmount cannot exceed the customer's outstanding balance";
+  if (discountAmount > balance + 0.01) return "discountAmount cannot exceed the customer's outstanding balance";
   return null;
 }
 

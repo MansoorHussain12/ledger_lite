@@ -354,7 +354,10 @@ export default function SupplierPaymentsPage() {
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Balance After</div>
-                  <div className="font-semibold">Rs. {formatAmount(formSupplier.payableBalance - formAmount - formDiscount)}</div>
+                  <div className={cn("font-semibold", (formSupplier.payableBalance - formAmount - formDiscount) < 0 ? "text-emerald-600" : undefined)}>
+                    Rs. {formatAmount(formSupplier.payableBalance - formAmount - formDiscount)}
+                    {(formSupplier.payableBalance - formAmount - formDiscount) < 0 && " (Advance)"}
+                  </div>
                 </div>
               </div>
             )}
@@ -375,7 +378,7 @@ export default function SupplierPaymentsPage() {
                   type="number" value={form.discountAmount}
                   onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))}
                   placeholder="0" min="0" step="0.01"
-                  max={formSupplier ? formSupplier.payableBalance - formAmount : undefined}
+                  max={formSupplier ? Math.max(0, formSupplier.payableBalance) : undefined}
                 />
               </div>
               <div className="space-y-1.5">
