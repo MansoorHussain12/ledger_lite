@@ -43,13 +43,22 @@ type CartItem = {
   qty: number; rate: number; amount: number; note?: string;
 };
 
-type PaymentMode = "cash" | "bank" | "cheque" | "credit";
+// Only ever assigned cash/bank/cheque (payType carries its own separate "credit" option) —
+// kept narrow so it can be passed straight through to the sale order's paymentMode field.
+type PaymentMode = "cash" | "bank" | "cheque";
 
+// Mirrors the sale order's own response shape (see buildSaleOrderResponse) rather than
+// reconstructing these numbers from local cart/payment state — the server is the source
+// of truth for what actually got persisted (clamped discount, snapshotted balance, etc.).
+// `change` is the one POS-only concept with no server equivalent (never persisted).
 type CompletedOrder = {
   id: number; date: string; customerName: string; customerId: number;
-  items: CartItem[]; totalAmount: number;
-  payment: { amount: number; change: number; mode: PaymentMode } | null;
+  items: { productName: string; qty: number; rate: number; amount: number; costPrice: number | null }[];
+  totalAmount: number; discountAmount: number; netAmount: number;
+  previousBalance: number | null; receivedAmount: number;
+  paymentMode: PaymentMode | null; bankAccount: string | null; chequeNo: string | null;
   vehicleNo: string; driverName: string; billtyNo: string;
+  change: number;
 };
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -268,7 +277,18 @@ function ProductSearchBar({
 
 function ReceiptDialog({ order, onClose, onNewSale }: { order: CompletedOrder; onClose: () => void; onNewSale: () => void }) {
   const { settings } = useCompany();
+  const { user } = useAuth();
+  const canSeeProfit = user?.role === "owner";
   const handlePrint = () => window.print();
+
+  // Balance context is a snapshot taken when the order was created — see
+  // sale-order-detail.tsx's identical block. Null only if the customer lookup
+  // somehow failed server-side; in practice always present for POS sales now.
+  const hasBalanceSnapshot = order.previousBalance != null;
+  const previousBalance = order.previousBalance ?? 0;
+  const totalBalance = previousBalance + order.netAmount;
+  const remainingAmount = totalBalance - order.receivedAmount;
+  const paymentModeLabel = order.paymentMode === "bank" ? "Bank Transfer" : order.paymentMode === "cheque" ? "Cheque" : "Cash";
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -327,6 +347,7 @@ function ReceiptDialog({ order, onClose, onNewSale }: { order: CompletedOrder; o
               <span className="flex-1">Product</span>
               <span className="w-12 text-right">Qty</span>
               <span className="w-16 text-right">Rate</span>
+              {canSeeProfit && <span className="no-print w-16 text-right">Cost</span>}
               <span className="w-20 text-right">Amount</span>
             </div>
             {order.items.map((item, i) => (
@@ -334,6 +355,9 @@ function ReceiptDialog({ order, onClose, onNewSale }: { order: CompletedOrder; o
                 <span className="flex-1 truncate pr-1">{item.productName}</span>
                 <span className="w-12 text-right">{item.qty}</span>
                 <span className="w-16 text-right">{fmt(item.rate)}</span>
+                {canSeeProfit && (
+                  <span className="no-print w-16 text-right">{item.costPrice != null ? fmt(item.costPrice) : "—"}</span>
+                )}
                 <span className="w-20 text-right font-medium">{fmt(item.amount)}</span>
               </div>
             ))}
@@ -343,37 +367,64 @@ function ReceiptDialog({ order, onClose, onNewSale }: { order: CompletedOrder; o
 
           {/* Totals */}
           <div className="text-sm space-y-1">
-            <div className="flex justify-between font-bold text-base">
-              <span>Total</span>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Subtotal</span>
               <span>Rs {fmt(order.totalAmount)}</span>
             </div>
-            {order.payment && order.payment.amount > 0 && (
-              <>
-                <div className="flex justify-between text-emerald-400 text-xs">
-                  <span>Paid ({order.payment.mode})</span>
-                  <span>Rs {fmt(order.payment.amount)}</span>
-                </div>
-                {order.payment.amount < order.totalAmount && (
-                  <div className="flex justify-between text-red-400 text-xs">
-                    <span>Balance due</span>
-                    <span>Rs {fmt(order.totalAmount - order.payment.amount)}</span>
-                  </div>
-                )}
-                {order.payment.change > 0 && (
-                  <div className="flex justify-between text-emerald-400 text-xs">
-                    <span>Change</span>
-                    <span>Rs {fmt(order.payment.change)}</span>
-                  </div>
-                )}
-              </>
-            )}
-            {!order.payment && (
-              <div className="flex justify-between text-amber-400 text-xs">
-                <span>Credit sale</span>
-                <span>Rs {fmt(order.totalAmount)} due</span>
+            {order.discountAmount > 0 && (
+              <div className="flex justify-between text-emerald-400 text-xs">
+                <span>Discount</span>
+                <span>− Rs {fmt(order.discountAmount)}</span>
               </div>
             )}
+            <div className="flex justify-between font-bold text-base">
+              <span>Net Amount</span>
+              <span>Rs {fmt(order.netAmount)}</span>
+            </div>
           </div>
+
+          {hasBalanceSnapshot && (
+            <>
+              <div className="text-xs text-muted-foreground">━━━━━━━━━━━━━━━━━━━━━</div>
+              <div className="text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Previous Balance</span>
+                  <span>Rs {fmt(Math.abs(previousBalance))}{previousBalance < 0 && " (Adv)"}</span>
+                </div>
+                <div className="flex justify-between font-medium">
+                  <span>Total Balance</span>
+                  <span>Rs {fmt(Math.abs(totalBalance))}{totalBalance < 0 && " (Adv)"}</span>
+                </div>
+                {order.receivedAmount > 0 ? (
+                  <div className="flex justify-between text-emerald-400">
+                    <span>
+                      Received ({paymentModeLabel}
+                      {order.paymentMode === "bank" && order.bankAccount ? `: ${order.bankAccount}` : ""}
+                      {order.paymentMode === "cheque" && order.chequeNo ? `: ${order.chequeNo}` : ""})
+                    </span>
+                    <span>− Rs {fmt(order.receivedAmount)}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-amber-400">
+                    <span>Credit sale</span>
+                    <span>—</span>
+                  </div>
+                )}
+                {order.change > 0 && (
+                  <div className="flex justify-between text-emerald-400">
+                    <span>Change</span>
+                    <span>Rs {fmt(order.change)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold pt-1 border-t border-dashed">
+                  <span>{remainingAmount < 0 ? "Advance Balance" : "Remaining Balance"}</span>
+                  <span className={remainingAmount < 0 ? "text-emerald-400" : "text-red-400"}>
+                    Rs {fmt(Math.abs(remainingAmount))}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="text-center text-xs text-muted-foreground pt-1">
             Thank you for your business!
@@ -400,6 +451,11 @@ export default function PosPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const canSeeProfit = user?.role === "owner";
+  // Purchase/cost rate shown alongside the sale rate for the same audience and under the
+  // same rule as Profit — informative for pricing decisions on screen, never printed.
+  const cartGridCols = canSeeProfit
+    ? "grid-cols-[1fr_100px_90px_110px_90px_90px_28px]"
+    : "grid-cols-[1fr_100px_90px_110px_90px_28px]";
 
   // State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -411,6 +467,7 @@ export default function PosPage() {
   const [driverName, setDriverName] = useState("");
   const [billtyNo, setBilltyNo] = useState("");
   const [notes, setNotes] = useState("");
+  const [discountAmount, setDiscountAmount] = useState("");
   const [showExtra, setShowExtra] = useState(false);
   const [payMode, setPayMode] = useState<PaymentMode>("cash");
   const [payAmount, setPayAmount] = useState("");
@@ -449,6 +506,8 @@ export default function PosPage() {
   // Derived
   const subtotal = cart.reduce((s, i) => s + i.amount, 0);
   const totalQty  = cart.reduce((s, i) => s + i.qty, 0);
+  const discount = Math.min(parseFloat(discountAmount) || 0, subtotal);
+  const netAmount = subtotal - discount;
 
   // Invoice profit (owner-only) — rate minus each product's cost price, summed across the cart.
   const costPriceMap = useMemo(
@@ -469,24 +528,26 @@ export default function PosPage() {
       if (cost == null) { missingCost = true; continue; }
       profit += (item.rate - cost) * item.qty;
     }
+    // Sale-time discount is pure revenue given up, not tied to any one product's cost.
+    profit -= discount;
     return { profit, missingCost };
-  }, [cart, costPriceMap]);
+  }, [cart, costPriceMap, discount]);
 
   // Auto-set pay amount when type=full
   useEffect(() => {
-    if (payType === "full") setPayAmount(String(subtotal));
+    if (payType === "full") setPayAmount(String(netAmount));
     if (payType === "credit") setPayAmount("0");
-  }, [payType, subtotal]);
+  }, [payType, netAmount]);
 
   const paidAmt  = parseFloat(payAmount) || 0;
-  const change   = payType === "full" ? Math.max(0, paidAmt - subtotal) : 0;
+  const change   = payType === "full" ? Math.max(0, paidAmt - netAmount) : 0;
   // Amount actually applied toward the invoice/ledger — excess cash tendered on a
   // "full" sale is change handed back, not extra credit, so it must never be posted.
   const ledgerAmt = Math.max(0, paidAmt - change);
-  const balDue   = Math.max(0, subtotal - paidAmt);
+  const balDue   = Math.max(0, netAmount - paidAmt);
   // A "partial" payment is, by definition, less than the total — anything at or
   // above the total should go through "full" (which handles tender/change) instead.
-  const partialExceedsTotal = payType === "partial" && subtotal > 0 && paidAmt > subtotal;
+  const partialExceedsTotal = payType === "partial" && netAmount > 0 && paidAmt > netAmount;
 
   // ── Cart operations ──
 
@@ -535,6 +596,7 @@ export default function PosPage() {
     setDriverName("");
     setBilltyNo("");
     setNotes("");
+    setDiscountAmount("");
     setBankAccount("");
     setChequeNo("");
   };
@@ -550,7 +612,14 @@ export default function PosPage() {
     }
     setCompleting(true);
     try {
-      // 1. Create sale order
+      // receivedAmount is the amount actually applied toward the ledger (ledgerAmt, not
+      // paidAmt) — excess cash tendered on a "full" sale is change, never posted.
+      const received = payType !== "credit" ? ledgerAmt : 0;
+
+      // 1. Create sale order — also snapshots previousBalance/receivedAmount/paymentMode/
+      // bankAccount/chequeNo server-side (see buildSaleOrderResponse) for the receipt and
+      // any later reprint. This is a display snapshot only; step 2 below is still what
+      // actually posts to cashbook and the customer's running balance.
       const orderRes = await fetch(`${BASE}/api/sale-orders`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -561,15 +630,21 @@ export default function PosPage() {
           driverName: driverName || undefined,
           billtyNo: billtyNo || undefined,
           notes: notes || undefined,
+          discountAmount: discount || undefined,
+          receivedAmount: received || undefined,
+          paymentMode: received > 0 ? payMode : undefined,
+          bankAccount: received > 0 && payMode === "bank" ? (bankAccount || undefined) : undefined,
+          chequeNo: received > 0 && payMode === "cheque" ? (chequeNo || undefined) : undefined,
           items: cart.map(i => ({ productId: i.productId, qty: i.qty, rate: i.rate, notes: i.note || undefined })),
         }),
       });
       if (!orderRes.ok) { const e = await orderRes.json(); throw new Error(e.error ?? "Failed to create order"); }
       const order = await orderRes.json();
 
-      // 2. Record payment if not credit
-      let paymentResult = null;
-      if (payType !== "credit" && paidAmt > 0) {
+      // 2. Record payment if not credit — the actual cash receipt (cashbook entry +
+      // customer balance), independent of the order's own display snapshot above.
+      let paymentPosted = false;
+      if (received > 0) {
         const apiType = (payMode === "bank" || payMode === "cheque") ? "bank" : "cash";
         const payRes = await fetch(`${BASE}/api/payments`, {
           method: "POST", credentials: "include",
@@ -578,15 +653,13 @@ export default function PosPage() {
             customerId: customer.id,
             date,
             type: apiType,
-            amount: ledgerAmt,
+            amount: received,
             bankAccount: bankAccount || undefined,
             chequeNo: chequeNo || undefined,
             notes: notes || undefined,
           }),
         });
-        if (payRes.ok) {
-          paymentResult = { amount: ledgerAmt, change, mode: payMode };
-        }
+        paymentPosted = payRes.ok;
       }
 
       // Invalidate caches — both the POS-local raw keys and the codegen-generated keys
@@ -597,12 +670,15 @@ export default function PosPage() {
       qc.invalidateQueries({ queryKey: ["cashbook"] });
       qc.invalidateQueries({ queryKey: getListSaleOrdersQueryKey() });
       qc.invalidateQueries({ queryKey: getListCustomersQueryKey() });
-      if (paymentResult) qc.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
+      if (paymentPosted) qc.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
 
       setReceipt({
-        id: order.id, date, customerName: customer.name, customerId: customer.id,
-        items: cart, totalAmount: subtotal, payment: paymentResult,
-        vehicleNo, driverName, billtyNo,
+        id: order.id, date: order.date, customerName: order.customerName, customerId: customer.id,
+        items: order.items.map((i: any) => ({ productName: i.productName, qty: i.qty, rate: i.rate, amount: i.amount, costPrice: i.costPrice ?? null })),
+        totalAmount: order.totalAmount, discountAmount: order.discountAmount, netAmount: order.netAmount,
+        previousBalance: order.previousBalance, receivedAmount: order.receivedAmount,
+        paymentMode: order.paymentMode, bankAccount: order.bankAccount, chequeNo: order.chequeNo,
+        vehicleNo, driverName, billtyNo, change,
       });
     } catch (e: any) {
       toast({ title: "Sale failed", description: e.message, variant: "destructive" });
@@ -658,11 +734,12 @@ export default function PosPage() {
             ) : (
               <>
                 {/* Cart header */}
-                <div className="grid grid-cols-[1fr_100px_90px_110px_90px_28px] gap-2 px-4 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/10">
+                <div className={`grid ${cartGridCols} gap-2 px-4 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/10`}>
                   <span>Product</span>
                   <span className="text-right">Qty (bags)</span>
                   <span className="text-right">Previous Rate</span>
                   <span className="text-right">Rate (Rs)</span>
+                  {canSeeProfit && <span className="text-right">Cost (Rs)</span>}
                   <span className="text-right">Amount</span>
                   <span />
                 </div>
@@ -673,8 +750,9 @@ export default function PosPage() {
                     const previousRate = previousRateMap.get(item.productId);
                     const isRateOverridden = currentRateMap.get(item.productId) != null
                       && item.rate !== currentRateMap.get(item.productId);
+                    const cost = costPriceMap.get(item.productId);
                     return (
-                    <div key={item.key} className="grid grid-cols-[1fr_100px_90px_110px_90px_28px] gap-2 px-4 py-2.5 items-center hover:bg-muted/10 group">
+                    <div key={item.key} className={`grid ${cartGridCols} gap-2 px-4 py-2.5 items-center hover:bg-muted/10 group`}>
                       {/* Name */}
                       <div className="font-medium text-sm truncate">{item.productName}</div>
 
@@ -733,6 +811,13 @@ export default function PosPage() {
                         </button>
                       </div>
 
+                      {/* Cost (owner-only) */}
+                      {canSeeProfit && (
+                        <div className="text-right text-sm text-muted-foreground">
+                          {cost != null ? fmt(cost) : "—"}
+                        </div>
+                      )}
+
                       {/* Amount */}
                       <div className="text-right font-semibold text-sm">
                         {fmt(item.amount)}
@@ -770,9 +855,22 @@ export default function PosPage() {
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>{cart.length} item{cart.length !== 1 ? "s" : ""} · {fmt(totalQty)} bags</span>
                   </div>
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span className="text-primary">Rs {fmt(subtotal)}</span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>Rs {fmt(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Discount (Rs)</span>
+                    <input
+                      type="number" value={discountAmount} min="0" step="0.01"
+                      onChange={e => setDiscountAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-24 px-2 py-0.5 text-sm text-right bg-card border rounded outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div className="flex justify-between text-lg font-bold pt-1 border-t border-dashed">
+                    <span>Net Amount</span>
+                    <span className="text-primary">Rs {fmt(netAmount)}</span>
                   </div>
                   {canSeeProfit && (
                     <div className="flex justify-between text-sm font-semibold pt-1 border-t border-dashed">
@@ -904,7 +1002,7 @@ export default function PosPage() {
                     />
                     {partialExceedsTotal && (
                       <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-                        <AlertCircle size={11} /> Can't exceed total (Rs {fmt(subtotal)}) — use "Full" instead
+                        <AlertCircle size={11} /> Can't exceed total (Rs {fmt(netAmount)}) — use "Full" instead
                       </p>
                     )}
                   </div>
@@ -926,11 +1024,11 @@ export default function PosPage() {
                   )}
 
                   {/* Change / balance */}
-                  {paidAmt > 0 && subtotal > 0 && (
+                  {paidAmt > 0 && netAmount > 0 && (
                     <div className="rounded-lg bg-muted/20 px-3 py-2 space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Total</span>
-                        <span className="font-bold">Rs {fmt(subtotal)}</span>
+                        <span className="font-bold">Rs {fmt(netAmount)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Paid</span>
@@ -954,7 +1052,7 @@ export default function PosPage() {
               {payType === "credit" && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-400">
                   <AlertCircle size={12} className="inline mr-1" />
-                  Full amount (Rs {fmt(subtotal)}) will be added to customer credit
+                  Full amount (Rs {fmt(netAmount)}) will be added to customer credit
                 </div>
               )}
             </div>
@@ -972,7 +1070,7 @@ export default function PosPage() {
               ) : (
                 <>
                   <CheckCircle2 size={16} className="mr-2" />
-                  Complete Sale · Rs {fmt(subtotal)}
+                  Complete Sale · Rs {fmt(netAmount)}
                 </>
               )}
             </Button>

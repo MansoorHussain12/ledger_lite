@@ -40,8 +40,10 @@ async function fetchCustomerLastRates(
 // Explicit column widths for the item grid — shared by the header and every row so
 // they're always pixel-aligned. Product is the only flexible track; everything else
 // is sized to its content (e.g. Unit needs room for a combobox + chevron, Amount for
-// "Rs. 1,150,000" without wrapping).
+// "Rs. 1,150,000" without wrapping). The Cost track only applies when the owner-only
+// Cost column is rendered (see canSeeProfit) — never shown to non-owners or in print.
 const ITEM_GRID_COLS = "grid-cols-[minmax(160px,1fr)_80px_90px_64px_76px_110px_120px_28px]";
+const ITEM_GRID_COLS_WITH_COST = "grid-cols-[minmax(160px,1fr)_80px_90px_64px_76px_110px_90px_120px_28px]";
 
 interface LineItem {
   productId: number;
@@ -57,6 +59,10 @@ export default function SaleOrderNewPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const canSeeProfit = user?.role === "owner";
+  // Purchase/cost rate is shown alongside the sale rate for the same audience and under
+  // the same rule as Profit — informative for pricing decisions on screen, never part of
+  // the printed/customer-facing invoice.
+  const itemGridCols = canSeeProfit ? ITEM_GRID_COLS_WITH_COST : ITEM_GRID_COLS;
   const queryClient = useQueryClient();
 
   const searchParams = new URLSearchParams(window.location.search);
@@ -269,13 +275,14 @@ export default function SaleOrderNewPage() {
               col-span arithmetic across rows with a different number of cells (e.g.
               amount+delete sharing what the header treats as one column) silently
               drifts out of alignment; a shared template can't. */}
-          <div className={`grid ${ITEM_GRID_COLS} gap-2 mb-1 px-1`}>
+          <div className={`grid ${itemGridCols} gap-2 mb-1 px-1`}>
             <div className="text-xs text-muted-foreground font-medium">Product</div>
             <div className="text-xs text-muted-foreground font-medium">Qty</div>
             <div className="text-xs text-muted-foreground font-medium">Unit</div>
             <div className="text-xs text-muted-foreground font-medium text-right">Rem.</div>
             <div className="text-xs text-muted-foreground font-medium text-right">Prev.</div>
             <div className="text-xs text-muted-foreground font-medium">Rate (Rs)</div>
+            {canSeeProfit && <div className="text-xs text-muted-foreground font-medium text-right">Cost (Rs)</div>}
             <div className="text-xs text-muted-foreground font-medium text-right">Amount</div>
           </div>
 
@@ -289,8 +296,9 @@ export default function SaleOrderNewPage() {
               // flags an oversell before the order is even submitted.
               const stock = item.productId ? stockMap.get(item.productId) : undefined;
               const remainingQty = stock != null ? stock - (parseFloat(item.qty) || 0) : null;
+              const cost = item.productId ? costPriceMap.get(item.productId) : undefined;
               return (
-                <div key={idx} className={`grid ${ITEM_GRID_COLS} gap-2 items-center`}>
+                <div key={idx} className={`grid ${itemGridCols} gap-2 items-center`}>
                   <div>
                     <Combobox
                       options={products.map(p => ({ value: String(p.id), label: p.name }))}
@@ -346,6 +354,11 @@ export default function SaleOrderNewPage() {
                       className={isRateOverridden ? "border-amber-400/70" : undefined}
                     />
                   </div>
+                  {canSeeProfit && (
+                    <div className="text-right text-sm text-muted-foreground truncate" title={cost != null ? `Rs. ${formatAmount(cost)}` : undefined}>
+                      {cost != null ? formatAmount(cost) : "—"}
+                    </div>
+                  )}
                   <div className="text-right text-sm font-semibold text-muted-foreground truncate" title={amt > 0 ? `Rs. ${formatAmount(amt)}` : undefined}>
                     {amt > 0 ? `Rs. ${formatAmount(amt)}` : "—"}
                   </div>

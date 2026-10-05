@@ -153,6 +153,7 @@ export default function SaleOrderDetailPage() {
               <th className="text-left py-2 font-semibold">Product</th>
               <th className="text-right py-2 font-semibold">Qty (Bags)</th>
               <th className="text-right py-2 font-semibold">Rate</th>
+              {canSeeProfit && <th className="no-print text-right py-2 font-semibold">Cost</th>}
               <th className="text-right py-2 font-semibold">Amount</th>
             </tr>
           </thead>
@@ -167,6 +168,11 @@ export default function SaleOrderDetailPage() {
                 </td>
                 <td className="py-2.5 text-right text-muted-foreground">{item.qty}</td>
                 <td className="py-2.5 text-right text-muted-foreground">{settings.currency} {formatAmount(item.rate)}</td>
+                {canSeeProfit && (
+                  <td className="no-print py-2.5 text-right text-muted-foreground">
+                    {item.costPrice != null ? `${settings.currency} ${formatAmount(item.costPrice)}` : "—"}
+                  </td>
+                )}
                 <td className="py-2.5 text-right font-semibold">{settings.currency} {formatAmount(item.amount)}</td>
               </tr>
             ))}
@@ -174,16 +180,19 @@ export default function SaleOrderDetailPage() {
           <tfoot>
             <tr className="border-t-2 border-border">
               <td colSpan={3} className="pt-3 text-right text-muted-foreground">Subtotal:</td>
+              {canSeeProfit && <td className="no-print" />}
               <td className="pt-3 text-right">{settings.currency} {formatAmount(order.totalAmount)}</td>
             </tr>
             {order.discountAmount > 0 && (
               <tr>
                 <td colSpan={3} className="pt-1 text-right text-muted-foreground">Discount:</td>
+                {canSeeProfit && <td className="no-print" />}
                 <td className="pt-1 text-right text-emerald-600">− {settings.currency} {formatAmount(order.discountAmount)}</td>
               </tr>
             )}
             <tr className="font-bold">
               <td colSpan={3} className="pt-2 text-right">Net Amount:</td>
+              {canSeeProfit && <td className="no-print" />}
               <td className="pt-2 text-right text-red-600">{settings.currency} {formatAmount(order.netAmount)}</td>
             </tr>
           </tfoot>
