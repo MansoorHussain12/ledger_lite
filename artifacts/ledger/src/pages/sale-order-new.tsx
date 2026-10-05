@@ -167,6 +167,10 @@ export default function SaleOrderNewPage() {
           billtyNo: billtyNo || undefined,
           notes: notes || undefined,
           discountAmount: discount || undefined,
+          receivedAmount: receivedAmt || undefined,
+          paymentMode: receivedAmt > 0 ? payMode : undefined,
+          bankAccount: receivedAmt > 0 ? (bankAccount || undefined) : undefined,
+          chequeNo: receivedAmt > 0 ? (chequeNo || undefined) : undefined,
           items: validItems.map(i => ({
             productId: i.productId,
             qty: parseFloat(i.qty),

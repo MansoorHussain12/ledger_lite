@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, saleOrdersTable, saleOrderItemsTable, productsTable, customersTable } from "@workspace/db";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
+import { computeCustomerBalance } from "../lib/customerBalance";
 
 // Zod coerces date strings to JS Date objects. Format them back to YYYY-MM-DD for Postgres.
 function toDateStr(d: Date | string): string {
@@ -34,6 +35,9 @@ async function buildSaleOrderResponse(orderId: number) {
     id: order.id, customerId: order.customerId, customerName: customer?.name ?? "",
     date: order.date, vehicleNo: order.vehicleNo ?? null, driverName: order.driverName ?? null,
     billtyNo: order.billtyNo ?? null, totalAmount, discountAmount, netAmount: totalAmount - discountAmount,
+    previousBalance: order.previousBalance != null ? parseFloat(order.previousBalance) : null,
+    receivedAmount: parseFloat(order.receivedAmount ?? "0"),
+    paymentMode: order.paymentMode ?? null, bankAccount: order.bankAccount ?? null, chequeNo: order.chequeNo ?? null,
     notes: order.notes ?? null, createdAt: order.createdAt,
     items: items.map(({ item, product }) => ({
       id: item.id, productId: item.productId, productName: product?.name ?? "",
@@ -124,6 +128,9 @@ router.get("/sale-orders", requireAuth, async (req, res): Promise<void> => {
       id: o.id, customerId: o.customerId, customerName: customer?.name ?? "",
       date: o.date, vehicleNo: o.vehicleNo ?? null, driverName: o.driverName ?? null,
       billtyNo: o.billtyNo ?? null, totalAmount, discountAmount, netAmount: totalAmount - discountAmount,
+      previousBalance: o.previousBalance != null ? parseFloat(o.previousBalance) : null,
+      receivedAmount: parseFloat(o.receivedAmount ?? "0"),
+      paymentMode: o.paymentMode ?? null, bankAccount: o.bankAccount ?? null, chequeNo: o.chequeNo ?? null,
       notes: o.notes ?? null, createdAt: o.createdAt,
       items: items.map(({ item, product }) => ({
         id: item.id, productId: item.productId, productName: product?.name ?? "",
@@ -141,16 +148,25 @@ router.post("/sale-orders", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateSaleOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { customerId, date, vehicleNo, driverName, billtyNo, notes, items, discountAmount } = parsed.data;
+  const { customerId, date, vehicleNo, driverName, billtyNo, notes, items, discountAmount, receivedAmount, paymentMode, bankAccount, chequeNo } = parsed.data;
   const { resolved: resolvedItems, totalAmount } = await resolveItems(items);
 
   const discount = discountAmount ?? 0;
   const discountError = validateDiscount(discount, totalAmount);
   if (discountError) { res.status(400).json({ error: discountError }); return; }
 
+  // Snapshot the customer's balance as of right now, before this order's own total is
+  // added to it — this is what the invoice shows as "previous balance" even after later
+  // activity moves the customer's current balance.
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
+  const previousBalance = customer ? await computeCustomerBalance(customerId, customer.openingBalance) : null;
+
   const [order] = await db.insert(saleOrdersTable).values({
     customerId, date: toDateStr(date), vehicleNo: vehicleNo ?? null, driverName: driverName ?? null,
     billtyNo: billtyNo ?? null, notes: notes ?? null, totalAmount: String(totalAmount), discountAmount: String(discount),
+    previousBalance: previousBalance != null ? String(previousBalance) : null,
+    receivedAmount: String(receivedAmount ?? 0), paymentMode: paymentMode ?? null,
+    bankAccount: bankAccount ?? null, chequeNo: chequeNo ?? null,
   }).returning();
 
   for (const item of resolvedItems) {
@@ -239,6 +255,24 @@ router.post("/sale-orders/:id/correct", requireRole("owner"), async (req, res): 
 
   const originalItems = await db.select().from(saleOrderItemsTable).where(eq(saleOrderItemsTable.saleOrderId, original.id));
 
+  // Snapshot the replacement's own "previous balance" before the transaction opens
+  // (original is still 'posted' here). If it's going to the same customer, subtract the
+  // original's own net contribution — it's about to be excluded (status -> reversed) by
+  // the time the correction posts, so the correction's invoice should show the balance
+  // as of *after* that reversal, not before it.
+  let correctionPreviousBalance: number | null = null;
+  if (!isVoid) {
+    const correctedCustomerId = parsed.data.customerId!;
+    const [correctedCustomerRow] = await db.select().from(customersTable).where(eq(customersTable.id, correctedCustomerId));
+    if (correctedCustomerRow) {
+      let bal = await computeCustomerBalance(correctedCustomerId, correctedCustomerRow.openingBalance);
+      if (correctedCustomerId === original.customerId) {
+        bal -= parseFloat(original.totalAmount) - parseFloat(original.discountAmount ?? "0");
+      }
+      correctionPreviousBalance = bal;
+    }
+  }
+
   const result = await db.transaction(async (tx) => {
     // 1. Insert the reversal — a literal mirror of the original, for the paper trail.
     // Its notes carry the submitted correction reason (falling back to the original's
@@ -248,6 +282,8 @@ router.post("/sale-orders/:id/correct", requireRole("owner"), async (req, res): 
       customerId: original.customerId, date: original.date, vehicleNo: original.vehicleNo,
       driverName: original.driverName, billtyNo: original.billtyNo, notes: parsed.data.reason ?? original.notes,
       totalAmount: original.totalAmount, discountAmount: original.discountAmount, status: "reversal", reversesId: original.id,
+      previousBalance: original.previousBalance, receivedAmount: original.receivedAmount,
+      paymentMode: original.paymentMode, bankAccount: original.bankAccount, chequeNo: original.chequeNo,
     }).returning();
     for (const item of originalItems) {
       await tx.insert(saleOrderItemsTable).values({
@@ -268,6 +304,9 @@ router.post("/sale-orders/:id/correct", requireRole("owner"), async (req, res): 
         vehicleNo: parsed.data.vehicleNo ?? null, driverName: parsed.data.driverName ?? null,
         billtyNo: parsed.data.billtyNo ?? null, notes: parsed.data.notes ?? null,
         totalAmount: String(totalAmount), discountAmount: String(correctedDiscount), status: "posted", correctsId: original.id,
+        previousBalance: correctionPreviousBalance != null ? String(correctionPreviousBalance) : null,
+        receivedAmount: original.receivedAmount, paymentMode: original.paymentMode,
+        bankAccount: original.bankAccount, chequeNo: original.chequeNo,
       }).returning();
       for (const item of resolvedItems) {
         await tx.insert(saleOrderItemsTable).values({ saleOrderId: correction.id, ...item });

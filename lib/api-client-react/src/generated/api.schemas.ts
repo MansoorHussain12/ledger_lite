@@ -261,6 +261,18 @@ export interface SaleOrderItem {
   costPrice?: number | null;
 }
 
+/**
+ * @nullable
+ */
+export type SaleOrderPaymentMode = typeof SaleOrderPaymentMode[keyof typeof SaleOrderPaymentMode] | null;
+
+
+export const SaleOrderPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  cheque: 'cheque',
+} as const;
+
 export type SaleOrderStatus = typeof SaleOrderStatus[keyof typeof SaleOrderStatus];
 
 
@@ -286,6 +298,19 @@ export interface SaleOrder {
   discountAmount: number;
   /** totalAmount - discountAmount — what the customer actually owes for this order. */
   netAmount: number;
+  /**
+     * Customer's balance immediately before this order posted, snapshotted at creation time for accurate invoice reprints. Null for orders created before this field existed.
+     * @nullable
+     */
+  previousBalance?: number | null;
+  /** Amount the customer paid at the time this order was created (0 if none). Display snapshot only — the actual cash receipt is a separate posted payment. */
+  receivedAmount: number;
+  /** @nullable */
+  paymentMode?: SaleOrderPaymentMode;
+  /** @nullable */
+  bankAccount?: string | null;
+  /** @nullable */
+  chequeNo?: string | null;
   /** @nullable */
   notes?: string | null;
   createdAt: string;
@@ -304,6 +329,15 @@ export interface SaleOrderItemInput {
   notes?: string;
 }
 
+export type SaleOrderInputPaymentMode = typeof SaleOrderInputPaymentMode[keyof typeof SaleOrderInputPaymentMode];
+
+
+export const SaleOrderInputPaymentMode = {
+  cash: 'cash',
+  bank: 'bank',
+  cheque: 'cheque',
+} as const;
+
 export interface SaleOrderInput {
   customerId: number;
   date: string;
@@ -313,6 +347,11 @@ export interface SaleOrderInput {
   notes?: string;
   /** Flat discount off the order total. Must not exceed the sum of item amounts. */
   discountAmount?: number;
+  /** Amount the customer is paying now, at the time of this order, if any. Stored as a display snapshot on the order for invoice reprints — the caller must still separately create the actual payment (POST /payments) to post it to cashbook and the customer's running balance. */
+  receivedAmount?: number;
+  paymentMode?: SaleOrderInputPaymentMode;
+  bankAccount?: string;
+  chequeNo?: string;
   items: SaleOrderItemInput[];
 }
 

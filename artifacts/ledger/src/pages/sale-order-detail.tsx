@@ -39,6 +39,16 @@ export default function SaleOrderDetailPage() {
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
   if (!order) return <div className="p-8 text-center text-muted-foreground">Order not found</div>;
 
+  // Balance context is a snapshot taken when the order was created — absent (null) on
+  // orders created before this field existed, in which case this whole block is skipped
+  // rather than showing numbers reconstructed from the customer's current balance (which
+  // may have moved since, making them misleading on a reprinted invoice).
+  const hasBalanceSnapshot = order.previousBalance != null;
+  const previousBalance = order.previousBalance ?? 0;
+  const totalBalance = previousBalance + order.netAmount;
+  const remainingAmount = totalBalance - order.receivedAmount;
+  const paymentModeLabel = order.paymentMode === "bank" ? "Bank Transfer" : order.paymentMode === "cheque" ? "Cheque" : "Cash";
+
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       {/* Header */}
@@ -178,6 +188,41 @@ export default function SaleOrderDetailPage() {
             </tr>
           </tfoot>
         </table>
+
+        {hasBalanceSnapshot && (
+          <div className="mb-6 pt-3 border-t border-border text-sm space-y-1.5">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Previous Balance</span>
+              <span className="font-medium">
+                {settings.currency} {formatAmount(Math.abs(previousBalance))}{previousBalance < 0 && " (Advance)"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="font-medium">Total Balance</span>
+              <span className="font-bold">
+                {settings.currency} {formatAmount(Math.abs(totalBalance))}{totalBalance < 0 && " (Advance)"}
+              </span>
+            </div>
+            {order.receivedAmount > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">
+                  Received ({paymentModeLabel}
+                  {order.paymentMode === "bank" && order.bankAccount ? `: ${order.bankAccount}` : ""}
+                  {order.paymentMode === "cheque" && order.chequeNo ? `: ${order.chequeNo}` : ""})
+                </span>
+                <span className="font-medium text-emerald-600">
+                  − {settings.currency} {formatAmount(order.receivedAmount)}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between items-center pt-1.5 border-t border-border">
+              <span className="font-semibold">{remainingAmount < 0 ? "Advance Balance" : "Remaining Balance"}</span>
+              <span className={`font-bold text-lg ${remainingAmount < 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {settings.currency} {formatAmount(Math.abs(remainingAmount))}
+              </span>
+            </div>
+          </div>
+        )}
 
         {canSeeProfit && (
           <div className="no-print flex justify-between items-center mb-4 text-sm">

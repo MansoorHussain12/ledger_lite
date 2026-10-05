@@ -2428,7 +2428,7 @@ components:
 
     SaleOrder:
       type: object
-      required: [id, customerId, customerName, date, totalAmount, discountAmount, netAmount, createdAt, items, status]
+      required: [id, customerId, customerName, date, totalAmount, discountAmount, netAmount, receivedAmount, createdAt, items, status]
       properties:
         id:
           type: integer
@@ -2453,6 +2453,24 @@ components:
         netAmount:
           type: number
           description: totalAmount - discountAmount — what the customer actually owes for this order.
+        previousBalance:
+          type: ["number", "null"]
+          description: >
+            Customer's balance immediately before this order posted, snapshotted at
+            creation time for accurate invoice reprints. Null for orders created before
+            this field existed.
+        receivedAmount:
+          type: number
+          description: >
+            Amount the customer paid at the time this order was created (0 if none).
+            Display snapshot only — the actual cash receipt is a separate posted payment.
+        paymentMode:
+          type: ["string", "null"]
+          enum: [cash, bank, cheque, null]
+        bankAccount:
+          type: ["string", "null"]
+        chequeNo:
+          type: ["string", "null"]
         notes:
           type: ["string", "null"]
         createdAt:
@@ -2503,6 +2521,20 @@ components:
         discountAmount:
           type: number
           description: Flat discount off the order total. Must not exceed the sum of item amounts.
+        receivedAmount:
+          type: number
+          description: >
+            Amount the customer is paying now, at the time of this order, if any. Stored
+            as a display snapshot on the order for invoice reprints — the caller must
+            still separately create the actual payment (POST /payments) to post it to
+            cashbook and the customer's running balance.
+        paymentMode:
+          type: string
+          enum: [cash, bank, cheque]
+        bankAccount:
+          type: string
+        chequeNo:
+          type: string
         items:
           type: array
           items:

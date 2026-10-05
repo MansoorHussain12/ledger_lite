@@ -18,6 +18,20 @@ export const saleOrdersTable = pgTable("sale_orders", {
   // their own satellite adjustment rather than mutating the order row. Net amount owed
   // for the order is totalAmount - discountAmount.
   discountAmount: numeric("discount_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  // Invoice snapshot of the customer's balance immediately before this order posted —
+  // computed server-side at creation time (see computeCustomerBalance) and frozen from
+  // then on, so a reprinted invoice stays accurate even after later orders/payments/
+  // corrections move the customer's current balance. Null for rows created before this
+  // column existed.
+  previousBalance: numeric("previous_balance", { precision: 14, scale: 2 }),
+  // Amount the customer paid at the time this order was created, if any (optional — an
+  // unpaid order just adds to their outstanding balance). This is a display snapshot
+  // only, for reprinting the invoice later — the actual cash receipt is still a normal
+  // row in payments (and its own cashbook entry); this column doesn't post anywhere.
+  receivedAmount: numeric("received_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  paymentMode: text("payment_mode").$type<"cash" | "bank" | "cheque">(),
+  bankAccount: text("bank_account"),
+  chequeNo: text("cheque_no"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   // Correction workflow: a posted transaction is never edited or deleted in place.
