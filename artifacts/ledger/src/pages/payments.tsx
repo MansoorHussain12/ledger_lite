@@ -51,6 +51,10 @@ export default function PaymentsPage() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<PaymentForm>(defaultForm());
+  // Advance payment — cash received beyond what's owed, driving the balance negative.
+  // A settlement discount only makes sense against actual debt, so checking this just
+  // hides (and clears) those fields rather than leaving them to be silently ignored.
+  const [isAdvance, setIsAdvance] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -76,6 +80,7 @@ export default function PaymentsPage() {
 
   const openNewForm = () => {
     setForm({ ...defaultForm(), customerId: preCustomerId ? parseInt(preCustomerId) : "" });
+    setIsAdvance(false);
     setShowForm(true);
   };
 
@@ -111,6 +116,7 @@ export default function PaymentsPage() {
       queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
       setShowForm(false);
       setForm(defaultForm());
+      setIsAdvance(false);
       toast({ title: "Payment recorded" });
     } catch {
       toast({ title: "Failed to record payment", variant: "destructive" });
@@ -364,24 +370,38 @@ export default function PaymentsPage() {
                 <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required min="0.01" step="0.01" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Discount (Rs.)</Label>
-                <Input
-                  type="number" value={form.discountAmount}
-                  onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))}
-                  placeholder="0" min="0" step="0.01"
-                  max={formCustomer ? Math.max(0, formCustomer.balance) : undefined}
-                />
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox" checked={isAdvance}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setIsAdvance(checked);
+                  if (checked) setForm(f => ({ ...f, discountAmount: "", discountReason: "" }));
+                }}
+                className="h-4 w-4 rounded border-border"
+              />
+              Advance payment
+            </label>
+            {!isAdvance && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Discount (Rs.)</Label>
+                  <Input
+                    type="number" value={form.discountAmount}
+                    onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))}
+                    placeholder="0" min="0" step="0.01"
+                    max={formCustomer ? Math.max(0, formCustomer.balance) : undefined}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Discount Reason {formDiscount > 0 && "*"}</Label>
+                  <Input
+                    value={form.discountReason} onChange={e => setForm(f => ({ ...f, discountReason: e.target.value }))}
+                    placeholder="e.g. rounding, goodwill" required={formDiscount > 0}
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Discount Reason {formDiscount > 0 && "*"}</Label>
-                <Input
-                  value={form.discountReason} onChange={e => setForm(f => ({ ...f, discountReason: e.target.value }))}
-                  placeholder="e.g. rounding, goodwill" required={formDiscount > 0}
-                />
-              </div>
-            </div>
+            )}
             <div className="space-y-1.5">
               <Label>Payment Type *</Label>
               <div className="flex gap-2">

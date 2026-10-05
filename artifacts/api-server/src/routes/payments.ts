@@ -38,7 +38,8 @@ function toPaymentResponse(p: typeof paymentsTable.$inferSelect, customerName: s
 // file is not auditable later. Mirrors supplierPayments.ts's identical validatePayment.
 async function validatePayment(customerId: number, amount: number, discountAmount: number, discountReason: string | undefined | null, excludePaymentId?: number): Promise<string | null> {
   if (discountAmount < 0) return "discountAmount cannot be negative";
-  if (discountAmount > 0 && !discountReason?.trim()) return "discountReason is required when discountAmount > 0";
+  if (discountAmount === 0) return null;
+  if (!discountReason?.trim()) return "discountReason is required when discountAmount > 0";
   // computeCustomerBalance() already excludes reversed/reversal rows; when correcting a
   // payment we're about to reverse, its own old amount+discount must be added back first
   // so the check reflects the balance *after* that reversal, not before it.
