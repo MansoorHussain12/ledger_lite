@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable } from "@workspace/db";
+import { db, customersTable, saleOrdersTable, saleOrderItemsTable, paymentsTable, productsTable, supplierPaymentsTable, suppliersTable } from "@workspace/db";
 import { saleReturnsTable, saleReturnItemsTable, customerLoansTable } from "@workspace/db/schema";
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -155,6 +155,52 @@ async function getProfitBreakdownForDate(date: string) {
   return { date, totalAmount, totalProfit, hasMissingCost, customers: customersArr };
 }
 
+// Shared by /dashboard/summary (todaySupplierPayments) and
+// /dashboard/supplier-payments-breakdown, so the KPI card total and the drill-down
+// dialog's grand total can never disagree.
+async function getSupplierPaymentsBreakdownForDate(date: string) {
+  const paymentsForDate = await db.select().from(supplierPaymentsTable)
+    .where(and(eq(supplierPaymentsTable.date, date), eq(supplierPaymentsTable.status, "posted")));
+
+  const supplierIds = Array.from(new Set(paymentsForDate.map(p => p.supplierId)));
+  const suppliers = supplierIds.length
+    ? await db.select().from(suppliersTable).where(inArray(suppliersTable.id, supplierIds))
+    : [];
+  const supplierMap = new Map(suppliers.map(s => [s.id, s]));
+
+  type BreakdownPayment = {
+    id: number; paymentMode: string; amount: number; discountAmount: number; notes: string | null;
+  };
+  const bySupplier = new Map<number, {
+    supplierId: number; supplierName: string; payments: BreakdownPayment[]; subtotalAmount: number;
+  }>();
+
+  for (const p of paymentsForDate) {
+    if (!bySupplier.has(p.supplierId)) {
+      bySupplier.set(p.supplierId, {
+        supplierId: p.supplierId,
+        supplierName: supplierMap.get(p.supplierId)?.name ?? "",
+        payments: [], subtotalAmount: 0,
+      });
+    }
+    const bucket = bySupplier.get(p.supplierId)!;
+    const amount = parseFloat(p.amount);
+    bucket.payments.push({
+      id: p.id, paymentMode: p.paymentMode, amount: round2(amount),
+      discountAmount: round2(parseFloat(p.discountAmount ?? "0")), notes: p.notes ?? null,
+    });
+    bucket.subtotalAmount += amount;
+  }
+
+  const suppliersArr = Array.from(bySupplier.values())
+    .map(s => ({ ...s, subtotalAmount: round2(s.subtotalAmount) }))
+    .sort((a, b) => b.subtotalAmount - a.subtotalAmount);
+
+  const totalAmount = round2(suppliersArr.reduce((s, x) => s + x.subtotalAmount, 0));
+
+  return { date, totalAmount, suppliers: suppliersArr };
+}
+
 router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> => {
   const today = new Date().toISOString().split("T")[0];
 
@@ -171,6 +217,7 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
   const todayCollections = await db.select({ total: sql<number>`coalesce(sum(${paymentsTable.amount}),0)` }).from(paymentsTable).where(and(eq(paymentsTable.date, today), eq(paymentsTable.status, "posted")));
   const todaySales = await db.select({ total: sql<number>`coalesce(sum(${saleOrdersTable.totalAmount}),0)` }).from(saleOrdersTable).where(and(eq(saleOrdersTable.date, today), eq(saleOrdersTable.status, "posted")));
   const todayProfit = (await getProfitBreakdownForDate(today)).totalProfit;
+  const todaySupplierPayments = (await getSupplierPaymentsBreakdownForDate(today)).totalAmount;
 
   const activeProducts = await db.select({ count: sql<number>`count(*)` }).from(productsTable);
 
@@ -179,6 +226,7 @@ router.get("/dashboard/summary", requireAuth, async (_req, res): Promise<void> =
     todayCollections: parseFloat(String(todayCollections[0]?.total ?? 0)),
     todaySales: parseFloat(String(todaySales[0]?.total ?? 0)),
     todayProfit,
+    todaySupplierPayments,
     totalCustomers: customers.length,
     activeProducts: parseInt(String(activeProducts[0]?.count ?? 0)),
   });
@@ -191,6 +239,15 @@ router.get("/dashboard/profit-breakdown", requireAuth, async (req, res): Promise
   const date = parsed.data.date ?? new Date().toISOString().split("T")[0];
 
   res.json(await getProfitBreakdownForDate(date));
+});
+
+router.get("/dashboard/supplier-payments-breakdown", requireAuth, async (req, res): Promise<void> => {
+  const Query = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
+  const parsed = Query.safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const date = parsed.data.date ?? new Date().toISOString().split("T")[0];
+
+  res.json(await getSupplierPaymentsBreakdownForDate(date));
 });
 
 router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<void> => {
@@ -207,8 +264,9 @@ router.get("/dashboard/top-debtors", requireAuth, async (_req, res): Promise<voi
 router.get("/dashboard/recent-activity", requireAuth, async (_req, res): Promise<void> => {
   const recentOrders = await db.select().from(saleOrdersTable).where(eq(saleOrdersTable.status, "posted")).orderBy(desc(saleOrdersTable.createdAt)).limit(10);
   const recentPayments = await db.select().from(paymentsTable).where(eq(paymentsTable.status, "posted")).orderBy(desc(paymentsTable.createdAt)).limit(10);
+  const recentSupplierPayments = await db.select().from(supplierPaymentsTable).where(eq(supplierPaymentsTable.status, "posted")).orderBy(desc(supplierPaymentsTable.createdAt)).limit(10);
 
-  const activity: Array<{ id: number; type: string; date: string; customerId: number; customerName: string; amount: number; description: string }> = [];
+  const activity: Array<{ id: number; type: string; date: string; customerId?: number; customerName?: string; supplierId?: number; supplierName?: string; amount: number; description: string }> = [];
 
   for (const o of recentOrders) {
     const [c] = await db.select().from(customersTable).where(eq(customersTable.id, o.customerId));
@@ -217,6 +275,10 @@ router.get("/dashboard/recent-activity", requireAuth, async (_req, res): Promise
   for (const p of recentPayments) {
     const [c] = await db.select().from(customersTable).where(eq(customersTable.id, p.customerId));
     activity.push({ id: p.id, type: "payment", date: p.date, customerId: p.customerId, customerName: c?.name ?? "", amount: parseFloat(p.amount), description: `${p.type === "cash" ? "Cash" : "Bank"} Payment` });
+  }
+  for (const sp of recentSupplierPayments) {
+    const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, sp.supplierId));
+    activity.push({ id: sp.id, type: "supplier_payment", date: sp.date, supplierId: sp.supplierId, supplierName: s?.name ?? "", amount: parseFloat(sp.amount), description: `${sp.paymentMode === "cash" ? "Cash" : sp.paymentMode === "bank" ? "Bank" : sp.paymentMode} Payment to Supplier` });
   }
 
   activity.sort((a, b) => b.date.localeCompare(a.date));

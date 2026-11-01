@@ -5,10 +5,11 @@ import {
   useGetTopDebtors, getGetTopDebtorsQueryKey,
   useGetRecentActivity, getGetRecentActivityQueryKey,
   useGetProfitBreakdown, getGetProfitBreakdownQueryKey,
+  useGetSupplierPaymentsBreakdown, getGetSupplierPaymentsBreakdownQueryKey,
 } from "@workspace/api-client-react";
 import { formatAmount, formatDate } from "@/lib/format";
 import {
-  TrendingUp, TrendingDown, Users, ShoppingCart, CreditCard,
+  TrendingUp, TrendingDown, Users, ShoppingCart, CreditCard, Truck,
   ArrowRight, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 export default function DashboardPage() {
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showSupplierPaymentsBreakdown, setShowSupplierPaymentsBreakdown] = useState(false);
 
   const { data: summary, isLoading: sumLoading } = useGetDashboardSummary({
     query: { queryKey: getGetDashboardSummaryQueryKey() }
@@ -41,7 +43,7 @@ export default function DashboardPage() {
       icon: TrendingUp,
       color: "text-red-500",
       bg: "bg-red-50",
-      clickable: false,
+      onClick: undefined,
     },
     {
       label: "Today's Collections",
@@ -49,7 +51,7 @@ export default function DashboardPage() {
       icon: CreditCard,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
-      clickable: false,
+      onClick: undefined,
     },
     {
       label: "Today's Sales",
@@ -57,7 +59,7 @@ export default function DashboardPage() {
       icon: ShoppingCart,
       color: "text-blue-600",
       bg: "bg-blue-50",
-      clickable: true,
+      onClick: () => setShowBreakdown(true),
     },
     {
       label: "Today's Profit",
@@ -65,7 +67,15 @@ export default function DashboardPage() {
       icon: profitPositive ? TrendingUp : TrendingDown,
       color: profitPositive ? "text-emerald-600" : "text-red-500",
       bg: profitPositive ? "bg-emerald-50" : "bg-red-50",
-      clickable: true,
+      onClick: () => setShowBreakdown(true),
+    },
+    {
+      label: "Today's Supplier Payments",
+      value: `Rs. ${formatAmount(summary?.todaySupplierPayments ?? 0)}`,
+      icon: Truck,
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+      onClick: () => setShowSupplierPaymentsBreakdown(true),
     },
     {
       label: "Total Customers",
@@ -73,7 +83,7 @@ export default function DashboardPage() {
       icon: Users,
       color: "text-purple-600",
       bg: "bg-purple-50",
-      clickable: false,
+      onClick: undefined,
     },
   ];
 
@@ -85,14 +95,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         {statCards.map((card) => (
           <div
             key={card.label}
-            onClick={card.clickable ? () => setShowBreakdown(true) : undefined}
+            onClick={card.onClick}
             className={cn(
               "bg-card border border-card-border rounded-xl p-4 shadow-xs",
-              card.clickable && "cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
+              card.onClick && "cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
             )}
           >
             <div className="flex items-center justify-between mb-3">
@@ -103,13 +113,14 @@ export default function DashboardPage() {
             </div>
             <div className={cn("text-xl font-bold flex items-center gap-1", sumLoading ? "text-muted-foreground" : "text-foreground")}>
               {sumLoading ? "..." : card.value}
-              {card.clickable && !sumLoading && <ArrowRight size={13} className="text-muted-foreground/50" />}
+              {card.onClick && !sumLoading && <ArrowRight size={13} className="text-muted-foreground/50" />}
             </div>
           </div>
         ))}
       </div>
 
       <ProfitBreakdownDialog open={showBreakdown} onOpenChange={setShowBreakdown} />
+      <SupplierPaymentsBreakdownDialog open={showSupplierPaymentsBreakdown} onOpenChange={setShowSupplierPaymentsBreakdown} />
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Top Debtors */}
@@ -150,19 +161,28 @@ export default function DashboardPage() {
               <div className="px-5 py-8 text-center text-muted-foreground text-sm">No recent activity</div>
             )}
             {activity?.slice(0, 10).map((item, i) => (
-              <Link key={`${item.type}-${item.id}-${i}`} href={item.type === "sale" ? `/sale-orders/${item.id}` : `/payments`}>
+              <Link key={`${item.type}-${item.id}-${i}`} href={
+                item.type === "sale" ? `/sale-orders/${item.id}`
+                  : item.type === "supplier_payment" ? "/supplier-payments"
+                    : "/payments"
+              }>
                 <div className="px-5 py-3 flex items-center gap-3 hover:bg-muted/30 cursor-pointer transition-colors">
                   <div className={cn(
                     "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold",
-                    item.type === "sale" ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600"
+                    item.type === "sale" ? "bg-blue-100 text-blue-600"
+                      : item.type === "supplier_payment" ? "bg-amber-100 text-amber-600"
+                        : "bg-emerald-100 text-emerald-600"
                   )}>
-                    {item.type === "sale" ? "S" : "P"}
+                    {item.type === "sale" ? "S" : item.type === "supplier_payment" ? "SP" : "P"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{item.customerName}</div>
+                    <div className="text-sm font-medium truncate">{item.customerName ?? item.supplierName}</div>
                     <div className="text-xs text-muted-foreground">{item.description} · {formatDate(item.date)}</div>
                   </div>
-                  <div className={cn("text-sm font-semibold", item.type === "sale" ? "text-red-600" : "text-emerald-600")}>
+                  <div className={cn(
+                    "text-sm font-semibold",
+                    item.type === "sale" ? "text-red-600" : item.type === "supplier_payment" ? "text-amber-600" : "text-emerald-600"
+                  )}>
                     {item.type === "sale" ? "+" : "-"}Rs. {formatAmount(item.amount)}
                   </div>
                 </div>
@@ -267,6 +287,86 @@ function ProfitBreakdownDialog({
               <Link href="/reports">
                 <span className="text-xs text-primary flex items-center justify-end gap-1 hover:underline cursor-pointer">
                   View full report <ArrowRight size={12} />
+                </span>
+              </Link>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Today's Supplier Payments drill-down ────────────────────────────────────
+
+function SupplierPaymentsBreakdownDialog({
+  open, onOpenChange,
+}: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const params = { date: todayStr() };
+  const { data, isLoading } = useGetSupplierPaymentsBreakdown(params, {
+    query: { queryKey: getGetSupplierPaymentsBreakdownQueryKey(params), enabled: open },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between pr-6">
+            <span>Today's Supplier Payments</span>
+            {data && <span className="text-sm font-normal text-muted-foreground">{formatDate(data.date)}</span>}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading && <div className="text-center py-12 text-muted-foreground text-sm">Calculating…</div>}
+
+        {!isLoading && data && (
+          <div className="space-y-4">
+            {data.suppliers.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground text-sm">No supplier payments today yet</div>
+            )}
+
+            {data.suppliers.map((s) => (
+              <div key={s.supplierId} className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold">{s.supplierName}</h3>
+                  <div className="text-xs font-semibold text-amber-600">Rs. {formatAmount(s.subtotalAmount)}</div>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-muted-foreground">
+                      <th className="pb-1.5 text-left font-semibold">Mode</th>
+                      <th className="pb-1.5 text-left font-semibold pl-4">Notes</th>
+                      <th className="pb-1.5 text-right font-semibold pl-4">Discount</th>
+                      <th className="pb-1.5 text-right font-semibold pl-4">Amount (Rs.)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {s.payments.map((p) => (
+                      <tr key={p.id} className="hover:bg-muted/20">
+                        <td className="py-1.5 font-medium capitalize">{p.paymentMode}</td>
+                        <td className="py-1.5 pl-4 text-muted-foreground text-xs">{p.notes ?? "—"}</td>
+                        <td className="py-1.5 pl-4 text-right text-muted-foreground">
+                          {p.discountAmount > 0 ? `Rs. ${formatAmount(p.discountAmount)}` : "—"}
+                        </td>
+                        <td className="py-1.5 pl-4 text-right font-bold">{formatAmount(p.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+
+            {data.suppliers.length > 0 && (
+              <div className="rounded-xl border border-border bg-muted/10 px-4 py-3 flex items-center justify-between font-bold text-sm">
+                <span>Total</span>
+                <span>Rs. {formatAmount(data.totalAmount)}</span>
+              </div>
+            )}
+
+            <div className="text-right">
+              <Link href="/supplier-payments">
+                <span className="text-xs text-primary flex items-center justify-end gap-1 hover:underline cursor-pointer">
+                  View all supplier payments <ArrowRight size={12} />
                 </span>
               </Link>
             </div>

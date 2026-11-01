@@ -1549,6 +1549,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "todayCollections": zod.number(),
   "todaySales": zod.number(),
   "todayProfit": zod.number(),
+  "todaySupplierPayments": zod.number(),
   "totalCustomers": zod.number(),
   "activeProducts": zod.number()
 })
@@ -1585,6 +1586,31 @@ export const GetProfitBreakdownResponse = zod.object({
 
 
 /**
+ * @summary Supplier-wise payment breakdown for a single day (defaults to today)
+ */
+export const GetSupplierPaymentsBreakdownQueryParams = zod.object({
+  "date": zod.date().optional()
+})
+
+export const GetSupplierPaymentsBreakdownResponse = zod.object({
+  "date": zod.coerce.date(),
+  "totalAmount": zod.number(),
+  "suppliers": zod.array(zod.object({
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "payments": zod.array(zod.object({
+  "id": zod.number(),
+  "paymentMode": zod.string(),
+  "amount": zod.number(),
+  "discountAmount": zod.number(),
+  "notes": zod.string().nullable()
+})),
+  "subtotalAmount": zod.number()
+}))
+})
+
+
+/**
  * @summary Top debtors list
  */
 export const GetTopDebtorsResponseItem = zod.object({
@@ -1601,10 +1627,12 @@ export const GetTopDebtorsResponse = zod.array(GetTopDebtorsResponseItem)
  */
 export const GetRecentActivityResponseItem = zod.object({
   "id": zod.number(),
-  "type": zod.enum(['sale', 'payment']),
+  "type": zod.enum(['sale', 'payment', 'supplier_payment']),
   "date": zod.coerce.date(),
   "customerId": zod.number().optional(),
-  "customerName": zod.string(),
+  "customerName": zod.string().optional(),
+  "supplierId": zod.number().optional(),
+  "supplierName": zod.string().optional(),
   "amount": zod.number(),
   "description": zod.string()
 })

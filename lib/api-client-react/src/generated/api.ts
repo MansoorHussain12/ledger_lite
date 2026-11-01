@@ -54,6 +54,7 @@ import type {
   GetMonthlySalesReportParams,
   GetProfitBreakdownParams,
   GetSupplierLedgerParams,
+  GetSupplierPaymentsBreakdownParams,
   HealthStatus,
   InstallmentPaymentCorrectionInput,
   InstallmentPaymentInput,
@@ -116,6 +117,7 @@ import type {
   SupplierPaymentCorrectionInput,
   SupplierPaymentCorrectionResult,
   SupplierPaymentInput,
+  SupplierPaymentsBreakdown,
   SupplierRow,
   SupplierStatement,
   UpdateInventorySettingsResponse,
@@ -3881,6 +3883,90 @@ export function useGetProfitBreakdown<TData = Awaited<ReturnType<typeof getProfi
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetProfitBreakdownQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSupplierPaymentsBreakdownUrl = (params?: GetSupplierPaymentsBreakdownParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/supplier-payments-breakdown?${stringifiedParams}` : `/api/dashboard/supplier-payments-breakdown`
+}
+
+/**
+ * @summary Supplier-wise payment breakdown for a single day (defaults to today)
+ */
+export const getSupplierPaymentsBreakdown = async (params?: GetSupplierPaymentsBreakdownParams, options?: RequestInit): Promise<SupplierPaymentsBreakdown> => {
+
+  return customFetch<SupplierPaymentsBreakdown>(getGetSupplierPaymentsBreakdownUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierPaymentsBreakdownQueryKey = (params?: GetSupplierPaymentsBreakdownParams,) => {
+    return [
+    `/api/dashboard/supplier-payments-breakdown`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetSupplierPaymentsBreakdownQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierPaymentsBreakdown>>, TError = ErrorType<unknown>>(params?: GetSupplierPaymentsBreakdownParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierPaymentsBreakdown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierPaymentsBreakdownQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierPaymentsBreakdown>>> = ({ signal }) => getSupplierPaymentsBreakdown(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierPaymentsBreakdown>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierPaymentsBreakdownQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierPaymentsBreakdown>>>
+export type GetSupplierPaymentsBreakdownQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Supplier-wise payment breakdown for a single day (defaults to today)
+ */
+
+export function useGetSupplierPaymentsBreakdown<TData = Awaited<ReturnType<typeof getSupplierPaymentsBreakdown>>, TError = ErrorType<unknown>>(
+ params?: GetSupplierPaymentsBreakdownParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierPaymentsBreakdown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierPaymentsBreakdownQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -914,6 +914,7 @@ export interface DashboardSummary {
   todayCollections: number;
   todaySales: number;
   todayProfit: number;
+  todaySupplierPayments: number;
   totalCustomers: number;
   activeProducts: number;
 }
@@ -946,6 +947,28 @@ export interface ProfitBreakdown {
   customers: ProfitBreakdownCustomer[];
 }
 
+export interface SupplierPaymentsBreakdownPayment {
+  id: number;
+  paymentMode: string;
+  amount: number;
+  discountAmount: number;
+  /** @nullable */
+  notes: string | null;
+}
+
+export interface SupplierPaymentsBreakdownSupplier {
+  supplierId: number;
+  supplierName: string;
+  payments: SupplierPaymentsBreakdownPayment[];
+  subtotalAmount: number;
+}
+
+export interface SupplierPaymentsBreakdown {
+  date: string;
+  totalAmount: number;
+  suppliers: SupplierPaymentsBreakdownSupplier[];
+}
+
 export interface DebtorRow {
   customerId: number;
   customerName: string;
@@ -960,6 +983,7 @@ export type ActivityItemType = typeof ActivityItemType[keyof typeof ActivityItem
 export const ActivityItemType = {
   sale: 'sale',
   payment: 'payment',
+  supplier_payment: 'supplier_payment',
 } as const;
 
 export interface ActivityItem {
@@ -967,7 +991,9 @@ export interface ActivityItem {
   type: ActivityItemType;
   date: string;
   customerId?: number;
-  customerName: string;
+  customerName?: string;
+  supplierId?: number;
+  supplierName?: string;
   amount: number;
   description: string;
 }
@@ -2080,6 +2106,10 @@ category?: string;
 };
 
 export type GetProfitBreakdownParams = {
+date?: string;
+};
+
+export type GetSupplierPaymentsBreakdownParams = {
 date?: string;
 };
 
