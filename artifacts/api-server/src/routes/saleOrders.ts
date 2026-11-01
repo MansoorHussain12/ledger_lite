@@ -58,8 +58,13 @@ function validateDiscount(discountAmount: number, totalAmount: number): string |
 }
 
 // Shared by POST /sale-orders and the reversal-and-replace step of /correct — resolves
-// each line item's rate/cost-price snapshot and the order's total.
-async function resolveItems(items: { productId: number; qty: number; rate?: number; notes?: string }[]) {
+// each line item's rate/cost-price snapshot and the order's total. isOwner gates the
+// per-item costPrice override (see SaleOrderItemInput) — a non-owner's request can't
+// touch the snapshot even if it sends one, since cost/profit editing is owner-only.
+async function resolveItems(
+  items: { productId: number; qty: number; rate?: number; notes?: string; costPrice?: number }[],
+  isOwner: boolean
+) {
   let totalAmount = 0;
   const resolved = await Promise.all(items.map(async (item) => {
     const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
@@ -67,8 +72,9 @@ async function resolveItems(items: { productId: number; qty: number; rate?: numb
     const amount = parseFloat(String(item.qty)) * rate;
     totalAmount += amount;
     // Snapshot the product's cost price at sale time — frozen from here on, even if
-    // the product's cost price changes later (see costPrice column comment).
-    const costPrice = product?.costPrice ?? null;
+    // the product's cost price changes later (see costPrice column comment). An
+    // owner-supplied override takes precedence over the product's live cost.
+    const costPrice = isOwner && item.costPrice != null ? String(item.costPrice) : product?.costPrice ?? null;
     return { productId: item.productId, qty: String(item.qty), rate: String(rate), amount: String(amount), notes: item.notes ?? null, costPrice };
   }));
   return { resolved, totalAmount };
@@ -149,7 +155,8 @@ router.post("/sale-orders", requireAuth, async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { customerId, date, vehicleNo, driverName, billtyNo, notes, items, discountAmount, receivedAmount, paymentMode, bankAccount, chequeNo } = parsed.data;
-  const { resolved: resolvedItems, totalAmount } = await resolveItems(items);
+  const isOwner = req.session.userRole === "owner";
+  const { resolved: resolvedItems, totalAmount } = await resolveItems(items, isOwner);
 
   const discount = discountAmount ?? 0;
   const discountError = validateDiscount(discount, totalAmount);
@@ -247,7 +254,8 @@ router.post("/sale-orders/:id/correct", requireRole("owner"), async (req, res): 
   let correctedItems: Awaited<ReturnType<typeof resolveItems>> | null = null;
   let correctedDiscount = 0;
   if (!isVoid) {
-    correctedItems = await resolveItems(parsed.data.items!);
+    // This route is already requireRole("owner") — always safe to honor a costPrice override here.
+    correctedItems = await resolveItems(parsed.data.items!, true);
     correctedDiscount = parsed.data.discountAmount ?? 0;
     const discountError = validateDiscount(correctedDiscount, correctedItems.totalAmount);
     if (discountError) { res.status(400).json({ error: discountError }); return; }

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Pencil, X } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -43,7 +43,7 @@ async function fetchCustomerLastRates(
 // "Rs. 1,150,000" without wrapping). The Cost track only applies when the owner-only
 // Cost column is rendered (see canSeeProfit) — never shown to non-owners or in print.
 const ITEM_GRID_COLS = "grid-cols-[minmax(160px,1fr)_80px_90px_64px_76px_110px_120px_28px]";
-const ITEM_GRID_COLS_WITH_COST = "grid-cols-[minmax(160px,1fr)_80px_90px_64px_76px_110px_90px_120px_28px]";
+const ITEM_GRID_COLS_WITH_COST = "grid-cols-[minmax(160px,1fr)_80px_90px_64px_76px_110px_104px_120px_28px]";
 
 interface LineItem {
   productId: number;
@@ -52,6 +52,12 @@ interface LineItem {
   rate: string;
   unit: string;
   notes: string;
+  // Owner-only override of the product's cost price for this line (see
+  // SaleOrderItemInput.costPrice) — empty means "use the product's current cost price",
+  // same as before this existed. costEditing just controls whether the Cost cell shows
+  // an editable input or the usual read-only value with an edit affordance.
+  costPrice: string;
+  costEditing: boolean;
 }
 
 export default function SaleOrderNewPage() {
@@ -75,7 +81,7 @@ export default function SaleOrderNewPage() {
   const [billtyNo, setBilltyNo] = useState("");
   const [notes, setNotes] = useState("");
   const [discountAmount, setDiscountAmount] = useState("");
-  const [items, setItems] = useState<LineItem[]>([{ productId: 0, productName: "", qty: "", rate: "", unit: "", notes: "" }]);
+  const [items, setItems] = useState<LineItem[]>([{ productId: 0, productName: "", qty: "", rate: "", unit: "", notes: "", costPrice: "", costEditing: false }]);
   // Amount the customer is paying now, at the time of this sale order (optional — an
   // unpaid order is just added to their outstanding balance, same as before this field existed).
   const [receivedAmount, setReceivedAmount] = useState("");
@@ -113,12 +119,12 @@ export default function SaleOrderNewPage() {
     const product = products.find(p => p.id === productId);
     setItems(prev => prev.map((item, i) =>
       i === idx
-        ? { ...item, productId, productName: product?.name ?? "", rate: product ? String(product.currentRate) : "", unit: product?.unit ?? "" }
+        ? { ...item, productId, productName: product?.name ?? "", rate: product ? String(product.currentRate) : "", unit: product?.unit ?? "", costPrice: "", costEditing: false }
         : item
     ));
   };
 
-  const addLine = () => setItems(prev => [...prev, { productId: 0, productName: "", qty: "", rate: "", unit: "", notes: "" }]);
+  const addLine = () => setItems(prev => [...prev, { productId: 0, productName: "", qty: "", rate: "", unit: "", notes: "", costPrice: "", costEditing: false }]);
   const removeLine = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
 
   const totalAmount = items.reduce((s, item) => {
@@ -148,7 +154,7 @@ export default function SaleOrderNewPage() {
       const qty = parseFloat(item.qty) || 0;
       const rate = parseFloat(item.rate) || 0;
       if (!item.productId || qty <= 0) continue;
-      const cost = costPriceMap.get(item.productId);
+      const cost = item.costPrice !== "" ? parseFloat(item.costPrice) : costPriceMap.get(item.productId);
       if (cost == null) { missingCost = true; continue; }
       profit += (rate - cost) * qty;
     }
@@ -182,6 +188,7 @@ export default function SaleOrderNewPage() {
             qty: parseFloat(i.qty),
             rate: parseFloat(i.rate) || undefined,
             notes: i.notes || undefined,
+            costPrice: i.costPrice !== "" ? parseFloat(i.costPrice) : undefined,
           })),
         }
       });
@@ -296,7 +303,9 @@ export default function SaleOrderNewPage() {
               // flags an oversell before the order is even submitted.
               const stock = item.productId ? stockMap.get(item.productId) : undefined;
               const remainingQty = stock != null ? stock - (parseFloat(item.qty) || 0) : null;
-              const cost = item.productId ? costPriceMap.get(item.productId) : undefined;
+              const defaultCost = item.productId ? costPriceMap.get(item.productId) : undefined;
+              const isCostOverridden = item.costPrice !== "";
+              const cost = isCostOverridden ? parseFloat(item.costPrice) : defaultCost;
               return (
                 <div key={idx} className={`grid ${itemGridCols} gap-2 items-center`}>
                   <div>
@@ -355,8 +364,48 @@ export default function SaleOrderNewPage() {
                     />
                   </div>
                   {canSeeProfit && (
-                    <div className="text-right text-sm text-muted-foreground truncate" title={cost != null ? `Rs. ${formatAmount(cost)}` : undefined}>
-                      {cost != null ? formatAmount(cost) : "—"}
+                    <div className="flex items-center justify-end gap-1">
+                      {item.costEditing ? (
+                        <>
+                          <Input
+                            type="number"
+                            value={item.costPrice}
+                            onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, costPrice: e.target.value } : it))}
+                            placeholder={defaultCost != null ? formatAmount(defaultCost) : "Cost"}
+                            min="0"
+                            step="0.01"
+                            autoFocus
+                            className={`h-8 px-1.5 text-xs text-right ${isCostOverridden ? "border-amber-400/70" : ""}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setItems(prev => prev.map((it, i) => i === idx ? { ...it, costEditing: false, costPrice: "" } : it))}
+                            className="p-0.5 text-muted-foreground hover:text-destructive shrink-0"
+                            title="Cancel override"
+                          >
+                            <X size={12} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span
+                            className={`text-sm truncate ${isCostOverridden ? "text-amber-600 font-medium" : "text-muted-foreground"}`}
+                            title={cost != null ? `Rs. ${formatAmount(cost)}` : undefined}
+                          >
+                            {cost != null ? formatAmount(cost) : "—"}
+                          </span>
+                          {item.productId > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setItems(prev => prev.map((it, i) => i === idx ? { ...it, costEditing: true } : it))}
+                              className="p-0.5 text-muted-foreground hover:text-primary shrink-0"
+                              title="Override cost rate for this line"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                   <div className="text-right text-sm font-semibold text-muted-foreground truncate" title={amt > 0 ? `Rs. ${formatAmount(amt)}` : undefined}>

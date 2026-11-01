@@ -327,6 +327,8 @@ export interface SaleOrderItemInput {
   qty: number;
   rate?: number;
   notes?: string;
+  /** Owner-only override of the product's cost price for this line, snapshotted on the item instead of the product's live cost. Omit to use the product's current cost price as usual. */
+  costPrice?: number;
 }
 
 export type SaleOrderInputPaymentMode = typeof SaleOrderInputPaymentMode[keyof typeof SaleOrderInputPaymentMode];

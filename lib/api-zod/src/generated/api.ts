@@ -482,7 +482,8 @@ export const CreateSaleOrderBody = zod.object({
   "productId": zod.number(),
   "qty": zod.number(),
   "rate": zod.number().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "costPrice": zod.number().optional().describe('Owner-only override of the product\'s cost price for this line, snapshotted on the item instead of the product\'s live cost. Omit to use the product\'s current cost price as usual.\n')
 }))
 })
 
@@ -583,7 +584,8 @@ export const CorrectSaleOrderBody = zod.object({
   "productId": zod.number(),
   "qty": zod.number(),
   "rate": zod.number().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "costPrice": zod.number().optional().describe('Owner-only override of the product\'s cost price for this line, snapshotted on the item instead of the product\'s live cost. Omit to use the product\'s current cost price as usual.\n')
 })).optional()
 }).describe('Either set void=true to reverse the original with no replacement, or omit it and supply the corrected data (same shape as SaleOrderInput) to reverse-and-replace.\n')
 

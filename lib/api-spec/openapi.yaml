@@ -2520,6 +2520,12 @@ components:
           type: number
         notes:
           type: string
+        costPrice:
+          type: number
+          description: >
+            Owner-only override of the product's cost price for this line, snapshotted
+            on the item instead of the product's live cost. Omit to use the product's
+            current cost price as usual.
 
     SaleOrderInput:
       type: object
