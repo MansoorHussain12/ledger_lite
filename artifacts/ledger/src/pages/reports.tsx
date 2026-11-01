@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   useGetAgingReport, getGetAgingReportQueryKey,
@@ -7,6 +7,7 @@ import {
   useGetOutstandingReport, getGetOutstandingReportQueryKey,
   useGetDailyProfitReport, getGetDailyProfitReportQueryKey,
 } from "@workspace/api-client-react";
+import type { OutstandingRow } from "@workspace/api-client-react";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import {
@@ -59,6 +60,30 @@ function SummaryCard({
       <div className={cn("text-xl font-bold", color)}>{value}</div>
       {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
     </div>
+  );
+}
+
+type OutstandingSortKey = "customerName" | "balance" | "creditLimit" | "lastSaleDate" | "lastPaymentDate";
+
+function SortableHeader({
+  label, sortKey, active, dir, align = "right", onSort,
+}: {
+  label: string; sortKey: OutstandingSortKey; active: boolean; dir: "asc" | "desc";
+  align?: "left" | "right"; onSort: (key: OutstandingSortKey) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={cn(
+        "inline-flex items-center gap-0.5 font-medium transition-colors",
+        align === "right" ? "justify-end w-full" : "",
+        active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {label}
+      {active ? (dir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
+    </button>
   );
 }
 
@@ -406,6 +431,47 @@ export default function ReportsPage() {
   );
   const { data: outstanding = [] } = useGetOutstandingReport({ query: { queryKey: getGetOutstandingReportQueryKey() } });
 
+  const [outstandingSearch, setOutstandingSearch] = useState("");
+  const [outstandingArea, setOutstandingArea] = useState<string>("all");
+  const [outstandingOverLimitOnly, setOutstandingOverLimitOnly] = useState(false);
+  const [outstandingSort, setOutstandingSort] = useState<{ key: OutstandingSortKey; dir: "asc" | "desc" }>({ key: "balance", dir: "desc" });
+
+  const outstandingAreas = useMemo(
+    () => Array.from(new Set(outstanding.map(r => r.area).filter((a): a is string => !!a))).sort(),
+    [outstanding]
+  );
+
+  const toggleOutstandingSort = (key: OutstandingSortKey) => {
+    setOutstandingSort(prev => prev.key === key
+      ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+      : { key, dir: key === "customerName" ? "asc" : "desc" });
+  };
+
+  const filteredOutstanding = useMemo(() => {
+    let rows: OutstandingRow[] = outstanding;
+    if (outstandingOverLimitOnly) rows = rows.filter(r => r.isOverLimit);
+    if (outstandingArea !== "all") rows = rows.filter(r => r.area === outstandingArea);
+    const q = outstandingSearch.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter(r =>
+        r.customerName.toLowerCase().includes(q) ||
+        (r.contact ?? "").toLowerCase().includes(q) ||
+        (r.area ?? "").toLowerCase().includes(q)
+      );
+    }
+    const { key, dir } = outstandingSort;
+    const sign = dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      switch (key) {
+        case "customerName": return sign * a.customerName.localeCompare(b.customerName);
+        case "balance": return sign * (a.balance - b.balance);
+        case "creditLimit": return sign * ((a.creditLimit ?? -Infinity) - (b.creditLimit ?? -Infinity));
+        case "lastSaleDate": return sign * (a.lastSaleDate ?? "").localeCompare(b.lastSaleDate ?? "");
+        case "lastPaymentDate": return sign * (a.lastPaymentDate ?? "").localeCompare(b.lastPaymentDate ?? "");
+      }
+    });
+  }, [outstanding, outstandingOverLimitOnly, outstandingArea, outstandingSearch, outstandingSort]);
+
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="mb-5">
@@ -583,23 +649,79 @@ export default function ReportsPage() {
       {/* ── Outstanding ── */}
       {activeTab === "Outstanding" && (
         <div>
+          {/* Search + filters */}
+          <div className="flex flex-wrap items-end gap-3 mb-4">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Search</label>
+              <Input
+                value={outstandingSearch}
+                onChange={e => setOutstandingSearch(e.target.value)}
+                placeholder="Name, phone, or area…"
+                className="w-56 h-9 text-sm"
+              />
+            </div>
+            {outstandingAreas.length > 0 && (
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Area</label>
+                <Select value={outstandingArea} onValueChange={setOutstandingArea}>
+                  <SelectTrigger className="w-40 h-9 text-sm">
+                    <SelectValue placeholder="All Areas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Areas</SelectItem>
+                    {outstandingAreas.map(a => (
+                      <SelectItem key={a} value={a}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setOutstandingOverLimitOnly(v => !v)}
+              className={cn(
+                "h-9 text-xs px-3 rounded-md border transition-colors",
+                outstandingOverLimitOnly
+                  ? "border-amber-400 bg-amber-500/10 text-amber-400"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+              )}
+            >
+              Over limit only
+            </button>
+          </div>
+
           <div className="mb-4 text-sm text-muted-foreground">
-            {outstanding.length} customers · Total: Rs. {formatAmount(outstanding.reduce((s, r) => s + r.balance, 0))}
+            {filteredOutstanding.length} of {outstanding.length} customers · Total: Rs. {formatAmount(filteredOutstanding.reduce((s, r) => s + r.balance, 0))}
           </div>
           <div className="bg-card border rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Customer</th>
-                  <th className="text-right px-4 py-3 font-medium text-muted-foreground">Balance</th>
-                  <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Credit Limit</th>
-                  <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Last Sale</th>
-                  <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Last Payment</th>
+                  <th className="text-left px-4 py-3">
+                    <SortableHeader label="Customer" sortKey="customerName" align="left" active={outstandingSort.key === "customerName"} dir={outstandingSort.dir} onSort={toggleOutstandingSort} />
+                  </th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Phone</th>
+                  <th className="text-right px-4 py-3">
+                    <SortableHeader label="Balance" sortKey="balance" active={outstandingSort.key === "balance"} dir={outstandingSort.dir} onSort={toggleOutstandingSort} />
+                  </th>
+                  <th className="text-right px-4 py-3 hidden sm:table-cell">
+                    <SortableHeader label="Credit Limit" sortKey="creditLimit" active={outstandingSort.key === "creditLimit"} dir={outstandingSort.dir} onSort={toggleOutstandingSort} />
+                  </th>
+                  <th className="text-right px-4 py-3 hidden md:table-cell">
+                    <SortableHeader label="Last Sale" sortKey="lastSaleDate" active={outstandingSort.key === "lastSaleDate"} dir={outstandingSort.dir} onSort={toggleOutstandingSort} />
+                  </th>
+                  <th className="text-right px-4 py-3 hidden md:table-cell">
+                    <SortableHeader label="Last Payment" sortKey="lastPaymentDate" active={outstandingSort.key === "lastPaymentDate"} dir={outstandingSort.dir} onSort={toggleOutstandingSort} />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {outstanding.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No outstanding balances</td></tr>}
-                {outstanding.map(r => (
+                {filteredOutstanding.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    {outstanding.length === 0 ? "No outstanding balances" : "No customers match your search/filters"}
+                  </td></tr>
+                )}
+                {filteredOutstanding.map(r => (
                   <tr key={r.customerId} className={cn("hover:bg-muted/20 transition-colors", r.isOverLimit ? "bg-amber-500/5" : "")}>
                     <td className="px-4 py-3">
                       <div className="font-medium flex items-center gap-2">
@@ -608,6 +730,7 @@ export default function ReportsPage() {
                       </div>
                       {r.area && <div className="text-xs text-muted-foreground">{r.area}</div>}
                     </td>
+                    <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{r.contact ?? "—"}</td>
                     <td className="px-4 py-3 text-right font-bold text-red-400">Rs. {formatAmount(r.balance)}</td>
                     <td className="px-4 py-3 text-right text-muted-foreground hidden sm:table-cell">
                       {r.creditLimit != null ? `Rs. ${formatAmount(r.creditLimit)}` : "—"}
